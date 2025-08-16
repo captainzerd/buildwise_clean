@@ -1,0 +1,42 @@
+name: buildwise_clean
+description: BuildWise Flutter app
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 3rd‑party
+  provider: ^6.1.5
+  uuid: ^4.5.1
+  intl: ^0.20.2
+  pdf: ^3.11.1
+  printing: ^5.12.0
+  http: ^1.2.2
+  file_picker: ^8.1.2
+  shared_preferences: ^2.2.2
+
+  # Firebase (you’re using these in iOS pods)
+  firebase_core: ^4.0.0
+  cloud_firestore: ^6.0.0
+
+  # Local packages
+  buildwise_domain:
+    path: packages/domain
+  buildwise_data:
+    path: packages/data
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/data/ghana_locations.json
+    - assets/images/

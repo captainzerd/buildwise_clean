@@ -1,0 +1,26 @@
+platform :ios, '15.0'
+
+use_frameworks! :linkage => :static
+use_modular_headers!
+
+# Point to the FVM Flutter SDK
+flutter_root = File.expand_path('../.fvm/flutter_sdk', __dir__)
+load File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper.rb')
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+end
+
+post_install do |installer|
+  # ✅ Call flutter_additional_ios_build_settings for each target (NOT the installer)
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+
+    # Keep all pods and the Runner at the same minimum iOS
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+    end
+  end
+end

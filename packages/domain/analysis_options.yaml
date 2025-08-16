@@ -1,0 +1,15 @@
+# packages/domain/analysis_options.yaml
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  language:
+    strict-casts: false
+    strict-raw-types: false
+  errors:
+    # keep analyzer happy but visible in root app if needed
+    include_file_not_found: ignore
+
+linter:
+  rules:
+    # you can promote/demote these later
+    curly_braces_in_flow_control_structures: true

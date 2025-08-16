@@ -1,0 +1,68 @@
+{
+  "regions": [
+    {
+      "name": "Greater Accra",
+      "cities": ["Accra", "Tema", "Madina", "Teshie", "Nungua", "Adenta"]
+    },
+    {
+      "name": "Ashanti",
+      "cities": ["Kumasi", "Obuasi", "Ejisu", "Bekwai", "Mampong"]
+    },
+    {
+      "name": "Central",
+      "cities": ["Cape Coast", "Kasoa", "Elmina", "Winneba", "Mankessim"]
+    },
+    {
+      "name": "Eastern",
+      "cities": ["Koforidua", "Nkawkaw", "Akosombo", "Akim Oda", "Nsawam"]
+    },
+    {
+      "name": "Western",
+      "cities": ["Sekondi", "Takoradi", "Tarkwa", "Axim", "Shama"]
+    },
+    {
+      "name": "Western North",
+      "cities": ["Sefwi Wiawso", "Bibiani", "Juaboso", "Awaso", "Akontombra"]
+    },
+    {
+      "name": "Volta",
+      "cities": ["Ho", "Hohoe", "Keta", "Sogakope", "Kpando"]
+    },
+    {
+      "name": "Oti",
+      "cities": ["Dambai", "Jasikan", "Kadjebi", "Nkwanta", "Krachi East"]
+    },
+    {
+      "name": "Northern",
+      "cities": ["Tamale", "Yendi", "Savelugu", "Gushegu", "Tolon"]
+    },
+    {
+      "name": "Savannah",
+      "cities": ["Damongo", "Bole", "Salaga", "Daboya", "Sawla"]
+    },
+    {
+      "name": "North East",
+      "cities": ["Nalerigu", "Walewale", "Gambaga", "Bunkpurugu", "Yagaba"]
+    },
+    {
+      "name": "Upper East",
+      "cities": ["Bolgatanga", "Bawku", "Navrongo", "Zebilla", "Paga"]
+    },
+    {
+      "name": "Upper West",
+      "cities": ["Wa", "Lawra", "Jirapa", "Tumu", "Nandom"]
+    },
+    {
+      "name": "Bono",
+      "cities": ["Sunyani", "Berekum", "Dormaa Ahenkro", "Wenchi"]
+    },
+    {
+      "name": "Bono East",
+      "cities": ["Techiman", "Kintampo", "Nkoranza", "Atebubu", "Yeji"]
+    },
+    {
+      "name": "Ahafo",
+      "cities": ["Goaso", "Bechem", "Duayaw Nkwanta", "Hwidiem", "Kenyase"]
+    }
+  ]
+}
