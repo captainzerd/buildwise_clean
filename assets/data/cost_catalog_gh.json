@@ -1,0 +1,62 @@
+{
+  "ohpDefaultPct": 10,
+  "contingencyDefaultPct": 10,
+  "taxesDefaultPct": 15,
+
+  "baseRates": {
+    "residential": 3500,
+    "commercial": 4200
+  },
+
+  "soilFactor": {
+    "firm": 1.00,
+    "soft": 1.08,
+    "waterlogged": 1.15,
+    "laterite": 1.05
+  },
+
+  "foundationUpliftPct": {
+    "strip": 0,
+    "raft": 8,
+    "pile": 20,
+    "pad": 5
+  },
+
+  "phaseSharesDefault": {
+    "substructure": 25,
+    "superstructure": 45,
+    "roofing": 8,
+    "services": 8,
+    "finishes": 10,
+    "openings": 4
+  },
+
+  "roof": {
+    "pitched_sheet": 1.00,
+    "concrete_flat": 1.12,
+    "tile": 1.08
+  },
+
+  "services": {
+    "standard": 1.00,
+    "enhanced": 1.15
+  },
+
+  "finishes": {
+    "economy": 0.92,
+    "standard": 1.00,
+    "premium": 1.12
+  },
+
+  "openings": {
+    "aluminium": 1.00,
+    "hardwood": 1.05,
+    "upvc": 1.02
+  },
+
+  "external": {
+    "external_wall_ghs_per_m": 650,
+    "driveway_ghs_per_m2": 220,
+    "septic_ghs_lump": 16000
+  }
+}

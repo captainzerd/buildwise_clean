@@ -1,40 +1,121 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/foundation.dart';
 
-/// Loads Ghana regions/cities from the app bundle.
-/// Returns a map: { "RegionName": ["City1","City2",...] }
-class LocationRepository {
-  // Keep a single asset path here so it’s easy to change later.
-  static const String _assetPath = 'assets/data/ghana_locations.json';
+/// Loads Ghana regions (+ optional cities) from assets with a safe fallback.
+/// Notifies listeners when data changes so UI can rebuild.
+class LocationRepository extends ChangeNotifier {
+  static const String defaultAssetPath = 'assets/data/ghana_locations.json';
 
-  Future<Map<String, List<String>>> load() async {
-    if (kDebugMode) {
-      // (Fix: enclose single-line if body in a block to satisfy the lint)
-      debugPrint('Attempting to load location data from: $_assetPath');
+  // region -> cities
+  Map<String, List<String>> _data = {};
+
+  bool _loaded = false;
+  bool get isLoaded => _loaded;
+
+  List<String> get regions {
+    final keys = _data.keys.toList();
+    keys.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return keys;
+  }
+
+  List<String> citiesFor(String? region) {
+    if (region == null) return const [];
+    final list = _data[region] ?? const [];
+    // keep order stable but trimmed
+    return list.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+  }
+
+  /// Call once at app start. Safe to call multiple times; it will just refresh.
+  Future<void> loadFromAssets({String path = defaultAssetPath}) async {
+    try {
+      final jsonStr = await rootBundle.loadString(path);
+      final dynamic raw = json.decode(jsonStr);
+
+      _data = _normalize(raw);
+      if (_data.isEmpty) {
+        _useFallback();
+      }
+    } catch (_) {
+      _useFallback();
     }
+    _loaded = true;
+    notifyListeners();
+  }
 
-    final raw = await rootBundle.loadString(_assetPath);
-    if (kDebugMode) {
-      debugPrint('Loaded asset contents (first 100 chars): '
-          '${raw.substring(0, raw.length > 100 ? 100 : raw.length)}');
-    }
+  /// Accepts multiple shapes:
+  /// 1) {"regions": {"Greater Accra":["Accra","Tema"], ...}}
+  /// 2) {"Greater Accra":["Accra","Tema"], ...}
+  /// 3) [{"region":"Greater Accra","cities":["Accra","Tema"]}, ...]
+  Map<String, List<String>> _normalize(dynamic raw) {
+    final Map<String, List<String>> out = {};
 
-    final decoded = json.decode(raw) as Map<String, dynamic>;
-    final regions = decoded['regions'] as List<dynamic>? ?? const [];
-
-    final Map<String, List<String>> result = {};
-    for (final r in regions) {
-      final regionName = (r['name'] ?? '').toString();
-      final cities = (r['cities'] as List<dynamic>? ?? const [])
-          .map((c) => c.toString())
-          .toList();
-      cities.sort();
-      if (regionName.isNotEmpty) {
-        result[regionName] = cities;
+    if (raw is Map<String, dynamic>) {
+      // Case 1: wrapped in "regions"
+      if (raw['regions'] is Map<String, dynamic>) {
+        final m = raw['regions'] as Map<String, dynamic>;
+        m.forEach((k, v) {
+          out[_clean(k)] = _asStringList(v);
+        });
+        return out;
+      }
+      // Case 2: direct map region->cities
+      bool looksLikeDirect = raw.values.every((v) => v is List);
+      if (looksLikeDirect) {
+        raw.forEach((k, v) {
+          out[_clean(k)] = _asStringList(v);
+        });
+        return out;
       }
     }
 
-    return result;
+    // Case 3: list of objects {region, cities}
+    if (raw is List) {
+      for (final e in raw) {
+        if (e is Map) {
+          final region = _clean(e['region'] ?? '');
+          if (region.isEmpty) continue;
+          out[region] = _asStringList(e['cities']);
+        }
+      }
+      return out;
+    }
+
+    return out;
+  }
+
+  List<String> _asStringList(dynamic v) {
+    if (v is List) {
+      return v
+          .map((e) => e?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+    return const [];
+  }
+
+  String _clean(String s) => s.trim();
+
+  void _useFallback() {
+    // Minimal, safe fallback so dropdowns still work.
+    // You can expand/update this list anytime.
+    _data = <String, List<String>>{
+      'Greater Accra': ['Accra', 'Tema', 'Madina'],
+      'Ashanti': ['Kumasi', 'Obuasi', 'Tafo'],
+      'Western': ['Sekondi-Takoradi', 'Tarkwa'],
+      'Northern': ['Tamale', 'Yendi'],
+      'Central': ['Cape Coast', 'Mankessim'],
+      'Eastern': ['Koforidua', 'Nkawkaw'],
+      'Volta': ['Ho', 'Keta'],
+      'Upper East': ['Bolgatanga', 'Navrongo'],
+      'Upper West': ['Wa'],
+      'Bono': ['Sunyani', 'Berekum'],
+      'Ahafo': ['Goaso'],
+      'Bono East': ['Techiman'],
+      'Oti': ['Dambai'],
+      'Savannah': ['Damongo'],
+      'North East': ['Nalerigu'],
+      'Western North': ['Sefwi Wiawso'],
+    };
   }
 }
