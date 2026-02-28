@@ -469,4 +469,23 @@ class ProjectService {
     }
     return urls;
   }
+
+  /// Upload a receipt photo for a cost entry.
+  /// Returns the download URL. Throws [AppException] on failure.
+  Future<String> uploadReceiptPhoto({
+    required String projectId,
+    required String receiptId,
+    required File file,
+  }) async {
+    try {
+      final ext = file.path.split('.').last.toLowerCase();
+      final ref = _storage.ref(
+        'project_uploads/$projectId/receipts/$receiptId.$ext',
+      );
+      await ref.putFile(file, SettableMetadata(contentType: 'image/$ext'));
+      return await ref.getDownloadURL();
+    } catch (e) {
+      throw AppException.from(e);
+    }
+  }
 }

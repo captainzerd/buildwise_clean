@@ -7,8 +7,10 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/models/app_user.dart';
 import '../../core/models/builder_contract.dart';
@@ -1342,9 +1344,26 @@ class _CostEntryTile extends StatelessWidget {
         '${entry.category}  •  ${DateFormat('d MMM yyyy').format(entry.createdAt)}',
         style: Theme.of(context).textTheme.bodySmall,
       ),
+      onTap: entry.receiptUrl != null
+          ? () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => _FullScreenPhoto(
+                  url: entry.receiptUrl!,
+                  title: entry.description,
+                ),
+              ),)
+          : null,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (entry.receiptUrl != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Icon(
+                Icons.receipt_outlined,
+                size: 16,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
           Text(
             '$currencySymbol${NumberFormat('#,##0.00').format(entry.amountGhs)}',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -1980,6 +1999,7 @@ class _AddCostSheetState extends State<_AddCostSheet> {
   final _descCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   String _category = CostEntry.categories.first;
+  File? _receipt;
   bool _saving = false;
   String? _error;
 
@@ -1988,6 +2008,46 @@ class _AddCostSheetState extends State<_AddCostSheet> {
     _descCtrl.dispose();
     _amountCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickReceipt(ImageSource source) async {
+    final picked = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 80,
+      maxWidth: 1920,
+    );
+    if (picked != null && mounted) {
+      setState(() => _receipt = File(picked.path));
+    }
+  }
+
+  void _showReceiptPicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickReceipt(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickReceipt(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -2002,12 +2062,22 @@ class _AddCostSheetState extends State<_AddCostSheet> {
       _error = null;
     });
     try {
+      String? receiptUrl;
+      if (_receipt != null) {
+        final receiptId = const Uuid().v4();
+        receiptUrl = await widget.projectService.uploadReceiptPhoto(
+          projectId: widget.projectId,
+          receiptId: receiptId,
+          file: _receipt!,
+        );
+      }
       final entry = CostEntry(
         id: '',
         authorUid: widget.authorUid,
         description: desc,
         category: _category,
         amountGhs: amount,
+        receiptUrl: receiptUrl,
         createdAt: DateTime.now(),
       );
       await widget.projectService.addCostEntry(widget.projectId, entry);
@@ -2069,6 +2139,40 @@ class _AddCostSheetState extends State<_AddCostSheet> {
             ),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
+          const SizedBox(height: 12),
+          // Receipt photo picker
+          OutlinedButton.icon(
+            onPressed: _saving ? null : _showReceiptPicker,
+            icon: const Icon(Icons.receipt_outlined, size: 18),
+            label: Text(
+              _receipt == null ? 'Attach receipt photo' : 'Change receipt photo',
+            ),
+          ),
+          if (_receipt != null) ...[
+            const SizedBox(height: 8),
+            Stack(
+              alignment: Alignment.topRight,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(
+                    _receipt!,
+                    height: 120,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black54,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => setState(() => _receipt = null),
+                ),
+              ],
+            ),
+          ],
           if (_error != null) ...[
             const SizedBox(height: 8),
             Text(
@@ -3331,6 +3435,52 @@ class _DeletionRequestTile extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+// ── Full-screen receipt photo viewer ───────────────────────────────────────────
+
+class _FullScreenPhoto extends StatelessWidget {
+  const _FullScreenPhoto({required this.url, required this.title});
+  final String url;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(
+          title,
+          style: const TextStyle(color: Colors.white),
+        ),
+      ),
+      body: InteractiveViewer(
+        minScale: 0.5,
+        maxScale: 5,
+        child: Center(
+          child: Image.network(
+            url,
+            fit: BoxFit.contain,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              );
+            },
+            errorBuilder: (context, _, __) => const Center(
+              child: Icon(
+                Icons.broken_image_outlined,
+                size: 64,
+                color: Colors.white54,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
