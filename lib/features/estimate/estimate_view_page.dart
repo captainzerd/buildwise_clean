@@ -1,0 +1,370 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../vendor/vendors_page.dart';
+import '../../core/services/auth_service.dart';
+
+import 'edit_saved_estimate_page.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
+
+class EstimateViewPage extends StatelessWidget {
+  const EstimateViewPage({
+    super.key,
+    this.projectId,
+    this.estimateId,
+    this.docRef,
+    this.initialData,
+  }) : assert(
+          docRef != null || (projectId != null && estimateId != null),
+          'Provide either docRef or both projectId and estimateId',
+        );
+
+  final String? projectId;
+  final String? estimateId;
+  final DocumentReference<Map<String, dynamic>>? docRef;
+  final Map<String, dynamic>? initialData;
+
+  @override
+  Widget build(BuildContext context) {
+    final docRef = this.docRef ??
+        FirebaseFirestore.instance
+            .collection('projects')
+            .doc(projectId)
+            .collection('estimates')
+            .doc(estimateId);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Estimate'),
+        actions: [
+          IconButton(
+            tooltip: 'Share as PDF',
+            onPressed: () async => _shareAsPdf(context, docRef),
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+          ),
+          if (projectId != null && estimateId != null)
+            IconButton(
+              tooltip: 'Edit (title/notes/budget)',
+              onPressed: () async {
+                final snap = await docRef.get();
+                if (!snap.exists) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Estimate not found.')),
+                    );
+                  }
+                  return;
+                }
+                final initial = snap.data() ?? {};
+                if (!context.mounted) return;
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => EditSavedEstimatePage(
+                      projectId: projectId!,
+                      estimateId: estimateId!,
+                      initial: initial,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.edit_outlined),
+            ),
+          IconButton(
+            tooltip: 'Delete',
+            onPressed: () async {
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('Delete estimate?'),
+                  content: const Text('This action cannot be undone.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton.tonal(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                ),
+              );
+              if (ok == true) {
+                await docRef.delete();
+                if (context.mounted) Navigator.of(context).maybePop();
+              }
+            },
+            icon: const Icon(Icons.delete_outline),
+          ),
+        ],
+      ),
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: docRef.snapshots(),
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting &&
+              initialData == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snap.hasError) {
+            return Center(child: Text('Error: ${snap.error}'));
+          }
+          final m =
+              (snap.data?.data() as Map<String, dynamic>?) ?? initialData ?? {};
+          if (m.isEmpty) {
+            return const Center(child: Text('Estimate not found.'));
+          }
+
+          final title = (m['projectName'] as String?)?.trim();
+          final notes = (m['notes'] as String?)?.trim();
+          final totalGhs = (m['grandTotalGhs'] as num?)?.toDouble();
+          final fxSym = m['fxSymbol'] as String? ?? '';
+          final totalFx = (m['grandTotalFx'] as num?)?.toDouble();
+          final region = m['region'] as String? ?? '';
+          final bt = m['buildingType'] as String? ?? '';
+          final q = m['quality'] as String? ?? '';
+          final foundation = m['foundation'] as String? ?? '';
+          final soil = m['soil'] as String? ?? '';
+          final floors = (m['floors'] as List?) ?? const [];
+          final budget = (m['budgetAmount'] as num?)?.toDouble();
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (title != null && title.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+              _kv(
+                'Grand Total (GHS)',
+                '₵ ${totalGhs?.toStringAsFixed(2) ?? '--'}',
+              ),
+              _kv(
+                'Grand Total (FX)',
+                '${fxSym.isNotEmpty ? fxSym : ''} ${totalFx?.toStringAsFixed(2) ?? '--'}',
+              ),
+              if (budget != null)
+                _kv('Budget (GHS)', '₵ ${budget.toStringAsFixed(2)}'),
+              const Divider(height: 24),
+              Text('Inputs', style: Theme.of(context).textTheme.titleMedium),
+              _kv('Region', region),
+              _kv('Building Type', bt),
+              _kv('Quality', q),
+              _kv('Foundation', foundation),
+              _kv('Soil', soil),
+              const SizedBox(height: 8),
+              Text('Floors', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 4),
+              ...List.generate(floors.length, (i) {
+                final f = floors[i] as Map? ?? {};
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Text(
+                    '• Floor ${i + 1}: ${f['areaM2'] ?? '--'} m² × ${f['heightM'] ?? '--'} m',
+                  ),
+                );
+              }),
+              if (notes != null && notes.isNotEmpty) ...[
+                const Divider(height: 24),
+                Text('Notes', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 6),
+                Text(notes),
+              ],
+              const Divider(height: 32),
+              _findVendorsButton(region: region.isNotEmpty ? region : null),
+              const SizedBox(height: 16),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _findVendorsButton({String? region}) {
+    return Builder(
+      builder: (context) {
+        final auth = context.read<AuthService>();
+        if (!auth.isSignedIn) return const SizedBox.shrink();
+        return SizedBox(
+          width: double.infinity,
+          child: FilledButton.tonal(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => VendorsPage(initialRegion: region),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.store_outlined, size: 18),
+                const SizedBox(width: 8),
+                Text(region != null
+                    ? 'Find Vendors in $region'
+                    : 'Find Vendors',),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _kv(String k, String v) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(k, style: const TextStyle(color: Colors.black54)),
+            ),
+            Text(v, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ],
+        ),
+      );
+
+  Future<void> _shareAsPdf(
+    BuildContext context,
+    DocumentReference<Map<String, dynamic>> docRef,
+  ) async {
+    try {
+      final snap = await docRef.get();
+      final m = snap.data() ?? initialData ?? {};
+      if (m.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Nothing to export.')),
+          );
+        }
+        return;
+      }
+
+      final pdf = pw.Document();
+      final title = (m['projectName'] as String?) ?? 'Estimate';
+      final totalGhs = (m['grandTotalGhs'] as num?)?.toDouble() ?? 0;
+      final fxSym = m['fxSymbol'] as String? ?? '';
+      final totalFx = (m['grandTotalFx'] as num?)?.toDouble() ?? 0;
+      final region = m['region'] as String? ?? '';
+      final bt = m['buildingType'] as String? ?? '';
+      final q = m['quality'] as String? ?? '';
+      final foundation = m['foundation'] as String? ?? '';
+      final soil = m['soil'] as String? ?? '';
+      final floors = (m['floors'] as List?) ?? const [];
+      final notes = (m['notes'] as String?)?.trim();
+
+      pw.Widget row(String a, String b, {bool bold = false}) => pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(vertical: 2),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Expanded(
+                  child: pw.Text(
+                    a,
+                    style: pw.TextStyle(color: PdfColors.grey700),
+                  ),
+                ),
+                pw.Text(
+                  b,
+                  style: bold
+                      ? pw.TextStyle(fontWeight: pw.FontWeight.bold)
+                      : null,
+                ),
+              ],
+            ),
+          );
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageTheme: pw.PageTheme(
+            margin: const pw.EdgeInsets.symmetric(horizontal: 28, vertical: 36),
+          ),
+          build: (ctx) => [
+            pw.Text(
+              title,
+              style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 12),
+            row(
+              'Grand Total (GHS)',
+              '₵ ${totalGhs.toStringAsFixed(2)}',
+              bold: true,
+            ),
+            row(
+              'Grand Total (FX)',
+              '$fxSym ${totalFx.toStringAsFixed(2)}',
+              bold: true,
+            ),
+            pw.SizedBox(height: 16),
+            pw.Text(
+              'Inputs',
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 6),
+            row('Region', region),
+            row('Building Type', bt),
+            row('Quality', q),
+            row('Foundation', foundation),
+            row('Soil', soil),
+            pw.SizedBox(height: 6),
+            pw.Text(
+              'Floors',
+              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 4),
+            ...List.generate(floors.length, (i) {
+              final f = floors[i] as Map? ?? {};
+              final line =
+                  '• Floor ${i + 1}: ${f['areaM2'] ?? '--'} m² × ${f['heightM'] ?? '--'} m';
+              return pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(vertical: 1),
+                child: pw.Text(line),
+              );
+            }),
+            if (notes != null && notes.isNotEmpty) ...[
+              pw.SizedBox(height: 14),
+              pw.Text(
+                'Notes',
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(notes),
+            ],
+          ],
+        ),
+      );
+
+      final Uint8List bytes = await pdf.save();
+      final dir = await getTemporaryDirectory();
+      final safeName = title.replaceAll(RegExp(r'[^a-zA-Z0-9_\- ]'), '_');
+      final file = File('${dir.path}/$safeName-$estimateId.pdf');
+      await file.writeAsBytes(bytes, flush: true);
+
+      await Share.shareXFiles(
+        [
+          XFile(
+            file.path,
+            mimeType: 'application/pdf',
+            name: file.uri.pathSegments.last,
+          ),
+        ],
+        text: 'Estimate — $title',
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF export failed: $e')),
+      );
+    }
+  }
+}
