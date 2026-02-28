@@ -222,7 +222,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
         ),
       4 => FloatingActionButton(
           tooltip: 'Upload document',
-          onPressed: () => _uploadDoc(
+          onPressed: () => _showUploadDocSheet(
             context,
             projectService,
             auth.currentUser!.uid,
@@ -319,56 +319,22 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
 
   // ── Doc upload ───────────────────────────────────────────────────────────────
 
-  Future<void> _uploadDoc(
+  void _showUploadDocSheet(
     BuildContext context,
     ProjectService projectService,
     String uploaderUid,
-  ) async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-      allowMultiple: false,
-    );
-    if (result == null || result.files.isEmpty) return;
-    final picked = result.files.first;
-    if (picked.path == null) return;
-
-    final file = File(picked.path!);
-    final fileName = picked.name;
-
-    if (!context.mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await projectService.uploadDocument(
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => _UploadDocSheet(
         projectId: widget.projectId,
         uploaderUid: uploaderUid,
-        file: file,
-        fileName: fileName,
-        contentType: picked.extension != null
-            ? _mimeFromExt(picked.extension!)
-            : null,
-      );
-      messenger.showSnackBar(
-        SnackBar(content: Text('"$fileName" uploaded.')),
-      );
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Upload failed: $e')),
-      );
-    }
+        projectService: projectService,
+      ),
+    );
   }
-
-  String? _mimeFromExt(String ext) => switch (ext.toLowerCase()) {
-        'pdf' => 'application/pdf',
-        'jpg' || 'jpeg' => 'image/jpeg',
-        'png' => 'image/png',
-        'doc' => 'application/msword',
-        'docx' =>
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'xls' => 'application/vnd.ms-excel',
-        'xlsx' =>
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        _ => null,
-      };
 
   // ── Menu actions ─────────────────────────────────────────────────────────────
 
@@ -1539,6 +1505,7 @@ class _DocTile extends StatelessWidget {
         title: Text(doc.name, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: Text(
           [
+            doc.category.label,
             DateFormat('d MMM yyyy').format(doc.createdAt),
             if (sizeLabel != null) sizeLabel,
           ].join(' · '),
@@ -1597,7 +1564,11 @@ class _DocTile extends StatelessWidget {
       ),
     );
     if (confirmed == true) {
-      await projectService.deleteDocument(projectId, doc.id);
+      await projectService.deleteDocument(
+        projectId,
+        doc.id,
+        storagePath: doc.storagePath,
+      );
     }
   }
 
@@ -1616,6 +1587,175 @@ class _DocTile extends StatelessWidget {
     if (bytes < 1024) return '${bytes}B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)}KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+  }
+}
+
+// ── Upload document sheet ──────────────────────────────────────────────────────
+
+class _UploadDocSheet extends StatefulWidget {
+  const _UploadDocSheet({
+    required this.projectId,
+    required this.uploaderUid,
+    required this.projectService,
+  });
+
+  final String projectId;
+  final String uploaderUid;
+  final ProjectService projectService;
+
+  @override
+  State<_UploadDocSheet> createState() => _UploadDocSheetState();
+}
+
+class _UploadDocSheetState extends State<_UploadDocSheet> {
+  DocumentCategory _category = DocumentCategory.other;
+  PlatformFile? _picked;
+  final _nameCtrl = TextEditingController();
+  bool _uploading = false;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      allowMultiple: false,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final f = result.files.first;
+    setState(() {
+      _picked = f;
+      if (_nameCtrl.text.trim().isEmpty) {
+        // Pre-fill name without extension
+        final namePart = f.name.contains('.')
+            ? f.name.substring(0, f.name.lastIndexOf('.'))
+            : f.name;
+        _nameCtrl.text = namePart;
+      }
+    });
+  }
+
+  Future<void> _upload() async {
+    if (_picked == null || _picked!.path == null) return;
+    final displayName = _nameCtrl.text.trim();
+    setState(() => _uploading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.projectService.uploadDocument(
+        projectId: widget.projectId,
+        uploaderUid: widget.uploaderUid,
+        file: File(_picked!.path!),
+        fileName: _picked!.name,
+        category: _category,
+        displayName: displayName.isNotEmpty ? displayName : null,
+        contentType: _picked!.extension != null
+            ? _mimeFromExt(_picked!.extension!)
+            : null,
+      );
+      if (mounted) {
+        Navigator.of(context).pop();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '"${displayName.isNotEmpty ? displayName : _picked!.name}" uploaded.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _uploading = false);
+        messenger.showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
+    }
+  }
+
+  String? _mimeFromExt(String ext) => switch (ext.toLowerCase()) {
+        'pdf' => 'application/pdf',
+        'jpg' || 'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'doc' => 'application/msword',
+        'docx' =>
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'xls' => 'application/vnd.ms-excel',
+        'xlsx' =>
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        _ => null,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        24, 0, 24,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Upload Document',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 20),
+          Text('Category', style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: DocumentCategory.values.map((cat) {
+              return ChoiceChip(
+                label: Text(cat.label),
+                selected: _category == cat,
+                onSelected: _uploading
+                    ? null
+                    : (_) => setState(() => _category = cat),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 20),
+          OutlinedButton.icon(
+            onPressed: _uploading ? null : _pickFile,
+            icon: const Icon(Icons.attach_file),
+            label: Text(
+              _picked == null ? 'Pick file' : _picked!.name,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (_picked != null) ...[
+            const SizedBox(height: 16),
+            TextField(
+              controller: _nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Document name',
+                border: OutlineInputBorder(),
+                helperText: 'Rename (optional)',
+              ),
+              enabled: !_uploading,
+            ),
+          ],
+          if (_uploading) ...[
+            const SizedBox(height: 16),
+            const LinearProgressIndicator(),
+          ],
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _picked == null || _uploading ? null : _upload,
+              icon: const Icon(Icons.upload),
+              label: const Text('Upload'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
