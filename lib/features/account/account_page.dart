@@ -5,6 +5,7 @@ import '../../core/models/app_user.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/contract_service.dart';
 import '../estimate/saved_estimates_page.dart';
+import '../admin/admin_page.dart';
 import 'builder_profile_page.dart';
 import 'pending_contracts_page.dart';
 import 'pm_profile_page.dart';
@@ -32,6 +33,10 @@ class AccountPage extends StatelessWidget {
           const SizedBox(height: 32),
           _InfoSection(user: user),
           const SizedBox(height: 24),
+          if (user.role == UserRole.admin) ...[
+            _AdminTile(),
+            const SizedBox(height: 24),
+          ],
           if (user.role == UserRole.pm) ...[
             _BuilderProfileTile(),
             const SizedBox(height: 16),
@@ -238,6 +243,27 @@ class _UnverifiedBadge extends StatelessWidget {
           ),
         ],
       );
+}
+
+// ─────────────────────────────────────────────
+// Admin dashboard link
+// ─────────────────────────────────────────────
+
+class _AdminTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.admin_panel_settings_outlined),
+        title: const Text('Admin Dashboard'),
+        subtitle: const Text('Manage users, catalog and complaints'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const AdminPage()),
+        ),
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────
