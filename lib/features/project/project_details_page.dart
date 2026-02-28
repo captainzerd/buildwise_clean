@@ -29,6 +29,7 @@ import '../../core/services/project_service.dart';
 import '../estimate/estimate_view_page.dart';
 import 'builder_marketplace_page.dart';
 import 'contract_view_page.dart';
+import 'cost_analytics_page.dart';
 import 'create_contract_page.dart';
 
 class ProjectDetailsPage extends StatefulWidget {
@@ -96,6 +97,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                   onSelected: (action) =>
                       _handleMenu(context, action, project),
                   itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: _MenuAction.viewAnalytics,
+                      child: Text('View Analytics'),
+                    ),
                     PopupMenuItem(
                       value: _MenuAction.generateReport,
                       child: Text('Generate Report'),
@@ -381,6 +386,12 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
     final projectService = context.read<ProjectService>();
 
     switch (action) {
+      case _MenuAction.viewAnalytics:
+        if (context.mounted) {
+          await Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => CostAnalyticsPage(project: project),
+          ),);
+        }
       case _MenuAction.generateReport:
         await _generateReport(context, project);
       case _MenuAction.editStatus:
@@ -491,7 +502,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
   }
 }
 
-enum _MenuAction { generateReport, editStatus, delete }
+enum _MenuAction { viewAnalytics, generateReport, editStatus, delete }
 
 // ── Overview tab ───────────────────────────────────────────────────────────────
 
