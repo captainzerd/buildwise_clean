@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
@@ -35,6 +36,14 @@ Future<void> main() async {
 
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // App Check: debug provider in dev/debug; Play Integrity / DeviceCheck in prod.
+  await FirebaseAppCheck.instance.activate(
+    androidProvider:
+        kIsProduction && !kDebugMode ? AndroidProvider.playIntegrity : AndroidProvider.debug,
+    appleProvider:
+        kIsProduction && !kDebugMode ? AppleProvider.deviceCheck : AppleProvider.debug,
   );
 
   // Crashlytics: only collect in production release builds.

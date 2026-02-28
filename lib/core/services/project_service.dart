@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../errors/app_exception.dart';
 import '../models/cost_entry.dart';
@@ -139,14 +140,15 @@ class ProjectService {
         );
   }
 
-  Future<void> addPhase(String projectId, Phase phase) async {
+  Future<String> addPhase(String projectId, Phase phase) async {
     try {
-      await _db
+      final ref = _db
           .collection('projects')
           .doc(projectId)
           .collection('phases')
-          .doc()
-          .set(phase.toMap());
+          .doc();
+      await ref.set(phase.toMap());
+      return ref.id;
     } catch (e) {
       throw AppException.from(e);
     }
@@ -465,6 +467,30 @@ class ProjectService {
         urls.add(await ref.getDownloadURL());
       } catch (e) {
         debugPrint('ProjectService: photo upload failed for $name — $e');
+      }
+    }
+    return urls;
+  }
+
+  /// Upload completion proof photos for a phase.
+  /// Returns a list of download URLs for successfully uploaded photos.
+  Future<List<String>> uploadPhaseCompletionPhotos({
+    required String projectId,
+    required String phaseId,
+    required List<File> files,
+  }) async {
+    final urls = <String>[];
+    for (final file in files) {
+      final ext = file.path.split('.').last.toLowerCase();
+      final name = '${const Uuid().v4()}.$ext';
+      final ref = _storage.ref(
+        'project_uploads/$projectId/phase_completions/$phaseId/$name',
+      );
+      try {
+        await ref.putFile(file, SettableMetadata(contentType: 'image/$ext'));
+        urls.add(await ref.getDownloadURL());
+      } catch (e) {
+        debugPrint('ProjectService: phase photo upload failed — $e');
       }
     }
     return urls;

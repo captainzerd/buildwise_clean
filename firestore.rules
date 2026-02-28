@@ -32,10 +32,13 @@ service cloud.firestore {
     // ─────────────────────────────────────────
 
     match /users/{uid} {
-      allow read: if isSignedIn();
+      // Only the owner or an admin can read a user profile.
+      // (Names/avatars needed elsewhere are denormalised into project/contract docs.)
+      allow read: if isSignedIn() && (isOwner(uid) || isAdmin());
       allow create: if isSignedIn() && isOwner(uid);
       allow update: if (isSignedIn() && isOwner(uid)) || isAdmin();
-      allow delete: if isAdmin();
+      // Owner can delete their own account (via deleteAccount()); admins can too.
+      allow delete: if (isSignedIn() && isOwner(uid)) || isAdmin();
 
       match /notifications/{notifId} {
         // Only the owner can read/write their own notifications.

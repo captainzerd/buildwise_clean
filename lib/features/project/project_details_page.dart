@@ -1100,39 +1100,75 @@ class _PhaseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: ListTile(
-        onTap: onTap,
-        leading: CircleAvatar(
-          backgroundColor: _statusColor(context, phase.status),
-          radius: 18,
-          child: Text(
-            '${phase.order + 1}',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+      child: Column(
+        children: [
+          ListTile(
+            onTap: onTap,
+            leading: CircleAvatar(
+              backgroundColor: _statusColor(context, phase.status),
+              radius: 18,
+              child: Text(
+                '${phase.order + 1}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            title: Text(phase.name),
+            subtitle: phase.estimatedCostGhs != null
+                ? Text(
+                    'Est. GH₵${NumberFormat('#,##0').format(phase.estimatedCostGhs)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  )
+                : null,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _PhaseStatusChip(status: phase.status),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  tooltip: 'Delete phase',
+                  onPressed: onDelete,
+                ),
+              ],
             ),
           ),
-        ),
-        title: Text(phase.name),
-        subtitle: phase.estimatedCostGhs != null
-            ? Text(
-                'Est. GH₵${NumberFormat('#,##0').format(phase.estimatedCostGhs)}',
-                style: Theme.of(context).textTheme.bodySmall,
-              )
-            : null,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _PhaseStatusChip(status: phase.status),
-            const SizedBox(width: 4),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, size: 18),
-              tooltip: 'Delete phase',
-              onPressed: onDelete,
+          if (phase.completionPhotoUrls.isNotEmpty)
+            SizedBox(
+              height: 72,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                itemCount: phase.completionPhotoUrls.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (_, i) => GestureDetector(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => _FullScreenPhoto(
+                        url: phase.completionPhotoUrls[i],
+                        title: 'Photo ${i + 1}',
+                      ),
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      phase.completionPhotoUrls[i],
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.broken_image_outlined,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -1859,6 +1895,7 @@ class _AddPhaseSheetState extends State<_AddPhaseSheet> {
   final _estCostCtrl = TextEditingController();
   PhaseStatus _status = PhaseStatus.pending;
   bool _saving = false;
+  final List<File> _completionPhotos = [];
 
   @override
   void initState() {
@@ -1880,6 +1917,42 @@ class _AddPhaseSheetState extends State<_AddPhaseSheet> {
     super.dispose();
   }
 
+  Future<void> _pickCompletionPhoto(ImageSource source) async {
+    final picked = await ImagePicker().pickImage(source: source, imageQuality: 80);
+    if (picked != null && mounted) {
+      setState(() => _completionPhotos.add(File(picked.path)));
+    }
+  }
+
+  Future<void> _showPhotoSourcePicker() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Camera'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickCompletionPhoto(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickCompletionPhoto(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _save() async {
     if (_nameCtrl.text.trim().isEmpty) return;
     setState(() => _saving = true);
@@ -1896,6 +1969,21 @@ class _AddPhaseSheetState extends State<_AddPhaseSheet> {
               'estimatedCostGhs': double.tryParse(_estCostCtrl.text),
           },
         );
+        if (_completionPhotos.isNotEmpty) {
+          final urls = await widget.projectService.uploadPhaseCompletionPhotos(
+            projectId: widget.projectId,
+            phaseId: widget.editing!.id,
+            files: _completionPhotos,
+          );
+          if (urls.isNotEmpty) {
+            final existing = widget.editing!.completionPhotoUrls;
+            await widget.projectService.updatePhase(
+              widget.projectId,
+              widget.editing!.id,
+              {'completionPhotoUrls': [...existing, ...urls]},
+            );
+          }
+        }
       } else {
         final phase = Phase(
           id: '',
@@ -1906,7 +1994,22 @@ class _AddPhaseSheetState extends State<_AddPhaseSheet> {
           estimatedCostGhs: double.tryParse(_estCostCtrl.text),
           createdAt: DateTime.now(),
         );
-        await widget.projectService.addPhase(widget.projectId, phase);
+        final phaseId =
+            await widget.projectService.addPhase(widget.projectId, phase);
+        if (_status == PhaseStatus.completed && _completionPhotos.isNotEmpty) {
+          final urls = await widget.projectService.uploadPhaseCompletionPhotos(
+            projectId: widget.projectId,
+            phaseId: phaseId,
+            files: _completionPhotos,
+          );
+          if (urls.isNotEmpty) {
+            await widget.projectService.updatePhase(
+              widget.projectId,
+              phaseId,
+              {'completionPhotoUrls': urls},
+            );
+          }
+        }
       }
       if (mounted) Navigator.of(context).pop();
     } finally {
@@ -1974,6 +2077,84 @@ class _AddPhaseSheetState extends State<_AddPhaseSheet> {
             ),
             maxLines: 2,
           ),
+          // Completion photos — available when status is completed
+          if (_status == PhaseStatus.completed) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Completion photos (optional)',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+            const SizedBox(height: 8),
+            // Existing photos (edit mode)
+            if (widget.editing != null &&
+                widget.editing!.completionPhotoUrls.isNotEmpty) ...[
+              SizedBox(
+                height: 64,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: widget.editing!.completionPhotoUrls.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) => ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      widget.editing!.completionPhotoUrls[i],
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            // Newly picked photos
+            if (_completionPhotos.isNotEmpty) ...[
+              SizedBox(
+                height: 72,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _completionPhotos.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) => Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.file(
+                          _completionPhotos[i],
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: GestureDetector(
+                          onTap: () =>
+                              setState(() => _completionPhotos.removeAt(i)),
+                          child: const CircleAvatar(
+                            radius: 10,
+                            backgroundColor: Colors.black54,
+                            child: Icon(
+                              Icons.close,
+                              size: 12,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            OutlinedButton.icon(
+              onPressed: _showPhotoSourcePicker,
+              icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+              label: const Text('Add photo'),
+            ),
+          ],
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
