@@ -7,6 +7,7 @@ class Complaint {
   final String? projectTitle;
   final String message;
   final String status; // open, in_progress, closed
+  final String? adminResponse;
   final DateTime createdAt;
 
   Complaint({
@@ -16,6 +17,7 @@ class Complaint {
     this.projectTitle,
     required this.message,
     required this.status,
+    this.adminResponse,
     required this.createdAt,
   });
 
@@ -25,6 +27,7 @@ class Complaint {
         if (projectTitle != null) 'projectTitle': projectTitle,
         'message': message,
         'status': status,
+        if (adminResponse != null) 'adminResponse': adminResponse,
         'createdAt': Timestamp.fromDate(createdAt),
       };
 
@@ -38,6 +41,7 @@ class Complaint {
       projectTitle: d['projectTitle'],
       message: d['message'] ?? '',
       status: d['status'] ?? 'open',
+      adminResponse: d['adminResponse'] as String?,
       createdAt: ts is Timestamp ? ts.toDate() : DateTime.now(),
     );
   }

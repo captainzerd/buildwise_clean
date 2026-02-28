@@ -26,6 +26,7 @@ import 'core/services/notification_service.dart';
 import 'core/services/regional_index_provider.dart';
 import 'core/storage/storage_service.dart';
 import 'features/estimate/state/estimate_controller.dart';
+import 'features/onboarding/onboarding_page.dart';
 import 'features/shell/home_shell.dart';
 import 'firebase_options.dart';
 
@@ -207,6 +208,38 @@ class _PostFrameInitState extends State<_PostFrameInit> {
   Widget build(BuildContext context) => widget.child;
 }
 
+/// Shows onboarding on first launch, HomeShell on all subsequent launches.
+class _AppGate extends StatefulWidget {
+  const _AppGate();
+
+  @override
+  State<_AppGate> createState() => _AppGateState();
+}
+
+class _AppGateState extends State<_AppGate> {
+  late final Future<bool> _check;
+
+  @override
+  void initState() {
+    super.initState();
+    _check = isOnboardingDone();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _check,
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          // Brief flicker guard — show nothing (native splash still visible).
+          return const SizedBox.shrink();
+        }
+        return snap.data! ? const HomeShell() : const OnboardingPage();
+      },
+    );
+  }
+}
+
 class BuildWiseApp extends StatelessWidget {
   const BuildWiseApp({super.key});
 
@@ -233,7 +266,7 @@ class BuildWiseApp extends StatelessWidget {
       navigatorObservers: [
         FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance),
       ],
-      home: const HomeShell(),
+      home: const _AppGate(),
     );
   }
 }

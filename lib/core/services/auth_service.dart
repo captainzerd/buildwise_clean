@@ -127,6 +127,34 @@ class AuthService extends ChangeNotifier {
     await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
   }
 
+  /// Permanently deletes the current user's account.
+  /// Re-authenticates first (Firebase requirement for sensitive operations).
+  Future<void> deleteAccount(String password) async {
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null || firebaseUser.email == null) {
+      throw Exception('No signed-in user.');
+    }
+
+    final credential = EmailAuthProvider.credential(
+      email: firebaseUser.email!,
+      password: password,
+    );
+    await firebaseUser.reauthenticateWithCredential(credential);
+
+    final uid = firebaseUser.uid;
+    final db = FirebaseFirestore.instance;
+
+    // Delete Firestore profile docs.
+    // Sub-collections (projects, contracts, etc.) are cleaned up by
+    // Cloud Functions in production.
+    await db.collection('users').doc(uid).delete();
+    try {
+      await db.collection('pm_profiles').doc(uid).delete();
+    } catch (_) {}
+
+    await firebaseUser.delete();
+  }
+
   /// Re-reads Firebase user to pick up emailVerified after the user
   /// has clicked the verification link in their inbox.
   Future<void> refreshEmailVerificationStatus() async {

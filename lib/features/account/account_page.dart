@@ -50,6 +50,8 @@ class AccountPage extends StatelessWidget {
           if (!user.emailVerified) _VerificationBanner(auth: auth),
           const SizedBox(height: 32),
           _SignOutButton(auth: auth),
+          const SizedBox(height: 8),
+          _DeleteAccountButton(auth: auth),
         ],
       ),
     );
@@ -456,6 +458,7 @@ class _VerificationBannerState extends State<_VerificationBanner> {
 // ─────────────────────────────────────────────
 
 class _SignOutButton extends StatelessWidget {
+
   const _SignOutButton({required this.auth});
   final AuthService auth;
 
@@ -474,5 +477,88 @@ class _SignOutButton extends StatelessWidget {
       icon: const Icon(Icons.logout),
       label: const Text('Sign out'),
     );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Delete account
+// ─────────────────────────────────────────────
+
+class _DeleteAccountButton extends StatelessWidget {
+  const _DeleteAccountButton({required this.auth});
+  final AuthService auth;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      style: TextButton.styleFrom(
+        foregroundColor: Theme.of(context).colorScheme.error,
+        minimumSize: const Size.fromHeight(48),
+      ),
+      onPressed: () => _confirmDelete(context),
+      icon: const Icon(Icons.delete_forever_outlined),
+      label: const Text('Delete account'),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final passwordCtrl = TextEditingController();
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This permanently deletes your account and all associated '
+              'data. This action cannot be undone.\n\nEnter your password to confirm:',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passwordCtrl,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Password',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    final password = passwordCtrl.text;
+    passwordCtrl.dispose();
+
+    if (confirmed != true || password.isEmpty) return;
+
+    try {
+      await auth.deleteAccount(password);
+      navigator.pop(); // pop AccountPage — HomeShell will show sign-in state
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not delete account: $e')),
+      );
+    }
   }
 }

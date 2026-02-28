@@ -1,26 +1,25 @@
-// lib/features/estimate/state/estimate_controller.dart
-import 'dart:math' as math;
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/errors/app_exception.dart';
+import '../../../core/models/currency.dart';
 import '../../../core/services/catalog_service.dart';
-import '../../../core/services/regional_index_provider.dart';
 import '../../../core/services/fx_service.dart';
+import '../../../core/services/regional_index_provider.dart';
 import '../../../core/storage/storage_service.dart';
-import '../../../core/services/snapshot.dart';
 
-@immutable
-class CurrencyInfo {
-  const CurrencyInfo(this.code, this.symbol, {this.baseToUsd = 1.0});
-  final String code; // e.g., "GHS"
-  final String symbol; // e.g., "₵"
-  final double baseToUsd;
-}
+export '../../../core/models/currency.dart' show CurrencyInfo;
+
+enum PermitMode { percent, manual }
 
 @immutable
 class FloorSpec {
   const FloorSpec({required this.areaM2, required this.heightM});
   final double areaM2;
   final double heightM;
+
   FloorSpec copyWith({double? areaM2, double? heightM}) => FloorSpec(
         areaM2: areaM2 ?? this.areaM2,
         heightM: heightM ?? this.heightM,
@@ -28,197 +27,208 @@ class FloorSpec {
 }
 
 @immutable
+class TaxLine {
+  const TaxLine({required this.name, required this.pct});
+  final String name;
+  final double pct;
+}
+
+@immutable
 class EstimateResult {
   const EstimateResult({
     required this.totalBuiltUpArea,
-    required this.baseCostGhs,
     required this.phaseBreakdownGhs,
     required this.addOnsGhs,
+    required this.preliminariesGhs,
     required this.ohpGhs,
     required this.contingencyGhs,
-    required this.taxesGhs,
+    required this.taxLinesGhs,
+    required this.permitGhs,
     required this.totalPlannedGhs,
   });
 
   final double totalBuiltUpArea;
-  final double baseCostGhs; // phases + addOns (pre-OHP/cont/tax)
   final Map<String, double> phaseBreakdownGhs;
   final Map<String, double> addOnsGhs;
+  final double preliminariesGhs;
   final double ohpGhs;
   final double contingencyGhs;
-  final double taxesGhs;
+  final Map<String, double> taxLinesGhs;
+  final double permitGhs;
   final double totalPlannedGhs;
 }
 
 class EstimateController extends ChangeNotifier {
   EstimateController({
-    required CatalogService catalogService,
-    required RegionalIndexProvider regionalIndexProvider,
-    FxService? fxService,
-    StorageService? storageService,
-  })  : _catalogService = catalogService,
-        _regionalIndex = regionalIndexProvider,
-        _fx = fxService ?? FxService(),
-        _storage = storageService ?? StorageService();
+    required this.catalogService,
+    required this.regionalIndexProvider,
+    required this.fxService,
+    required this.storageService,
+  });
 
-  final CatalogService _catalogService;
-  final RegionalIndexProvider _regionalIndex;
-  final FxService _fx;
-  final StorageService _storage;
+  final CatalogService catalogService;
+  final RegionalIndexProvider regionalIndexProvider;
+  final FxService fxService;
+  final StorageService storageService;
 
-  // UI Form key (validators).
+  // ── Form state ──
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
-
-  // Legacy UI compatibility (kept)
   final TextEditingController projectNameCtrl = TextEditingController();
 
-  // Project
-  String projectName = '';
   String? region;
+  CurrencyInfo currency = CurrencyInfo.ghs;
 
-  // Units & Currency
-  bool useMetric = true;
-  CurrencyInfo currency = const CurrencyInfo('GHS', '₵');
-
-  // Programme
   String buildingType = 'Residential';
   String quality = 'Standard';
-  String roof = 'Pitched sheet';
   String foundation = 'Strip';
   String soil = 'Firm';
+  String roof = 'Pitched sheet';
+  int storeys = 1;
 
-  // Floors (at least one)
   final List<FloorSpec> floors = <FloorSpec>[
-    const FloorSpec(areaM2: 150, heightM: 10),
+    const FloorSpec(areaM2: 120, heightM: 3.0),
   ];
 
-  // External works (optional)
   bool includeExternalWorks = false;
   double externalWallLenM = 0;
   double drivewayAreaM2 = 0;
   bool includeSeptic = false;
 
-  // Commercial percentages (defaults loaded from catalog)
-  double _ohpPct = 10;
-  double _contingencyPct = 10;
-  double _taxesPct = 15;
+  double preliminariesPct = 0;
+  bool contingencyEnabled = false;
+  double contingencyPct = 10.0;
 
-  // Optional budget (MVP+)
+  PermitMode permitMode = PermitMode.percent;
+  double permitPct = 0;
+  double? permitManualGhs;
+
+  List<TaxLine> taxLines = const [];
+
   double? budgetAmount;
 
-  // Result
-  EstimateResult? _result;
-  bool _hasResult = false;
+  // ── Async state ──
+  bool _isComputing = false;
+  String? _computeError;
 
-  // -------- Getters (for UI & legacy code) ----------
-  bool get hasResult => _hasResult;
+  bool get isComputing => _isComputing;
+  String? get computeError => _computeError;
+
+  // ── Derived ──
+  List<String> get regions => regionalIndexProvider.regionCodes;
+
+  /// True when the minimum required inputs are present for a valid computation.
+  bool get isFormValid {
+    if (floors.isEmpty) return false;
+    for (final f in floors) {
+      if (f.areaM2 <= 0 || f.areaM2 > 50000) return false;
+      if (f.heightM <= 0 || f.heightM > 12.0) return false;
+    }
+    return true;
+  }
+
+  /// Human-readable reason why the form is invalid, or null if valid.
+  String? get validationError {
+    if (floors.isEmpty) return 'Add at least one floor.';
+    for (int i = 0; i < floors.length; i++) {
+      final f = floors[i];
+      if (f.areaM2 <= 0) {
+        return 'Floor ${i + 1}: area must be greater than 0 m².';
+      }
+      if (f.areaM2 > 50000) {
+        return 'Floor ${i + 1}: area seems too large (max 50,000 m²).';
+      }
+      if (f.heightM <= 0) {
+        return 'Floor ${i + 1}: height must be greater than 0.';
+      }
+      if (f.heightM > 12.0) {
+        return 'Floor ${i + 1}: height seems too large (max 12 m).';
+      }
+    }
+    return null;
+  }
+
+  // ── Result ──
+  EstimateResult? _result;
+  bool get hasResult => _result != null;
   EstimateResult? get result => _result;
 
-  List<String> get regions => _regionalIndex.regions;
+  // Compatibility getters consumed by existing widgets.
+  double get grandTotalGhs => _result?.totalPlannedGhs ?? 0;
+  Map<String, double> get phaseBreakdown =>
+      _result?.phaseBreakdownGhs ?? const {};
+  Map<String, double> get addOnsGhs => _result?.addOnsGhs ?? const {};
+  double get ohpGhs => _result?.ohpGhs ?? 0;
+  double get contingencyGhs => _result?.contingencyGhs ?? 0;
+  double get taxesGhs =>
+      _result?.taxLinesGhs.values.fold<double>(0, (a, b) => a + b) ?? 0;
 
-  // Legacy helpers still referenced by UI:
-  String get currencyCode => currency.code;
+  static const _prefKeyCurrency = 'estimate_currency_code';
 
-  // GHS money (used for local summaries if needed)
-  String _ghs(num v) => '₵ ${v.toStringAsFixed(2)}';
-
-  // Display money (selected currency) with FX conversion
-  String money(num vGhs) {
-    final fx = _fx.convertFromGhs(vGhs.toDouble(), currency.code);
-    return '${currency.symbol} ${fx.toStringAsFixed(2)}';
-  }
-
-  // GHS numbers for legacy bindings
-  Map<String, double> get phasesGhs => _result?.phaseBreakdownGhs ?? const {};
-  double get worksSubtotalGhs => _result?.baseCostGhs ?? 0.0;
-  double get ohpGhs => _result?.ohpGhs ?? 0.0;
-  double get contingencyGhs => _result?.contingencyGhs ?? 0.0;
-  double get taxesGhs => _result?.taxesGhs ?? 0.0;
-  double get grandTotalGhs => _result?.totalPlannedGhs ?? 0.0;
-
-  // FX view (for UI totals shown in selected currency)
-  double get grandTotalFx => _fx.convertFromGhs(grandTotalGhs, currency.code);
-
-  bool get contingencyEnabled => _contingencyPct > 0;
-  double get contingencyPct => _contingencyPct;
-
-  // Derived: is form valid?
-  bool get isFormValid {
-    final hasRegion = (region ?? '').isNotEmpty;
-    final hasFloor =
-        floors.isNotEmpty && floors.every((f) => f.areaM2 > 0 && f.heightM > 0);
-    final hasProgramme = buildingType.isNotEmpty &&
-        quality.isNotEmpty &&
-        foundation.isNotEmpty &&
-        soil.isNotEmpty;
-    return hasRegion && hasFloor && hasProgramme;
-  }
-
-  // -------- Lifecycle ----------
+  // ── Lifecycle ──
   Future<void> init() async {
-    await Future.wait([
-      _catalogService.ensureLoaded(),
-      _regionalIndex.load(),
-      _fx.refreshIfStale(),
-    ]);
+    await catalogService.ensureLoaded();
+    preliminariesPct = catalogService.preliminariesDefaultPct;
+    permitPct = catalogService.permitDefaultPct;
+    taxLines = [
+      for (final t in catalogService.taxLinesDefault)
+        TaxLine(name: t.name, pct: t.pct),
+    ];
 
-    region ??= regions.isNotEmpty ? regions.first : null;
-
-    final cat = _catalogService.catalog!;
-    _ohpPct = cat.ohpDefaultPct;
-    _contingencyPct = cat.contingencyDefaultPct;
-    _taxesPct = cat.taxesDefaultPct;
-
-    if (projectName.isNotEmpty) {
-      projectNameCtrl.text = projectName;
+    // Restore last-used currency from SharedPreferences.
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_prefKeyCurrency);
+    if (saved != null) {
+      final match = CurrencyInfo.values.where((c) => c.code == saved).firstOrNull;
+      if (match != null) currency = match;
     }
-    projectNameCtrl.addListener(() {
-      projectName = projectNameCtrl.text;
-    });
 
     notifyListeners();
   }
 
-  // -------- Mutators ----------
-  void setProjectName(String v) {
-    projectName = v;
-    if (projectNameCtrl.text != v) {
-      projectNameCtrl.text = v;
-      projectNameCtrl.selection = TextSelection.fromPosition(
-        TextPosition(offset: projectNameCtrl.text.length),
-      );
-    }
+  // ── Mutations ──
+  void setRegion(String? r) {
+    region = r;
     notifyListeners();
   }
 
-  void setRegion(String? v) {
-    region = v;
+  void setCurrency(CurrencyInfo c) {
+    currency = c;
     notifyListeners();
-  }
-
-  void setUseMetric(bool v) {
-    useMetric = v;
-    notifyListeners();
-  }
-
-  Future<void> setCurrency(CurrencyInfo v) async {
-    currency = v;
-    await _fx.refreshIfStale(); // ensure we have a rate
-    notifyListeners(); // redraw totals with FX
+    // Persist for next session.
+    SharedPreferences.getInstance()
+        .then((p) => p.setString(_prefKeyCurrency, c.code));
   }
 
   void setProgramme({
     String? buildingType_,
     String? quality_,
-    String? roof_,
     String? foundation_,
     String? soil_,
+    String? roof_,
+    int? storeys_,
   }) {
     buildingType = buildingType_ ?? buildingType;
     quality = quality_ ?? quality;
-    roof = roof_ ?? roof;
     foundation = foundation_ ?? foundation;
     soil = soil_ ?? soil;
+    roof = roof_ ?? roof;
+    storeys = storeys_ ?? storeys;
+    notifyListeners();
+  }
+
+  void addFloor() {
+    floors.add(const FloorSpec(areaM2: 100, heightM: 3.0));
+    notifyListeners();
+  }
+
+  void updateFloor(int i, {double? areaM2, double? heightM}) {
+    floors[i] = floors[i].copyWith(areaM2: areaM2, heightM: heightM);
+    notifyListeners();
+  }
+
+  void removeFloor(int i) {
+    if (floors.length <= 1) return;
+    floors.removeAt(i);
     notifyListeners();
   }
 
@@ -235,275 +245,198 @@ class EstimateController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setBudgetAmount(double? v) {
-    budgetAmount = v;
+  void setPreliminariesPct(double v) {
+    preliminariesPct = v;
     notifyListeners();
   }
 
-  void addFloor() {
-    floors.add(const FloorSpec(areaM2: 100, heightM: 10));
+  void setContingencyEnabled(bool v) {
+    contingencyEnabled = v;
     notifyListeners();
   }
 
-  void removeFloor(int index) {
-    if (index >= 0 && index < floors.length) {
-      floors.removeAt(index);
-      notifyListeners();
-    }
-  }
-
-  void updateFloor(int index, {double? areaM2, double? heightM}) {
-    if (index < 0 || index >= floors.length) return;
-    floors[index] = floors[index].copyWith(
-      areaM2: areaM2,
-      heightM: heightM,
-    );
+  void setContingencyPct(double v) {
+    contingencyPct = v;
     notifyListeners();
   }
 
-  void setContingencyEnabled(bool enabled) {
-    _contingencyPct = enabled ? math.max(_contingencyPct, 1) : 0;
+  void setPermitMode(PermitMode m) {
+    permitMode = m;
     notifyListeners();
   }
 
-  void setContingencyPct(double pct) {
-    _contingencyPct = pct.clamp(0, 50);
+  void setPermitPct(double v) {
+    permitPct = v;
     notifyListeners();
   }
 
-  // -------- Compute ----------
+  void setPermitManual(double? ghs) {
+    permitManualGhs = ghs;
+    notifyListeners();
+  }
+
+  void setBudgetAmount(double? ghs) {
+    budgetAmount = ghs;
+    notifyListeners();
+  }
+
+  // ── Compute ──
   Future<void> compute() async {
+    _computeError = null;
+
     if (!isFormValid) {
-      _hasResult = false;
+      _computeError = validationError ?? 'Please check your inputs.';
       notifyListeners();
       return;
     }
 
-    final cat = await _catalogService.ensureLoaded();
-
-    if (region == null || region!.isEmpty) {
-      region = regions.isNotEmpty ? regions.first : null;
-    }
-
-    final idx = _regionalIndex.indexFor(region ?? '');
-    final ci = (idx['ci'] ?? 1.0).toDouble();
-    final materialIdx = (idx['material'] ?? 1.0).toDouble();
-    final labourIdx = (idx['labour'] ?? 1.0).toDouble();
-    final transportIdx = (idx['transport'] ?? 1.0).toDouble();
-
-    final totalArea = floors.fold<double>(0, (sum, f) => sum + f.areaM2);
-
-    final isResidential = buildingType.toLowerCase().contains('res');
-    final baseRate = (isResidential
-            ? cat.baseRates['residential']
-            : cat.baseRates['commercial']) ??
-        3500;
-
-    final soilKey = soil.toLowerCase();
-    final soilMult = _pick(
-      cat.soilFactor,
-      {
-        'firm': 'firm',
-        'soft': 'soft',
-        'waterlogged': 'waterlogged',
-        'laterite': 'laterite',
-      },
-      soilKey,
-      1.0,
-    );
-
-    final foundationKey = foundation.toLowerCase();
-    final foundationPct = _pick(
-      cat.foundationUpliftPct,
-      {
-        'strip': 'strip',
-        'raft': 'raft',
-        'pile': 'pile',
-        'pad': 'pad',
-      },
-      foundationKey,
-      0.0,
-    );
-
-    final qualityKey = quality.toLowerCase();
-    final qualityMult = _pick(
-      cat.finishes,
-      {
-        'economy': 'economy',
-        'standard': 'standard',
-        'premium': 'premium',
-      },
-      qualityKey,
-      1.0,
-    );
-
-    final roofKey = roof.toLowerCase();
-    final roofMult = _pick(
-      cat.roof,
-      {
-        'pitched sheet': 'pitched_sheet',
-        'concrete flat': 'concrete_flat',
-        'tile': 'tile',
-      },
-      roofKey,
-      1.0,
-    );
-
-    final regionalMult = (ci + materialIdx + labourIdx + transportIdx) / 4.0;
-
-    final structureGhs = totalArea *
-        baseRate *
-        soilMult *
-        (1 + foundationPct / 100.0) *
-        regionalMult;
-
-    final shares = cat.phaseSharesDefault;
-    final substructure = structureGhs * (shares['substructure'] ?? 25) / 100.0;
-    final superstructure =
-        structureGhs * (shares['superstructure'] ?? 45) / 100.0;
-    final roofing = structureGhs * (shares['roofing'] ?? 8) / 100.0 * roofMult;
-    final services = structureGhs *
-        (shares['services'] ?? 8) /
-        100.0 *
-        _pick(
-          cat.services,
-          {'standard': 'standard', 'enhanced': 'enhanced'},
-          qualityKey,
-          1.0,
-        );
-    final finishes =
-        structureGhs * (shares['finishes'] ?? 10) / 100.0 * qualityMult;
-    final openings = structureGhs *
-        (shares['openings'] ?? 4) /
-        100.0 *
-        _pick(
-          cat.openings,
-          {'aluminium': 'aluminium', 'hardwood': 'hardwood', 'upvc': 'upvc'},
-          'aluminium',
-          1.0,
-        );
-
-    final extRates = cat.external;
-    final wallRate = (extRates['external_wall_ghs_per_m'] ?? 0).toDouble();
-    final driveRate = (extRates['driveway_ghs_per_m2'] ?? 0).toDouble();
-    final septicLump =
-        includeSeptic ? (extRates['septic_ghs_lump'] ?? 0).toDouble() : 0.0;
-
-    final externalWall =
-        includeExternalWorks ? externalWallLenM * wallRate : 0.0;
-    final driveway = includeExternalWorks ? drivewayAreaM2 * driveRate : 0.0;
-
-    final phaseBreakdown = <String, double>{
-      'Substructure': substructure,
-      'Superstructure': superstructure,
-      'Roofing': roofing,
-      'Services': services,
-      'Finishes': finishes,
-      'Openings': openings,
-    };
-
-    final addOns = <String, double>{
-      if (includeExternalWorks && externalWall > 0)
-        'External wall': externalWall,
-      if (includeExternalWorks && driveway > 0) 'Driveway': driveway,
-      if (includeSeptic && septicLump > 0) 'Septic system': septicLump,
-    };
-
-    final baseSum = _sum(phaseBreakdown.values) + _sum(addOns.values);
-
-    final ohp = baseSum * _ohpPct / 100.0;
-    final contingency = baseSum * _contingencyPct / 100.0;
-    final net = baseSum + ohp + contingency;
-    final taxes = net * _taxesPct / 100.0;
-    final total = net + taxes;
-
-    _result = EstimateResult(
-      totalBuiltUpArea: totalArea,
-      baseCostGhs: baseSum,
-      phaseBreakdownGhs: phaseBreakdown,
-      addOnsGhs: addOns,
-      ohpGhs: ohp,
-      contingencyGhs: contingency,
-      taxesGhs: taxes,
-      totalPlannedGhs: total,
-    );
-
-    _hasResult = true;
+    _isComputing = true;
     notifyListeners();
+
+    try {
+      final totalArea = floors.fold<double>(0, (p, f) => p + f.areaM2);
+
+      // Rates come from CatalogService (Firestore or built-in fallback).
+      final rate = catalogService.unitRatesGhsPerM2[quality] ??
+          catalogService.unitRatesGhsPerM2['Standard'] ??
+          4500.0;
+
+      final idx = regionalIndexProvider.indexFor(region);
+      final baseGhs = totalArea * rate * idx;
+
+      final Map<String, double> phaseGhs = {};
+      catalogService.phasePercents.forEach((name, pct) {
+        phaseGhs[name] = baseGhs * pct;
+      });
+
+      // Add-ons — rates from catalog, not hardcoded.
+      final Map<String, double> addOns = {};
+      double addOnsTotal = 0;
+      if (includeExternalWorks) {
+        if (externalWallLenM > 0) {
+          final wall =
+              externalWallLenM * catalogService.compoundWallRatePerM;
+          addOns['Compound wall'] = wall;
+          addOnsTotal += wall;
+        }
+        if (drivewayAreaM2 > 0) {
+          final drive = drivewayAreaM2 * catalogService.drivewayRatePerM2;
+          addOns['Driveway'] = drive;
+          addOnsTotal += drive;
+        }
+        if (includeSeptic) {
+          final septic = catalogService.septicLumpSum;
+          addOns['Septic/Soakaway'] = septic;
+          addOnsTotal += septic;
+        }
+      }
+
+      final prelimGhs = baseGhs * (preliminariesPct / 100.0);
+      final ohp =
+          (baseGhs + prelimGhs) * (catalogService.ohpDefaultPct / 100.0);
+      final contingency = contingencyEnabled
+          ? (baseGhs + prelimGhs + ohp + addOnsTotal) *
+              (contingencyPct / 100.0)
+          : 0.0;
+
+      final netBeforeTax =
+          baseGhs + prelimGhs + ohp + addOnsTotal + contingency;
+
+      final Map<String, double> taxLinesGhs = {};
+      double taxesTotal = 0;
+      for (final t in taxLines) {
+        final line = netBeforeTax * (t.pct / 100.0);
+        taxLinesGhs[t.name] = line;
+        taxesTotal += line;
+      }
+
+      final permit = permitMode == PermitMode.percent
+          ? (baseGhs + addOnsTotal) * (permitPct / 100.0)
+          : (permitManualGhs ?? 0.0);
+
+      final totalPlanned = netBeforeTax + taxesTotal + permit;
+
+      _result = EstimateResult(
+        totalBuiltUpArea: totalArea,
+        phaseBreakdownGhs: phaseGhs,
+        addOnsGhs: addOns,
+        preliminariesGhs: prelimGhs,
+        ohpGhs: ohp,
+        contingencyGhs: contingency,
+        taxLinesGhs: taxLinesGhs,
+        permitGhs: permit,
+        totalPlannedGhs: totalPlanned,
+      );
+    } catch (e) {
+      _computeError = AppException.from(e).message;
+      debugPrint('EstimateController.compute error: $e');
+    } finally {
+      _isComputing = false;
+      notifyListeners();
+    }
   }
 
-  /// Pure snapshot (no I/O). Used by UI (e.g., PDF export) and tests.
-  EstimateSnapshot toSnapshot() {
-    assert(_hasResult && region != null,
-        'toSnapshot called before compute() or without region');
+  // ── Display helpers ──
 
-    final fxRate = _fx.rateTo(currency.code);
-
-    return EstimateSnapshot.fromParts(
-      name: projectName.isEmpty ? 'Untitled Project' : projectName,
-      region: region!,
-      currencyCode: currency.code,
-      inputs: {
-        'buildingType': buildingType,
-        'quality': quality,
-        'roof': roof,
-        'foundation': foundation,
-        'soil': soil,
-        'floors': floors
-            .map((f) => {'areaM2': f.areaM2, 'heightM': f.heightM})
-            .toList(),
-        'external': {
-          'enabled': includeExternalWorks,
-          'externalWallLenM': externalWallLenM,
-          'drivewayAreaM2': drivewayAreaM2,
-          'septic': includeSeptic,
-        },
-        'percentages': {
-          'ohp': _ohpPct,
-          'contingency': _contingencyPct,
-          'taxes': _taxesPct,
-        },
-        'budget': budgetAmount,
-      },
-      outputs: {
-        'areaM2Total': _result!.totalBuiltUpArea,
-        'breakdownGhs': _result!.phaseBreakdownGhs,
-        'addonsGhs': _result!.addOnsGhs,
-        'ohpGhs': _result!.ohpGhs,
-        'contingencyGhs': _result!.contingencyGhs,
-        'taxesGhs': _result!.taxesGhs,
-        'totalGhs': _result!.totalPlannedGhs,
-        'fx': {
-          'code': currency.code,
-          'rate': fxRate,
-          'total': _fx.convertFromGhs(_result!.totalPlannedGhs, currency.code),
-        },
-      },
+  /// Format [ghs] in the currently selected currency.
+  String money(double ghs) {
+    final sym = currency.symbol;
+    if (currency.code == 'GHS') {
+      return '$sym${_fmt(ghs)}';
+    }
+    final converted = fxService.convertFromGhs(
+      amountGhs: ghs,
+      to: currency.code,
     );
+    return '$sym${_fmt(converted)}';
   }
 
-  // Save snapshot (local JSON). Returns saved path.
-  Future<String?> saveSnapshot() async {
-    if (!_hasResult || region == null) return null;
+  String _fmt(double v) =>
+      v >= 1000 ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 
-    final snap = toSnapshot(); // reuse the pure builder above
-    final path = await _storage.writeJson(snap.filename(), snap.toJson());
-    return path;
+  /// Serialises current inputs + result to a plain map for cloud/local storage.
+  /// [userId] must be provided by the caller before persisting.
+  /// Caller should also add `createdAt: FieldValue.serverTimestamp()`.
+  Map<String, dynamic> toMap() {
+    assert(_result != null, 'Call compute() before toMap().');
+    final r = _result!;
+    final fxRate = currency.code == 'GHS'
+        ? 1.0
+        : fxService.rateFor(currency.code);
+    return {
+      'projectName': projectNameCtrl.text.trim(),
+      'region': region ?? '',
+      'buildingType': buildingType,
+      'quality': quality,
+      'foundation': foundation,
+      'soil': soil,
+      'roof': roof,
+      'floors': [
+        for (final f in floors) {'areaM2': f.areaM2, 'heightM': f.heightM},
+      ],
+      'includeExternalWorks': includeExternalWorks,
+      'externalWallLenM': externalWallLenM,
+      'drivewayAreaM2': drivewayAreaM2,
+      'includeSeptic': includeSeptic,
+      if (budgetAmount != null) 'budgetAmount': budgetAmount,
+      'grandTotalGhs': r.totalPlannedGhs,
+      'grandTotalFx': r.totalPlannedGhs * fxRate,
+      'fxCode': currency.code,
+      'fxSymbol': currency.symbol,
+      'phaseBreakdownGhs': r.phaseBreakdownGhs,
+      'addOnsGhs': r.addOnsGhs,
+      'preliminariesGhs': r.preliminariesGhs,
+      'ohpGhs': r.ohpGhs,
+      'contingencyGhs': r.contingencyGhs,
+      'taxLinesGhs': r.taxLinesGhs,
+      'permitGhs': r.permitGhs,
+      'totalBuiltUpArea': r.totalBuiltUpArea,
+    };
   }
 
-  // -------- Helpers ----------
-  double _sum(Iterable<double> xs) => xs.fold<double>(0, (a, b) => a + b);
-
-  double _pick(
-    Map<String, double> table,
-    Map<String, String> aliases,
-    String key,
-    double fallback,
-  ) {
-    final normalized = key.replaceAll('_', ' ').trim();
-    final asKey = aliases[normalized] ??
-        aliases[normalized.toLowerCase()] ??
-        key.toLowerCase().replaceAll(' ', '_');
-    return (table[asKey] ?? fallback).toDouble();
+  @override
+  void dispose() {
+    projectNameCtrl.dispose();
+    super.dispose();
   }
 }

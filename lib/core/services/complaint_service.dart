@@ -41,4 +41,11 @@ class ComplaintService {
           .collection('complaints')
           .doc(complaintId)
           .update({'status': status});
+
+  /// Admin: save a response note on a complaint.
+  Future<void> updateResponse(String complaintId, String response) =>
+      FirebaseFirestore.instance
+          .collection('complaints')
+          .doc(complaintId)
+          .update({'adminResponse': response.trim().isEmpty ? null : response.trim()});
 }
