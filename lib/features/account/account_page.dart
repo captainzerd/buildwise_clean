@@ -7,6 +7,7 @@ import '../../core/services/contract_service.dart';
 import '../estimate/saved_estimates_page.dart';
 import 'builder_profile_page.dart';
 import 'pending_contracts_page.dart';
+import 'pm_profile_page.dart';
 
 class AccountPage extends StatelessWidget {
   const AccountPage({super.key});
@@ -33,6 +34,8 @@ class AccountPage extends StatelessWidget {
           const SizedBox(height: 24),
           if (user.role == UserRole.pm) ...[
             _BuilderProfileTile(),
+            const SizedBox(height: 16),
+            _PmProfileTile(),
             const SizedBox(height: 16),
             _PendingContractsTile(uid: user.uid),
             const SizedBox(height: 24),
@@ -252,6 +255,27 @@ class _BuilderProfileTile extends StatelessWidget {
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const BuilderProfilePage()),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// PM profile link
+// ─────────────────────────────────────────────
+
+class _PmProfileTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.architecture_outlined),
+        title: const Text('Manage PM Profile'),
+        subtitle: const Text('Set up your project manager listing'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const PmProfilePage()),
         ),
       ),
     );

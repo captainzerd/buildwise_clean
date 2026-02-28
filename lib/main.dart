@@ -14,10 +14,15 @@ import 'core/services/catalog_service.dart';
 import 'core/services/fx_service.dart';
 import 'core/services/complaint_service.dart';
 import 'core/services/builder_profile_service.dart';
+import 'core/services/pm_profile_service.dart';
 import 'core/services/contract_service.dart';
+import 'core/services/deletion_request_service.dart';
+import 'core/state/builder_project_state.dart';
 import 'core/state/theme_mode_controller.dart';
+import 'core/services/payment_service.dart';
 import 'core/services/project_service.dart';
 import 'core/services/vendor_service.dart';
+import 'core/services/notification_service.dart';
 import 'core/services/regional_index_provider.dart';
 import 'core/storage/storage_service.dart';
 import 'features/estimate/state/estimate_controller.dart';
@@ -62,11 +67,19 @@ Future<void> main() async {
   final auth = AuthService();
   await auth.init();
 
+  final notifications = NotificationService();
+  await notifications.init();
+  notifications.listenToAuth(auth);
+
   final projectService = ProjectService();
   final builderProfileService = BuilderProfileService();
+  final pmProfileService = PmProfileService();
   final contractService = ContractService();
   final vendorService = VendorService();
   final complaintService = ComplaintService();
+  final paymentService = PaymentService();
+  final deletionRequestService = DeletionRequestService();
+  final builderProjectState = BuilderProjectState();
   final themeModeController = ThemeModeController();
 
   runApp(
@@ -76,11 +89,16 @@ Future<void> main() async {
       regional: regional,
       fx: fx,
       auth: auth,
+      notifications: notifications,
       projectService: projectService,
       builderProfileService: builderProfileService,
+      pmProfileService: pmProfileService,
       contractService: contractService,
       vendorService: vendorService,
       complaintService: complaintService,
+      paymentService: paymentService,
+      deletionRequestService: deletionRequestService,
+      builderProjectState: builderProjectState,
       themeModeController: themeModeController,
     ),
   );
@@ -94,11 +112,16 @@ class AppRoot extends StatelessWidget {
     required this.regional,
     required this.fx,
     required this.auth,
+    required this.notifications,
     required this.projectService,
     required this.builderProfileService,
+    required this.pmProfileService,
     required this.contractService,
     required this.vendorService,
     required this.complaintService,
+    required this.paymentService,
+    required this.deletionRequestService,
+    required this.builderProjectState,
     required this.themeModeController,
   });
 
@@ -107,11 +130,16 @@ class AppRoot extends StatelessWidget {
   final RegionalIndexProvider regional;
   final FxService fx;
   final AuthService auth;
+  final NotificationService notifications;
   final ProjectService projectService;
   final BuilderProfileService builderProfileService;
+  final PmProfileService pmProfileService;
   final ContractService contractService;
   final VendorService vendorService;
   final ComplaintService complaintService;
+  final PaymentService paymentService;
+  final DeletionRequestService deletionRequestService;
+  final BuilderProjectState builderProjectState;
   final ThemeModeController themeModeController;
 
   @override
@@ -124,11 +152,18 @@ class AppRoot extends StatelessWidget {
         // FxService is now a ChangeNotifier — widgets can watch it for rate updates.
         ChangeNotifierProvider<FxService>.value(value: fx),
         ChangeNotifierProvider<AuthService>.value(value: auth),
+        Provider<NotificationService>.value(value: notifications),
         Provider<ProjectService>.value(value: projectService),
         ChangeNotifierProvider<BuilderProfileService>.value(value: builderProfileService),
+        ChangeNotifierProvider<PmProfileService>.value(value: pmProfileService),
         Provider<ContractService>.value(value: contractService),
         ChangeNotifierProvider<VendorService>.value(value: vendorService),
         Provider<ComplaintService>.value(value: complaintService),
+        Provider<PaymentService>.value(value: paymentService),
+        Provider<DeletionRequestService>.value(value: deletionRequestService),
+        ChangeNotifierProvider<BuilderProjectState>.value(
+          value: builderProjectState,
+        ),
         ChangeNotifierProvider<ThemeModeController>.value(
           value: themeModeController,
         ),
@@ -180,6 +215,7 @@ class BuildWiseApp extends StatelessWidget {
     final themeMode = context.watch<ThemeModeController>().mode;
 
     return MaterialApp(
+      navigatorKey: NotificationService.navigatorKey,
       title: 'BuildWise',
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,

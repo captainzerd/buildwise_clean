@@ -8,7 +8,7 @@ import '../auth/sign_in_page.dart';
 import '../../core/widgets/theme_mode_action.dart';
 import '../complaints/complaints_page.dart';
 import '../estimate/estimate_page.dart';
-import '../project/builder_marketplace_page.dart';
+import '../project/marketplace_page.dart';
 import '../project/projects_page.dart';
 import '../vendor/vendors_page.dart';
 
@@ -25,7 +25,7 @@ class _HomeShellState extends State<HomeShell> {
   static const _tabs = [
     _TabDef('Estimate', Icons.calculate_outlined, Icons.calculate),
     _TabDef('Projects', Icons.work_outline, Icons.work),
-    _TabDef('Find a Builder', Icons.people_outline, Icons.people),
+    _TabDef('Marketplace', Icons.people_outline, Icons.people),
     _TabDef('Vendors', Icons.store_mall_directory_outlined, Icons.store_mall_directory),
     _TabDef('Complaints', Icons.report_problem_outlined, Icons.report_problem),
   ];
@@ -66,9 +66,9 @@ class _HomeShellState extends State<HomeShell> {
     return switch (_index) {
       0 => const EstimatePage(),
       1 => _AuthGuard(auth: auth, child: const ProjectsPage()),
-      2 => const BuilderMarketplacePage(),
+      2 => const MarketplacePage(),
       3 => _AuthGuard(auth: auth, child: const VendorsPage()),
-      4 => _AuthGuard(auth: auth, child: const ComplaintsPage()),
+      4 => _SignInGuard(auth: auth, child: const ComplaintsPage()),
       _ => const SizedBox.shrink(),
     };
   }
@@ -87,7 +87,30 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 // ─────────────────────────────────────────────
-// Auth guard for tabs that require sign-in
+// Sign-in only guard (no email verification)
+// ─────────────────────────────────────────────
+
+class _SignInGuard extends StatelessWidget {
+  const _SignInGuard({required this.auth, required this.child});
+
+  final AuthService auth;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!auth.isSignedIn) {
+      return _SignInPrompt(
+        onSignIn: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const SignInPage()),
+        ),
+      );
+    }
+    return child;
+  }
+}
+
+// ─────────────────────────────────────────────
+// Auth guard for tabs that require sign-in + email verified
 // ─────────────────────────────────────────────
 
 class _AuthGuard extends StatelessWidget {
