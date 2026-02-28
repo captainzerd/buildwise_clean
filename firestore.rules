@@ -15,12 +15,12 @@ service cloud.firestore {
       return request.auth.uid == uid;
     }
 
-    function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-    }
-
+    // Safe admin check: uses exists() before get() to avoid null crash
+    // when the users/{uid} document hasn't been written yet.
     function isAdmin() {
-      return isSignedIn() && getUserRole() == 'admin';
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     function isEmailVerified() {
@@ -32,13 +32,19 @@ service cloud.firestore {
     // ─────────────────────────────────────────
 
     match /users/{uid} {
-      // Any signed-in user can read another user's basic profile (needed for PM marketplace).
       allow read: if isSignedIn();
-
-      // Users can only write their own profile. Admins can write any profile.
       allow create: if isSignedIn() && isOwner(uid);
       allow update: if (isSignedIn() && isOwner(uid)) || isAdmin();
       allow delete: if isAdmin();
+
+      match /notifications/{notifId} {
+        // Only the owner can read/write their own notifications.
+        // Cloud Functions write here using Admin SDK (bypasses rules).
+        allow read: if isSignedIn() && isOwner(uid);
+        allow update: if isSignedIn() && isOwner(uid);
+        allow delete: if isSignedIn() && isOwner(uid);
+        allow create: if false; // written only by Cloud Functions
+      }
     }
 
     // ─────────────────────────────────────────
@@ -60,14 +66,11 @@ service cloud.firestore {
 
       allow read: if isSignedIn() && isProjectMember();
 
-      // Only verified users can create projects.
       allow create: if isEmailVerified()
         && request.resource.data.ownerUid == request.auth.uid;
 
-      // Owner or PM can update; only owner can change the assignedPmUid.
       allow update: if isSignedIn() && isProjectMember();
 
-      // Only owner (or admin) can delete a project.
       allow delete: if isSignedIn() && (isProjectOwner() || isAdmin());
 
       // ── Project sub-collections ──
@@ -80,21 +83,18 @@ service cloud.firestore {
       match /costs/{costId} {
         allow read: if isSignedIn() && isProjectMember();
         allow create: if isEmailVerified() && isProjectMember();
-        // Cost entries are immutable after creation (edit by creating new one).
         allow update, delete: if isSignedIn() && isProjectOwner();
       }
 
       match /updates/{updateId} {
         allow read: if isSignedIn() && isProjectMember();
         allow create: if isEmailVerified() && isProjectMember();
-        // Updates are immutable.
         allow update, delete: if isAdmin();
       }
 
       match /documents/{docId} {
         allow read: if isSignedIn() && isProjectMember();
         allow create: if isEmailVerified() && isProjectMember();
-        // Only owner can delete documents.
         allow delete: if isSignedIn() && isProjectOwner();
         allow update: if isEmailVerified() && isProjectMember();
       }
@@ -103,6 +103,21 @@ service cloud.firestore {
         allow read: if isSignedIn() && isProjectMember();
         allow write: if isEmailVerified() && isProjectMember();
       }
+
+      match /payments/{paymentId} {
+        allow read: if isSignedIn() && isProjectMember();
+        allow create: if isEmailVerified() && isProjectMember();
+        allow delete: if isSignedIn() && (isProjectOwner() || isAdmin());
+        allow update: if isAdmin();
+      }
+
+      match /deletionRequests/{itemId} {
+        // Builder creates request; owner + admin can read + resolve
+        allow read: if isSignedIn() && isProjectMember();
+        allow create: if isEmailVerified() && isProjectMember();
+        allow update: if isEmailVerified() && (isProjectOwner() || isAdmin());
+        allow delete: if isAdmin();
+      }
     }
 
     // ─────────────────────────────────────────
@@ -110,36 +125,31 @@ service cloud.firestore {
     // ─────────────────────────────────────────
 
     match /pm_profiles/{uid} {
-      // Anyone signed in can browse PM profiles.
       allow read: if isSignedIn();
-
-      // PMs manage their own profile. Admins can manage any.
       allow create: if isEmailVerified() && isOwner(uid);
       allow update: if isEmailVerified() && (isOwner(uid) || isAdmin());
       allow delete: if isAdmin();
 
       match /reviews/{reviewId} {
         allow read: if isSignedIn();
-        // Verified owners can write a review (one per project enforced in app layer).
         allow create: if isEmailVerified();
         allow update, delete: if isAdmin();
       }
     }
 
     // ─────────────────────────────────────────
-    // Vendors (any verified user can add/rate; only admin can delete)
+    // Vendors
     // ─────────────────────────────────────────
 
     match /vendors/{vendorId} {
       allow read: if isSignedIn();
       allow create: if isEmailVerified();
-      // Allow update for ratings (ratingsCount / ratingsSum increment).
       allow update: if isEmailVerified();
       allow delete: if isAdmin();
     }
 
     // ─────────────────────────────────────────
-    // Cost Catalog (admin publishes; public read — estimate page works unauthed)
+    // Cost Catalog (admin publishes; public read)
     // ─────────────────────────────────────────
 
     match /cost_catalog/{document=**} {
@@ -148,7 +158,7 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────
-    // FX Rates (admin or server writes; public read)
+    // FX Rates (public read)
     // ─────────────────────────────────────────
 
     match /fx_rates/{document=**} {
@@ -158,39 +168,35 @@ service cloud.firestore {
 
     // ─────────────────────────────────────────
     // Contracts
+    // Stored top-level so both owner and builder can query.
+    // memberUids = [ownerUid, builderUid] — enables arrayContains queries
+    // that Firestore can align with the security rule.
     // ─────────────────────────────────────────
 
     match /contracts/{contractId} {
-      function isContractOwner() {
-        return resource.data.ownerUid == request.auth.uid;
-      }
-      function isContractBuilder() {
-        return resource.data.builderUid == request.auth.uid;
-      }
-      function isContractMember() {
-        return isContractOwner() || isContractBuilder() || isAdmin();
-      }
+      // read: aligned for arrayContains queries on memberUids,
+      //       and also aligned for where('builderUid') queries (pendingForBuilder).
+      allow read: if isSignedIn() && (
+        request.auth.uid in resource.data.memberUids ||
+        resource.data.builderUid == request.auth.uid
+      );
 
-      // Owner and builder can read; admins can read all.
-      allow read: if isSignedIn() && isContractMember();
-
-      // Verified owners can create a contract.
       allow create: if isEmailVerified()
         && request.resource.data.ownerUid == request.auth.uid;
 
-      // Builder can accept/decline (update status + signature fields).
-      // Owner can cancel (update status).
-      allow update: if isEmailVerified() && isContractMember();
+      allow update: if isEmailVerified() && (
+        request.auth.uid in resource.data.memberUids ||
+        resource.data.builderUid == request.auth.uid
+      );
 
       allow delete: if isAdmin();
     }
 
     // ─────────────────────────────────────────
-    // Complaints (deferred — placeholder rules)
+    // Complaints
     // ─────────────────────────────────────────
 
     match /complaints/{complaintId} {
-      // Users can read and delete their own complaints; admins can access all.
       allow read: if isSignedIn()
         && (resource.data.userUid == request.auth.uid || isAdmin());
       allow create: if isEmailVerified();

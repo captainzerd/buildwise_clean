@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/services/auth_service.dart';
+import '../../core/services/notification_service.dart';
 import '../account/account_page.dart';
 import '../auth/email_verification_page.dart';
 import '../auth/sign_in_page.dart';
+import '../notifications/notification_centre_page.dart';
 import '../../core/widgets/theme_mode_action.dart';
 import '../complaints/complaints_page.dart';
 import '../estimate/estimate_page.dart';
@@ -39,6 +41,7 @@ class _HomeShellState extends State<HomeShell> {
         title: Text(_tabs[_index].title),
         actions: [
           const ThemeModeAction(),
+          if (auth.isSignedIn) _NotificationBell(uid: auth.currentUser!.uid),
           IconButton(
             tooltip: auth.isSignedIn ? 'Account' : 'Sign in',
             icon: const Icon(Icons.account_circle_outlined),
@@ -178,6 +181,39 @@ class _SignInPrompt extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Notification bell with unread badge
+// ─────────────────────────────────────────────
+
+class _NotificationBell extends StatelessWidget {
+  const _NotificationBell({required this.uid});
+  final String uid;
+
+  @override
+  Widget build(BuildContext context) {
+    final svc = context.read<NotificationService>();
+    return StreamBuilder<int>(
+      stream: svc.unreadCountStream(uid),
+      builder: (context, snap) {
+        final count = snap.data ?? 0;
+        return IconButton(
+          tooltip: 'Notifications',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const NotificationCentrePage(),
+            ),
+          ),
+          icon: Badge(
+            isLabelVisible: count > 0,
+            label: Text(count > 99 ? '99+' : '$count'),
+            child: const Icon(Icons.notifications_outlined),
+          ),
+        );
+      },
     );
   }
 }
