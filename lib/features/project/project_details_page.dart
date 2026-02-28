@@ -14,9 +14,13 @@ import '../../core/models/project.dart';
 import '../../core/models/project_document.dart';
 import '../../core/models/project_update.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/models/builder_contract.dart';
 import '../../core/services/builder_profile_service.dart';
+import '../../core/services/contract_service.dart';
 import '../../core/services/project_service.dart';
 import 'builder_marketplace_page.dart';
+import 'contract_view_page.dart';
+import 'create_contract_page.dart';
 
 class ProjectDetailsPage extends StatefulWidget {
   const ProjectDetailsPage({
@@ -110,6 +114,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                           projectService: projectService,
                           builderProfileService:
                               context.read<BuilderProfileService>(),
+                          contractService: context.read<ContractService>(),
                           currentUserUid:
                               context.read<AuthService>().currentUser?.uid ?? '',
                         ),
@@ -380,12 +385,14 @@ class _OverviewTab extends StatelessWidget {
     required this.projectId,
     required this.projectService,
     required this.builderProfileService,
+    required this.contractService,
     required this.currentUserUid,
   });
   final Project project;
   final String projectId;
   final ProjectService projectService;
   final BuilderProfileService builderProfileService;
+  final ContractService contractService;
   final String currentUserUid;
 
   @override
@@ -535,7 +542,7 @@ class _OverviewTab extends StatelessWidget {
 
         const SizedBox(height: 16),
 
-        // Assigned PM card
+        // Assigned builder card
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -548,7 +555,7 @@ class _OverviewTab extends StatelessWidget {
                       radius: 20,
                       backgroundColor: cs.secondaryContainer,
                       child: Icon(
-                        Icons.person_outline,
+                        Icons.engineering_outlined,
                         color: cs.onSecondaryContainer,
                       ),
                     ),
@@ -616,6 +623,90 @@ class _OverviewTab extends StatelessWidget {
             ),
           ),
         ),
+
+        const SizedBox(height: 16),
+
+        // Contract section
+        StreamBuilder<BuilderContract?>(
+          stream: contractService.activeContractStream(projectId),
+          builder: (ctx, snap) {
+            final contract = snap.data;
+            return Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.description_outlined,
+                            size: 18, color: cs.outline,),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Contract',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        if (contract != null) ...[
+                          const Spacer(),
+                          _ContractStatusChip(status: contract.status),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (contract == null) ...[
+                      Text(
+                        'No active contract. Create a formal contract with a builder to protect both parties.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: cs.outline,
+                            ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.draw_outlined, size: 18),
+                          label: const Text('Create Contract'),
+                          onPressed: () => _openContractFlow(context),
+                        ),
+                      ),
+                    ] else ...[
+                      Text(
+                        contract.builderName,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'GHS ${NumberFormat('#,##0').format(contract.totalAmountGhs)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: cs.outline,
+                            ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.visibility_outlined, size: 18),
+                          label: const Text('View Contract'),
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => ContractViewPage(
+                                contract: contract,
+                                currentUserUid: currentUserUid,
+                                contractService: contractService,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
       ],
     );
   }
@@ -664,6 +755,30 @@ class _OverviewTab extends StatelessWidget {
               projectId,
               pmUid: builder.uid,
               pmName: builder.displayName,
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _openContractFlow(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BuilderMarketplacePage(
+          initialRegion: project.region.isNotEmpty ? project.region : null,
+          onSelect: (builder) {
+            Navigator.of(context).pop();
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => CreateContractPage(
+                  projectId: projectId,
+                  projectTitle: project.title,
+                  builder: builder,
+                  ownerUid: currentUserUid,
+                  contractService: contractService,
+                ),
+              ),
             );
           },
         ),
@@ -1701,6 +1816,35 @@ class _AddUpdateSheetState extends State<_AddUpdateSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Contract status chip ────────────────────────────────────────────────────────
+
+class _ContractStatusChip extends StatelessWidget {
+  const _ContractStatusChip({required this.status});
+  final ContractStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final (bg, fg) = switch (status) {
+      ContractStatus.pendingBuilder => (cs.secondaryContainer, cs.onSecondaryContainer),
+      ContractStatus.active => (Colors.green.withValues(alpha: 0.15), Colors.green[800]!),
+      ContractStatus.declined => (cs.errorContainer, cs.onErrorContainer),
+      ContractStatus.cancelled => (cs.surfaceContainerHighest, cs.onSurfaceVariant),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        status.label,
+        style: TextStyle(fontSize: 11, color: fg, fontWeight: FontWeight.w600),
       ),
     );
   }

@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../../core/models/app_user.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/contract_service.dart';
 import '../estimate/saved_estimates_page.dart';
 import 'builder_profile_page.dart';
+import 'pending_contracts_page.dart';
 
 class AccountPage extends StatelessWidget {
   const AccountPage({super.key});
@@ -31,6 +33,8 @@ class AccountPage extends StatelessWidget {
           const SizedBox(height: 24),
           if (user.role == UserRole.pm) ...[
             _BuilderProfileTile(),
+            const SizedBox(height: 16),
+            _PendingContractsTile(uid: user.uid),
             const SizedBox(height: 24),
           ],
           _SavedEstimatesTile(),
@@ -250,6 +254,45 @@ class _BuilderProfileTile extends StatelessWidget {
           MaterialPageRoute(builder: (_) => const BuilderProfilePage()),
         ),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Pending contracts link (builder role)
+// ─────────────────────────────────────────────
+
+class _PendingContractsTile extends StatelessWidget {
+  const _PendingContractsTile({required this.uid});
+  final String uid;
+
+  @override
+  Widget build(BuildContext context) {
+    final service = context.read<ContractService>();
+    return StreamBuilder<List<Object>>(
+      stream: service.pendingForBuilder(uid),
+      builder: (ctx, snap) {
+        final count = snap.data?.length ?? 0;
+        return Card(
+          child: ListTile(
+            leading: Badge(
+              isLabelVisible: count > 0,
+              label: Text('$count'),
+              child: const Icon(Icons.description_outlined),
+            ),
+            title: const Text('Pending Contracts'),
+            subtitle: Text(count > 0
+                ? '$count contract${count == 1 ? '' : 's'} awaiting your signature'
+                : 'No pending contracts',),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const PendingContractsPage(),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

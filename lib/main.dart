@@ -14,6 +14,7 @@ import 'core/services/catalog_service.dart';
 import 'core/services/fx_service.dart';
 import 'core/services/complaint_service.dart';
 import 'core/services/builder_profile_service.dart';
+import 'core/services/contract_service.dart';
 import 'core/state/theme_mode_controller.dart';
 import 'core/services/project_service.dart';
 import 'core/services/vendor_service.dart';
@@ -63,6 +64,7 @@ Future<void> main() async {
 
   final projectService = ProjectService();
   final builderProfileService = BuilderProfileService();
+  final contractService = ContractService();
   final vendorService = VendorService();
   final complaintService = ComplaintService();
   final themeModeController = ThemeModeController();
@@ -76,6 +78,7 @@ Future<void> main() async {
       auth: auth,
       projectService: projectService,
       builderProfileService: builderProfileService,
+      contractService: contractService,
       vendorService: vendorService,
       complaintService: complaintService,
       themeModeController: themeModeController,
@@ -93,6 +96,7 @@ class AppRoot extends StatelessWidget {
     required this.auth,
     required this.projectService,
     required this.builderProfileService,
+    required this.contractService,
     required this.vendorService,
     required this.complaintService,
     required this.themeModeController,
@@ -105,6 +109,7 @@ class AppRoot extends StatelessWidget {
   final AuthService auth;
   final ProjectService projectService;
   final BuilderProfileService builderProfileService;
+  final ContractService contractService;
   final VendorService vendorService;
   final ComplaintService complaintService;
   final ThemeModeController themeModeController;
@@ -121,6 +126,7 @@ class AppRoot extends StatelessWidget {
         ChangeNotifierProvider<AuthService>.value(value: auth),
         Provider<ProjectService>.value(value: projectService),
         ChangeNotifierProvider<BuilderProfileService>.value(value: builderProfileService),
+        Provider<ContractService>.value(value: contractService),
         ChangeNotifierProvider<VendorService>.value(value: vendorService),
         Provider<ComplaintService>.value(value: complaintService),
         ChangeNotifierProvider<ThemeModeController>.value(
