@@ -1,4 +1,8 @@
+import 'dart:io';
+
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models/builder_profile.dart';
@@ -26,9 +30,11 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
 
   BuilderRole _role = BuilderRole.contractor;
   String? _region;
+  String? _photoUrl;
   bool _isActive = true;
   bool _availableForHire = true;
   bool _saving = false;
+  bool _uploading = false;
   bool _loading = true;
   String? _error;
 
@@ -64,6 +70,7 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
           _region = snap.region.isEmpty ? null : snap.region;
           _isActive = snap.isActive;
           _availableForHire = snap.availableForHire;
+          _photoUrl = snap.photoUrl;
         });
       }
     } finally {
@@ -82,6 +89,53 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
     _minBudgetCtrl.dispose();
     _projectsDoneCtrl.dispose();
     super.dispose();
+  }
+
+  String _initials(String? name) {
+    if (name == null || name.trim().isEmpty) return '?';
+    final parts =
+        name.trim().split(' ').where((s) => s.isNotEmpty).toList();
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return '${parts[0][0]}${parts[parts.length - 1][0]}'.toUpperCase();
+  }
+
+  Future<void> _pickAndUploadPhoto() async {
+    final auth = context.read<AuthService>();
+    final uid = auth.currentUser?.uid;
+    if (uid == null) return;
+
+    final xfile = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+      maxWidth: 800,
+    );
+    if (xfile == null || !mounted) return;
+
+    setState(() => _uploading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final ref = FirebaseStorage.instance
+          .ref('profile_photos/builders/$uid.jpg');
+      final task = await ref.putFile(
+        File(xfile.path),
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      final url = await task.ref.getDownloadURL();
+      if (mounted) {
+        setState(() => _photoUrl = url);
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Photo updated — save to confirm.'),
+          ),
+        );
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Upload failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
   }
 
   Future<void> _save() async {
@@ -112,6 +166,7 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
             ? null
             : _whatsappCtrl.text.trim(),
         email: user.email,
+        photoUrl: _photoUrl,
         location: _locationCtrl.text.trim().isEmpty
             ? null
             : _locationCtrl.text.trim(),
@@ -121,8 +176,7 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
         availableForHire: _availableForHire,
         yearsExperience: int.tryParse(_yearsCtrl.text.trim()),
         minimumBudgetGhs: double.tryParse(_minBudgetCtrl.text.trim()),
-        projectsCompleted:
-            int.tryParse(_projectsDoneCtrl.text.trim()) ?? 0,
+        projectsCompleted: int.tryParse(_projectsDoneCtrl.text.trim()) ?? 0,
         createdAt: now,
         updatedAt: now,
       );
@@ -149,6 +203,9 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final displayName =
+        context.read<AuthService>().currentUser?.displayName;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Builder Profile')),
       body: Form(
@@ -156,6 +213,55 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // ── Profile photo ───────────────────────────────────────────────
+            Center(
+              child: GestureDetector(
+                onTap: _uploading ? null : _pickAndUploadPhoto,
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 44,
+                      backgroundImage: _photoUrl != null
+                          ? NetworkImage(_photoUrl!) as ImageProvider
+                          : null,
+                      child: _photoUrl == null
+                          ? Text(
+                              _initials(displayName),
+                              style: const TextStyle(fontSize: 28),
+                            )
+                          : null,
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        padding: const EdgeInsets.all(6),
+                        child: _uploading
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.camera_alt,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
             Text(
               'Your public profile is visible to property owners looking for '
               'a builder.',

@@ -6,17 +6,24 @@ import 'package:provider/provider.dart';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/models/app_user.dart';
+import '../../core/models/builder_contract.dart';
 import '../../core/models/cost_entry.dart';
+import '../../core/models/deletion_request.dart';
+import '../../core/models/payment_record.dart';
 import '../../core/models/phase.dart';
 import '../../core/models/project.dart';
 import '../../core/models/project_document.dart';
 import '../../core/models/project_update.dart';
 import '../../core/services/auth_service.dart';
-import '../../core/models/builder_contract.dart';
 import '../../core/services/builder_profile_service.dart';
 import '../../core/services/contract_service.dart';
+import '../../core/services/deletion_request_service.dart';
+import '../../core/services/payment_service.dart';
+import '../../core/services/pdf_service.dart';
 import '../../core/services/project_service.dart';
 import 'builder_marketplace_page.dart';
 import 'contract_view_page.dart';
@@ -40,11 +47,12 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
   int _tabIndex = 0;
+  bool _generatingReport = false;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 5, vsync: this)
+    _tabs = TabController(length: 6, vsync: this)
       ..addListener(() {
         if (!_tabs.indexIsChanging) {
           setState(() => _tabIndex = _tabs.index);
@@ -72,11 +80,24 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
           appBar: AppBar(
             title: Text(title),
             actions: [
-              if (project != null)
+              if (_generatingReport)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              else if (project != null)
                 PopupMenuButton<_MenuAction>(
                   onSelected: (action) =>
                       _handleMenu(context, action, project),
                   itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: _MenuAction.generateReport,
+                      child: Text('Generate Report'),
+                    ),
                     PopupMenuItem(
                       value: _MenuAction.editStatus,
                       child: Text('Change status'),
@@ -98,6 +119,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                 Tab(icon: Icon(Icons.receipt_long_outlined), text: 'Costs'),
                 Tab(icon: Icon(Icons.chat_bubble_outline), text: 'Updates'),
                 Tab(icon: Icon(Icons.folder_outlined), text: 'Docs'),
+                Tab(icon: Icon(Icons.payments_outlined), text: 'Payments'),
               ],
             ),
           ),
@@ -105,37 +127,62 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
               ? const Center(child: CircularProgressIndicator())
               : project == null
                   ? const Center(child: Text('Project not found.'))
-                  : TabBarView(
-                      controller: _tabs,
-                      children: [
-                        _OverviewTab(
-                          project: project,
-                          projectId: widget.projectId,
-                          projectService: projectService,
-                          builderProfileService:
-                              context.read<BuilderProfileService>(),
-                          contractService: context.read<ContractService>(),
-                          currentUserUid:
-                              context.read<AuthService>().currentUser?.uid ?? '',
-                        ),
-                        _PhasesTab(
-                          projectId: widget.projectId,
-                          projectService: projectService,
-                        ),
-                        _CostsTab(
-                          projectId: widget.projectId,
-                          currencySymbol: project.currencySymbol,
-                          projectService: projectService,
-                        ),
-                        _UpdatesTab(
-                          projectId: widget.projectId,
-                          projectService: projectService,
-                        ),
-                        _DocsTab(
-                          projectId: widget.projectId,
-                          projectService: projectService,
-                        ),
-                      ],
+                  : Builder(
+                      builder: (context) {
+                        final auth = context.read<AuthService>();
+                        final currentUserUid = auth.currentUser?.uid ?? '';
+                        final isOwner = project.ownerUid == currentUserUid;
+                        final isBuilder = auth.role == UserRole.pm;
+                        final deletionService =
+                            context.read<DeletionRequestService>();
+                        return TabBarView(
+                          controller: _tabs,
+                          children: [
+                            _OverviewTab(
+                              project: project,
+                              projectId: widget.projectId,
+                              projectService: projectService,
+                              builderProfileService:
+                                  context.read<BuilderProfileService>(),
+                              contractService: context.read<ContractService>(),
+                              currentUserUid: currentUserUid,
+                              isOwner: isOwner,
+                              deletionRequestService: deletionService,
+                            ),
+                            _PhasesTab(
+                              projectId: widget.projectId,
+                              projectService: projectService,
+                            ),
+                            _CostsTab(
+                              projectId: widget.projectId,
+                              currencySymbol: project.currencySymbol,
+                              projectService: projectService,
+                              isBuilder: isBuilder,
+                              currentUserUid: currentUserUid,
+                              currentUserName:
+                                  auth.currentUser?.displayName ?? '',
+                              deletionRequestService: deletionService,
+                            ),
+                            _UpdatesTab(
+                              projectId: widget.projectId,
+                              projectService: projectService,
+                            ),
+                            _DocsTab(
+                              projectId: widget.projectId,
+                              projectService: projectService,
+                            ),
+                            _PaymentsTab(
+                              projectId: widget.projectId,
+                              paymentService: context.read<PaymentService>(),
+                              isBuilder: isBuilder,
+                              currentUserUid: currentUserUid,
+                              currentUserName:
+                                  auth.currentUser?.displayName ?? '',
+                              deletionRequestService: deletionService,
+                            ),
+                          ],
+                        );
+                      },
                     ),
           floatingActionButton: project != null
               ? _buildFab(context, project)
@@ -181,6 +228,16 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
             auth.currentUser!.uid,
           ),
           child: const Icon(Icons.upload_file_outlined),
+        ),
+      5 => FloatingActionButton(
+          tooltip: 'Record payment',
+          onPressed: () => _showAddPayment(
+            context,
+            context.read<PaymentService>(),
+            auth.currentUser!.uid,
+            project,
+          ),
+          child: const Icon(Icons.add),
         ),
       _ => null,
     };
@@ -235,6 +292,27 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
         projectId: widget.projectId,
         authorUid: authorUid,
         projectService: projectService,
+      ),
+    );
+  }
+
+  // ── Payment sheet ────────────────────────────────────────────────────────────
+
+  void _showAddPayment(
+    BuildContext context,
+    PaymentService paymentService,
+    String authorUid,
+    Project project,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => _AddPaymentSheet(
+        projectId: widget.projectId,
+        authorUid: authorUid,
+        paymentService: paymentService,
+        projectService: context.read<ProjectService>(),
       ),
     );
   }
@@ -302,10 +380,47 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
     final projectService = context.read<ProjectService>();
 
     switch (action) {
+      case _MenuAction.generateReport:
+        await _generateReport(context, project);
       case _MenuAction.editStatus:
         await _showStatusPicker(context, project, projectService);
       case _MenuAction.delete:
         await _confirmDelete(context, projectService);
+    }
+  }
+
+  Future<void> _generateReport(BuildContext context, Project project) async {
+    setState(() => _generatingReport = true);
+    final projectService = context.read<ProjectService>();
+    final paymentService = context.read<PaymentService>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final phases =
+          await projectService.phasesStream(widget.projectId).first;
+      final costs =
+          await projectService.costEntriesStream(widget.projectId).first;
+      final payments =
+          await paymentService.paymentsStream(widget.projectId).first;
+
+      final data = ProjectReportData(
+        project: project,
+        phases: phases,
+        costs: costs,
+        payments: payments,
+      );
+      final bytes = await PdfService().generateProjectReport(data);
+      final safeName =
+          project.title.replaceAll(RegExp(r'[^\w\s\-]'), '_').trim();
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: '${safeName}_report.pdf',
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Report failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _generatingReport = false);
     }
   }
 
@@ -375,7 +490,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
   }
 }
 
-enum _MenuAction { editStatus, delete }
+enum _MenuAction { generateReport, editStatus, delete }
 
 // ── Overview tab ───────────────────────────────────────────────────────────────
 
@@ -387,6 +502,8 @@ class _OverviewTab extends StatelessWidget {
     required this.builderProfileService,
     required this.contractService,
     required this.currentUserUid,
+    required this.isOwner,
+    required this.deletionRequestService,
   });
   final Project project;
   final String projectId;
@@ -394,6 +511,8 @@ class _OverviewTab extends StatelessWidget {
   final BuilderProfileService builderProfileService;
   final ContractService contractService;
   final String currentUserUid;
+  final bool isOwner;
+  final DeletionRequestService deletionRequestService;
 
   @override
   Widget build(BuildContext context) {
@@ -626,9 +745,20 @@ class _OverviewTab extends StatelessWidget {
 
         const SizedBox(height: 16),
 
+        // Deletion requests section (owner only)
+        if (isOwner) ...[
+          const SizedBox(height: 16),
+          _DeletionRequestsSection(
+            projectId: projectId,
+            deletionRequestService: deletionRequestService,
+          ),
+        ],
+
+        const SizedBox(height: 16),
+
         // Contract section
         StreamBuilder<BuilderContract?>(
-          stream: contractService.activeContractStream(projectId),
+          stream: contractService.activeContractStream(projectId, currentUserUid),
           builder: (ctx, snap) {
             final contract = snap.data;
             return Card(
@@ -1044,11 +1174,19 @@ class _CostsTab extends StatelessWidget {
     required this.projectId,
     required this.currencySymbol,
     required this.projectService,
+    required this.isBuilder,
+    required this.currentUserUid,
+    required this.currentUserName,
+    required this.deletionRequestService,
   });
 
   final String projectId;
   final String currencySymbol;
   final ProjectService projectService;
+  final bool isBuilder;
+  final String currentUserUid;
+  final String currentUserName;
+  final DeletionRequestService deletionRequestService;
 
   @override
   Widget build(BuildContext context) {
@@ -1102,10 +1240,15 @@ class _CostsTab extends StatelessWidget {
                 itemBuilder: (_, i) => _CostEntryTile(
                   entry: entries[i],
                   currencySymbol: currencySymbol,
+                  isBuilder: isBuilder,
                   onDelete: () => projectService.deleteCostEntry(
                     projectId,
                     entries[i].id,
                     entries[i].amountGhs,
+                  ),
+                  onRequestDeletion: () => _requestDeletion(
+                    context,
+                    entries[i],
                   ),
                 ),
               ),
@@ -1115,18 +1258,68 @@ class _CostsTab extends StatelessWidget {
       },
     );
   }
+
+  Future<void> _requestDeletion(BuildContext context, CostEntry entry) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Request deletion?'),
+        content: Text(
+          'Send a deletion request to the owner for:\n\n'
+          '"${entry.description}" — GH₵${NumberFormat('#,##0.00').format(entry.amountGhs)}\n\n'
+          'The item will only be deleted after the owner approves.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Send Request'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await deletionRequestService.request(
+        DeletionRequest(
+          itemId: entry.id,
+          projectId: projectId,
+          itemType: DeletionItemType.costEntry,
+          itemDescription: entry.description,
+          requestedByUid: currentUserUid,
+          requestedByName: currentUserName,
+          status: DeletionStatus.pending,
+          createdAt: DateTime.now(),
+          amountGhs: entry.amountGhs,
+        ),
+      );
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Deletion request sent to owner.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
 }
 
 class _CostEntryTile extends StatelessWidget {
   const _CostEntryTile({
     required this.entry,
     required this.currencySymbol,
+    required this.isBuilder,
     required this.onDelete,
+    required this.onRequestDeletion,
   });
 
   final CostEntry entry;
   final String currencySymbol;
+  final bool isBuilder;
   final VoidCallback onDelete;
+  final VoidCallback onRequestDeletion;
 
   @override
   Widget build(BuildContext context) {
@@ -1147,11 +1340,22 @@ class _CostEntryTile extends StatelessWidget {
                 ),
           ),
           const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, size: 18),
-            tooltip: 'Delete',
-            onPressed: onDelete,
-          ),
+          if (isBuilder)
+            IconButton(
+              icon: Icon(
+                Icons.flag_outlined,
+                size: 18,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              tooltip: 'Request deletion',
+              onPressed: onRequestDeletion,
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18),
+              tooltip: 'Delete',
+              onPressed: onDelete,
+            ),
         ],
       ),
     );
@@ -1935,4 +2139,753 @@ Widget _centeredHint(
       ),
     ),
   );
+}
+
+// ── Payments tab ───────────────────────────────────────────────────────────────
+
+class _PaymentsTab extends StatelessWidget {
+  const _PaymentsTab({
+    required this.projectId,
+    required this.paymentService,
+    required this.isBuilder,
+    required this.currentUserUid,
+    required this.currentUserName,
+    required this.deletionRequestService,
+  });
+  final String projectId;
+  final PaymentService paymentService;
+  final bool isBuilder;
+  final String currentUserUid;
+  final String currentUserName;
+  final DeletionRequestService deletionRequestService;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<PaymentRecord>>(
+      stream: paymentService.paymentsStream(projectId),
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final payments = snap.data ?? [];
+        if (payments.isEmpty) {
+          return _centeredHint(
+            context,
+            Icons.payments_outlined,
+            'No payments recorded',
+            'Tap + to record a payment in or out.',
+          );
+        }
+
+        // Summary totals
+        double totalOut = 0;
+        double totalIn = 0;
+        for (final p in payments) {
+          if (p.direction == PaymentDirection.outbound) {
+            totalOut += p.amountGhs;
+          } else {
+            totalIn += p.amountGhs;
+          }
+        }
+        final net = totalIn - totalOut;
+        final fmt = NumberFormat('#,##0.00');
+        final cs = Theme.of(context).colorScheme;
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Summary card
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _SummaryColumn(
+                        label: 'Paid Out',
+                        value: 'GHS ${fmt.format(totalOut)}',
+                        color: cs.error,
+                      ),
+                    ),
+                    const VerticalDivider(width: 24),
+                    Expanded(
+                      child: _SummaryColumn(
+                        label: 'Received',
+                        value: 'GHS ${fmt.format(totalIn)}',
+                        color: Colors.green,
+                      ),
+                    ),
+                    const VerticalDivider(width: 24),
+                    Expanded(
+                      child: _SummaryColumn(
+                        label: 'Net',
+                        value: 'GHS ${fmt.format(net.abs())}',
+                        color: net >= 0 ? Colors.green : cs.error,
+                        prefix: net >= 0 ? '+' : '-',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...payments.map(
+              (p) => _PaymentCard(
+                payment: p,
+                isBuilder: isBuilder,
+                onDelete: () => paymentService.deletePayment(
+                  projectId: projectId,
+                  paymentId: p.id,
+                ),
+                onRequestDeletion: () => _requestPaymentDeletion(
+                  context,
+                  p,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _requestPaymentDeletion(
+    BuildContext context,
+    PaymentRecord payment,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Request deletion?'),
+        content: Text(
+          'Send a deletion request to the owner for:\n\n'
+          '"${payment.description}" — GHS ${NumberFormat('#,##0.00').format(payment.amountGhs)}\n\n'
+          'The record will only be deleted after the owner approves.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Send Request'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await deletionRequestService.request(
+        DeletionRequest(
+          itemId: payment.id,
+          projectId: projectId,
+          itemType: DeletionItemType.payment,
+          itemDescription: payment.description,
+          requestedByUid: currentUserUid,
+          requestedByName: currentUserName,
+          status: DeletionStatus.pending,
+          createdAt: DateTime.now(),
+          amountGhs: payment.amountGhs,
+        ),
+      );
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Deletion request sent to owner.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+}
+
+class _SummaryColumn extends StatelessWidget {
+  const _SummaryColumn({
+    required this.label,
+    required this.value,
+    required this.color,
+    this.prefix = '',
+  });
+  final String label;
+  final String value;
+  final Color color;
+  final String prefix;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '$prefix$value',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
+class _PaymentCard extends StatelessWidget {
+  const _PaymentCard({
+    required this.payment,
+    required this.isBuilder,
+    required this.onDelete,
+    required this.onRequestDeletion,
+  });
+  final PaymentRecord payment;
+  final bool isBuilder;
+  final VoidCallback onDelete;
+  final VoidCallback onRequestDeletion;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final fmt = NumberFormat('#,##0.00');
+    final dateFmt = DateFormat('d MMM yyyy');
+    final isOut = payment.direction == PaymentDirection.outbound;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: CircleAvatar(
+          radius: 20,
+          backgroundColor:
+              isOut ? cs.errorContainer : Colors.green.withValues(alpha: 0.15),
+          child: Icon(
+            isOut ? Icons.arrow_upward : Icons.arrow_downward,
+            size: 18,
+            color: isOut ? cs.error : Colors.green,
+          ),
+        ),
+        title: Text(payment.description),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${payment.method.label} · ${dateFmt.format(payment.paymentDate)}',
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+            if (payment.phaseTitle != null)
+              Text(
+                'Phase: ${payment.phaseTitle}',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: cs.outline,
+                    ),
+              ),
+            if (payment.reference != null && payment.reference!.isNotEmpty)
+              Text(
+                'Ref: ${payment.reference}',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: cs.outline,
+                    ),
+              ),
+          ],
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              'GHS ${fmt.format(payment.amountGhs)}',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: isOut ? cs.error : Colors.green,
+              ),
+            ),
+            if (isBuilder)
+              GestureDetector(
+                onTap: onRequestDeletion,
+                child: Icon(
+                  Icons.flag_outlined,
+                  size: 16,
+                  color: cs.error,
+                ),
+              )
+            else
+              GestureDetector(
+                onTap: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text('Delete payment?'),
+                      content:
+                          const Text('This record will be permanently removed.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton.tonal(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) onDelete();
+                },
+                child: Icon(Icons.delete_outline, size: 16, color: cs.outline),
+              ),
+          ],
+        ),
+        isThreeLine: payment.phaseTitle != null || payment.reference != null,
+      ),
+    );
+  }
+}
+
+// ── Add Payment Sheet ──────────────────────────────────────────────────────────
+
+class _AddPaymentSheet extends StatefulWidget {
+  const _AddPaymentSheet({
+    required this.projectId,
+    required this.authorUid,
+    required this.paymentService,
+    required this.projectService,
+  });
+  final String projectId;
+  final String authorUid;
+  final PaymentService paymentService;
+  final ProjectService projectService;
+
+  @override
+  State<_AddPaymentSheet> createState() => _AddPaymentSheetState();
+}
+
+class _AddPaymentSheetState extends State<_AddPaymentSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _descCtrl = TextEditingController();
+  final _amountCtrl = TextEditingController();
+  final _refCtrl = TextEditingController();
+
+  PaymentDirection _direction = PaymentDirection.outbound;
+  PaymentMethod _method = PaymentMethod.cash;
+  DateTime _paymentDate = DateTime.now();
+  String? _selectedPhaseId;
+  String? _selectedPhaseTitle;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _descCtrl.dispose();
+    _amountCtrl.dispose();
+    _refCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _paymentDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) setState(() => _paymentDate = picked);
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final payment = PaymentRecord(
+        id: '',
+        authorUid: widget.authorUid,
+        direction: _direction,
+        amountGhs: double.parse(_amountCtrl.text.replaceAll(',', '')),
+        description: _descCtrl.text.trim(),
+        method: _method,
+        paymentDate: _paymentDate,
+        createdAt: DateTime.now(),
+        reference: _refCtrl.text.trim().isEmpty ? null : _refCtrl.text.trim(),
+        phaseId: _selectedPhaseId,
+        phaseTitle: _selectedPhaseTitle,
+      );
+      await widget.paymentService.addPayment(
+        projectId: widget.projectId,
+        payment: payment,
+      );
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFmt = DateFormat('d MMM yyyy');
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        0,
+        16,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Record Payment',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 16),
+
+              // Direction toggle
+              SegmentedButton<PaymentDirection>(
+                segments: PaymentDirection.values
+                    .map(
+                      (d) => ButtonSegment(
+                        value: d,
+                        label: Text(d.label),
+                        icon: Icon(
+                          d == PaymentDirection.outbound
+                              ? Icons.arrow_upward
+                              : Icons.arrow_downward,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                selected: {_direction},
+                onSelectionChanged: (s) =>
+                    setState(() => _direction = s.first),
+              ),
+              const SizedBox(height: 12),
+
+              // Description
+              TextFormField(
+                controller: _descCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Description *',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+
+              // Amount
+              TextFormField(
+                controller: _amountCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Amount (GHS) *',
+                  prefixText: 'GHS ',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Required';
+                  final n = double.tryParse(v.replaceAll(',', ''));
+                  if (n == null || n <= 0) return 'Enter a valid amount';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Payment method
+              DropdownButtonFormField<PaymentMethod>(
+                initialValue: _method,
+                decoration: const InputDecoration(
+                  labelText: 'Payment method',
+                  border: OutlineInputBorder(),
+                ),
+                items: PaymentMethod.values
+                    .map(
+                      (m) => DropdownMenuItem(value: m, child: Text(m.label)),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => _method = v);
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Date picker
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.calendar_today_outlined),
+                title: const Text('Payment date'),
+                subtitle: Text(dateFmt.format(_paymentDate)),
+                onTap: _pickDate,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Reference (optional)
+              TextFormField(
+                controller: _refCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Reference / receipt no. (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Phase link (optional) — streams phases
+              StreamBuilder<List<Phase>>(
+                stream:
+                    widget.projectService.phasesStream(widget.projectId),
+                builder: (ctx, snap) {
+                  final phases = snap.data ?? [];
+                  if (phases.isEmpty) return const SizedBox.shrink();
+                  return DropdownButtonFormField<String>(
+                    initialValue: _selectedPhaseId,
+                    decoration: const InputDecoration(
+                      labelText: 'Link to phase (optional)',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        child: Text('None'),
+                      ),
+                      ...phases.map(
+                        (ph) => DropdownMenuItem(
+                          value: ph.id,
+                          child: Text(ph.name),
+                        ),
+                      ),
+                    ],
+                    onChanged: (v) {
+                      setState(() {
+                        _selectedPhaseId = v;
+                        _selectedPhaseTitle = phases
+                            .where((ph) => ph.id == v)
+                            .map((ph) => ph.name)
+                            .firstOrNull;
+                      });
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 20),
+
+              FilledButton(
+                onPressed: _saving ? null : _save,
+                child: _saving
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Save Payment'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Deletion requests section (owner view in Overview tab) ─────────────────────
+
+class _DeletionRequestsSection extends StatelessWidget {
+  const _DeletionRequestsSection({
+    required this.projectId,
+    required this.deletionRequestService,
+  });
+
+  final String projectId;
+  final DeletionRequestService deletionRequestService;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<DeletionRequest>>(
+      stream: deletionRequestService.pendingStream(projectId),
+      builder: (context, snap) {
+        final requests = snap.data ?? [];
+        if (requests.isEmpty) return const SizedBox.shrink();
+
+        final cs = Theme.of(context).colorScheme;
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.flag_outlined, size: 18, color: cs.error),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Deletion Requests (${requests.length})',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: cs.error,
+                          ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                for (int i = 0; i < requests.length; i++) ...[
+                  _DeletionRequestTile(
+                    request: requests[i],
+                    onApprove: () => _handleApprove(context, requests[i]),
+                    onDeny: () => _handleDeny(context, requests[i]),
+                  ),
+                  if (i < requests.length - 1) const Divider(height: 16),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _handleApprove(
+    BuildContext context,
+    DeletionRequest req,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Approve deletion?'),
+        content: Text(
+          'This will permanently delete:\n"${req.itemDescription}"\n\n'
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonal(
+            style: FilledButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Approve & Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await deletionRequestService.approve(req);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Item deleted.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  Future<void> _handleDeny(
+    BuildContext context,
+    DeletionRequest req,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await deletionRequestService.deny(req);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Deletion request denied.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+}
+
+class _DeletionRequestTile extends StatelessWidget {
+  const _DeletionRequestTile({
+    required this.request,
+    required this.onApprove,
+    required this.onDeny,
+  });
+
+  final DeletionRequest request;
+  final VoidCallback onApprove;
+  final VoidCallback onDeny;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final fmt = NumberFormat('#,##0.00');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              request.itemDescription,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${request.itemType.label}'
+              '${request.amountGhs != null ? ' · GH₵${fmt.format(request.amountGhs)}' : ''}'
+              ' · by ${request.requestedByName}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: cs.outline,
+                  ),
+            ),
+            Text(
+              DateFormat('d MMM yyyy').format(request.createdAt),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: cs.outline,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: cs.error,
+                side: BorderSide(color: cs.error),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                minimumSize: Size.zero,
+              ),
+              icon: const Icon(Icons.check, size: 16),
+              label: const Text('Approve'),
+              onPressed: onApprove,
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                minimumSize: Size.zero,
+              ),
+              icon: const Icon(Icons.close, size: 16),
+              label: const Text('Deny'),
+              onPressed: onDeny,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
