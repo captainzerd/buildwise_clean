@@ -1477,13 +1477,23 @@ class _UpdateCard extends StatelessWidget {
                   scrollDirection: Axis.horizontal,
                   itemCount: update.photoUrls.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (_, i) => ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Image.network(
-                      update.photoUrls[i],
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.cover,
+                  itemBuilder: (context, i) => GestureDetector(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => _FullScreenPhoto(
+                          url: update.photoUrls[i],
+                          title: 'Photo ${i + 1}',
+                        ),
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.network(
+                        update.photoUrls[i],
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                 ),
@@ -2217,6 +2227,7 @@ class _AddUpdateSheet extends StatefulWidget {
 class _AddUpdateSheetState extends State<_AddUpdateSheet> {
   final _textCtrl = TextEditingController();
   final _costCtrl = TextEditingController();
+  final List<File> _photos = [];
   bool _saving = false;
   String? _error;
 
@@ -2225,6 +2236,56 @@ class _AddUpdateSheetState extends State<_AddUpdateSheet> {
     _textCtrl.dispose();
     _costCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickPhotos(ImageSource source) async {
+    if (source == ImageSource.gallery) {
+      final picked = await ImagePicker().pickMultiImage(
+        imageQuality: 80,
+        maxWidth: 1920,
+      );
+      if (picked.isNotEmpty && mounted) {
+        setState(() => _photos.addAll(picked.map((x) => File(x.path))));
+      }
+    } else {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+        maxWidth: 1920,
+      );
+      if (picked != null && mounted) {
+        setState(() => _photos.add(File(picked.path)));
+      }
+    }
+  }
+
+  void _showPhotoPicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickPhotos(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickPhotos(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -2238,10 +2299,20 @@ class _AddUpdateSheetState extends State<_AddUpdateSheet> {
       _error = null;
     });
     try {
+      List<String> photoUrls = [];
+      if (_photos.isNotEmpty) {
+        final uploadId = const Uuid().v4();
+        photoUrls = await widget.projectService.uploadUpdatePhotos(
+          projectId: widget.projectId,
+          updateId: uploadId,
+          files: _photos,
+        );
+      }
       await widget.projectService.addUpdate(
         projectId: widget.projectId,
         authorUid: widget.authorUid,
         text: text,
+        photoUrls: photoUrls,
         costDelta: double.tryParse(_costCtrl.text),
       );
       if (mounted) Navigator.of(context).pop();
@@ -2291,6 +2362,59 @@ class _AddUpdateSheetState extends State<_AddUpdateSheet> {
             ),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _saving ? null : _showPhotoPicker,
+            icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
+            label: Text(
+              _photos.isEmpty
+                  ? 'Add site photos'
+                  : 'Add more photos (${_photos.length} selected)',
+            ),
+          ),
+          if (_photos.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 80,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _photos.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (_, i) => Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.file(
+                        _photos[i],
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    Positioned(
+                      top: 2,
+                      right: 2,
+                      child: GestureDetector(
+                        onTap: () => setState(() => _photos.removeAt(i)),
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                          ),
+                          padding: const EdgeInsets.all(2),
+                          child: const Icon(
+                            Icons.close,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
           if (_error != null) ...[
             const SizedBox(height: 8),
             Text(
