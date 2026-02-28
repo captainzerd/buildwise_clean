@@ -307,6 +307,55 @@ class ProjectService {
     }
   }
 
+  // ── Estimates ──
+
+  /// Stream of estimates attached to this project, newest first.
+  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> estimatesStream(
+    String projectId,
+  ) {
+    return _db
+        .collection('projects')
+        .doc(projectId)
+        .collection('estimates')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((s) => s.docs.cast<QueryDocumentSnapshot<Map<String, dynamic>>>());
+  }
+
+  /// Copy an estimate doc into this project's estimates sub-collection.
+  Future<void> linkEstimate(
+    String projectId,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final ref = _db
+          .collection('projects')
+          .doc(projectId)
+          .collection('estimates')
+          .doc();
+      await ref.set({
+        ...data,
+        'linkedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw AppException.from(e);
+    }
+  }
+
+  /// Remove an estimate from this project.
+  Future<void> deleteEstimate(String projectId, String estimateId) async {
+    try {
+      await _db
+          .collection('projects')
+          .doc(projectId)
+          .collection('estimates')
+          .doc(estimateId)
+          .delete();
+    } catch (e) {
+      throw AppException.from(e);
+    }
+  }
+
   // ── Documents ──
 
   Stream<List<ProjectDocument>> documentsStream(String projectId) {

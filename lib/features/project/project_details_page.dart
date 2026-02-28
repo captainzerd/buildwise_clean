@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -25,6 +26,7 @@ import '../../core/services/deletion_request_service.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/services/pdf_service.dart';
 import '../../core/services/project_service.dart';
+import '../estimate/estimate_view_page.dart';
 import 'builder_marketplace_page.dart';
 import 'contract_view_page.dart';
 import 'create_contract_page.dart';
@@ -52,7 +54,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 6, vsync: this)
+    _tabs = TabController(length: 7, vsync: this)
       ..addListener(() {
         if (!_tabs.indexIsChanging) {
           setState(() => _tabIndex = _tabs.index);
@@ -120,6 +122,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                 Tab(icon: Icon(Icons.chat_bubble_outline), text: 'Updates'),
                 Tab(icon: Icon(Icons.folder_outlined), text: 'Docs'),
                 Tab(icon: Icon(Icons.payments_outlined), text: 'Payments'),
+                Tab(icon: Icon(Icons.analytics_outlined), text: 'Estimates'),
               ],
             ),
           ),
@@ -180,6 +183,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                                   auth.currentUser?.displayName ?? '',
                               deletionRequestService: deletionService,
                             ),
+                            _EstimatesTab(
+                              projectId: widget.projectId,
+                              projectService: projectService,
+                            ),
                           ],
                         );
                       },
@@ -238,6 +245,15 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
             project,
           ),
           child: const Icon(Icons.add),
+        ),
+      6 => FloatingActionButton(
+          tooltip: 'Attach estimate',
+          onPressed: () => _showAttachEstimateSheet(
+            context,
+            projectService,
+            auth.currentUser!.uid,
+          ),
+          child: const Icon(Icons.attach_file_outlined),
         ),
       _ => null,
     };
@@ -313,6 +329,25 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
         authorUid: authorUid,
         paymentService: paymentService,
         projectService: context.read<ProjectService>(),
+      ),
+    );
+  }
+
+  // ── Attach estimate ──────────────────────────────────────────────────────────
+
+  void _showAttachEstimateSheet(
+    BuildContext context,
+    ProjectService projectService,
+    String uid,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _AttachEstimateSheet(
+        projectId: widget.projectId,
+        uploaderUid: uid,
+        projectService: projectService,
       ),
     );
   }
@@ -2248,6 +2283,265 @@ class _StatusBadge extends StatelessWidget {
         status.label,
         style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.w500),
       ),
+    );
+  }
+}
+
+// ── Estimates tab ─────────────────────────────────────────────────────────────
+
+class _EstimatesTab extends StatelessWidget {
+  const _EstimatesTab({
+    required this.projectId,
+    required this.projectService,
+  });
+
+  final String projectId;
+  final ProjectService projectService;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
+      stream: projectService.estimatesStream(projectId),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final docs = snap.data ?? [];
+        if (docs.isEmpty) {
+          return _centeredHint(
+            context,
+            Icons.analytics_outlined,
+            'No estimates yet',
+            'Tap the attach button to link a saved estimate.',
+          );
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+          itemCount: docs.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 4),
+          itemBuilder: (_, i) => _EstimateTile(
+            doc: docs[i],
+            projectId: projectId,
+            projectService: projectService,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _EstimateTile extends StatelessWidget {
+  const _EstimateTile({
+    required this.doc,
+    required this.projectId,
+    required this.projectService,
+  });
+
+  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  final String projectId;
+  final ProjectService projectService;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = doc.data();
+    final name = (m['projectName'] as String?) ??
+        (m['projectNameInput'] as String?) ??
+        'Estimate';
+    final totalGhs = (m['grandTotalGhs'] as num?)?.toDouble();
+    final createdTs = m['createdAt'];
+    DateTime? created;
+    if (createdTs is Timestamp) created = createdTs.toDate();
+    final cs = Theme.of(context).colorScheme;
+
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: cs.primaryContainer,
+          child: Icon(
+            Icons.analytics_outlined,
+            color: cs.onPrimaryContainer,
+            size: 20,
+          ),
+        ),
+        title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(
+          [
+            if (totalGhs != null)
+              '₵ ${NumberFormat('#,##0').format(totalGhs)}',
+            if (created != null)
+              DateFormat('d MMM yyyy').format(created),
+          ].join(' · '),
+          style: Theme.of(context)
+              .textTheme
+              .labelSmall
+              ?.copyWith(color: cs.outline),
+        ),
+        trailing: IconButton(
+          icon: Icon(Icons.delete_outline, color: cs.error),
+          tooltip: 'Remove',
+          onPressed: () => _confirmRemove(context),
+        ),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => EstimateViewPage(docRef: doc.reference),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmRemove(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove estimate?'),
+        content: const Text(
+          'This will unlink the estimate from this project.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await projectService.deleteEstimate(projectId, doc.id);
+    }
+  }
+}
+
+// ── Attach estimate sheet ──────────────────────────────────────────────────────
+
+class _AttachEstimateSheet extends StatefulWidget {
+  const _AttachEstimateSheet({
+    required this.projectId,
+    required this.uploaderUid,
+    required this.projectService,
+  });
+
+  final String projectId;
+  final String uploaderUid;
+  final ProjectService projectService;
+
+  @override
+  State<_AttachEstimateSheet> createState() => _AttachEstimateSheetState();
+}
+
+class _AttachEstimateSheetState extends State<_AttachEstimateSheet> {
+  bool _attaching = false;
+
+  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+      get _savedEstimates => FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.uploaderUid)
+          .collection('estimates')
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map(
+            (s) => s.docs
+                .cast<QueryDocumentSnapshot<Map<String, dynamic>>>(),
+          );
+
+  Future<void> _attach(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) async {
+    setState(() => _attaching = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.projectService.linkEstimate(
+        widget.projectId,
+        doc.data(),
+      );
+      if (mounted) {
+        Navigator.of(context).pop();
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Estimate attached to project.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _attaching = false);
+        messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+          child: Text(
+            'Attach a Saved Estimate',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        if (_attaching) const LinearProgressIndicator(),
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.5,
+          ),
+          child: StreamBuilder<
+              List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
+            stream: _savedEstimates,
+            builder: (ctx, snap) {
+              if (!snap.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final docs = snap.data!;
+              if (docs.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'No saved estimates found.\nGenerate an estimate first.',
+                    textAlign: TextAlign.center,
+                  ),
+                );
+              }
+              return ListView.separated(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                itemCount: docs.length,
+                separatorBuilder: (_, __) => const Divider(height: 0),
+                itemBuilder: (_, i) {
+                  final m = docs[i].data();
+                  final name = (m['projectName'] as String?) ??
+                      (m['projectNameInput'] as String?) ??
+                      'Estimate';
+                  final totalGhs =
+                      (m['grandTotalGhs'] as num?)?.toDouble();
+                  final createdTs = m['createdAt'];
+                  DateTime? created;
+                  if (createdTs is Timestamp) {
+                    created = createdTs.toDate();
+                  }
+                  return ListTile(
+                    title: Text(name, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(
+                      [
+                        if (totalGhs != null)
+                          '₵ ${NumberFormat('#,##0').format(totalGhs)}',
+                        if (created != null)
+                          DateFormat('d MMM yyyy').format(created),
+                      ].join(' · '),
+                    ),
+                    onTap: _attaching ? null : () => _attach(docs[i]),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
