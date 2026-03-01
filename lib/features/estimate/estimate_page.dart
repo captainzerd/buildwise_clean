@@ -863,6 +863,7 @@ class _ResultsCard extends StatelessWidget {
                     builder: (_) => CreateProjectPage(
                       initialTitle: controller.projectNameCtrl.text.trim(),
                       initialBudget: r.totalPlannedGhs,
+                      initialRegion: controller.region,
                     ),
                   ),
                 ),

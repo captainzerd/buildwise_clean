@@ -72,9 +72,13 @@ class NotificationService {
       );
     }
 
-    // Initial token
-    final token = await _fcm.getToken();
-    if (token != null) _pendingToken = token;
+    // Initial token — may throw on iOS simulator (no APNS); safe to skip.
+    try {
+      final token = await _fcm.getToken();
+      if (token != null) _pendingToken = token;
+    } catch (e) {
+      debugPrint('NotificationService: FCM token unavailable — $e');
+    }
 
     // Token refresh
     _fcm.onTokenRefresh.listen((t) {

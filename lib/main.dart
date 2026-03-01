@@ -78,7 +78,12 @@ Future<void> main() async {
   await auth.init();
 
   final notifications = NotificationService();
-  await notifications.init();
+  try {
+    await notifications.init();
+  } catch (e) {
+    // Non-fatal: FCM unavailable (e.g. iOS simulator). App runs without push notifications.
+    debugPrint('NotificationService.init failed: $e');
+  }
   notifications.listenToAuth(auth);
 
   final projectService = ProjectService();

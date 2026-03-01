@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../project/create_project_page.dart';
 import '../vendor/vendors_page.dart';
 import '../../core/services/auth_service.dart';
 
@@ -134,6 +135,23 @@ class EstimateViewPage extends StatelessWidget {
           final floors = (m['floors'] as List?) ?? const [];
           final budget = (m['budgetAmount'] as num?)?.toDouble();
 
+          // Cost breakdown maps (saved by EstimateController.toMap())
+          final phaseBreakdown = (m['phaseBreakdownGhs'] as Map?)
+                  ?.cast<String, dynamic>() ??
+              const {};
+          final addOns =
+              (m['addOnsGhs'] as Map?)?.cast<String, dynamic>() ?? const {};
+          final prelimGhs = (m['preliminariesGhs'] as num?)?.toDouble() ?? 0;
+          final ohpGhs = (m['ohpGhs'] as num?)?.toDouble() ?? 0;
+          final contingencyGhs =
+              (m['contingencyGhs'] as num?)?.toDouble() ?? 0;
+          final taxLines =
+              (m['taxLinesGhs'] as Map?)?.cast<String, dynamic>() ?? const {};
+          final permitGhs = (m['permitGhs'] as num?)?.toDouble() ?? 0;
+
+          String ghsFmt(dynamic v) =>
+              '₵ ${(v as num?)?.toDouble().toStringAsFixed(0) ?? '--'}';
+
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -147,15 +165,17 @@ class EstimateViewPage extends StatelessWidget {
                 ),
               _kv(
                 'Grand Total (GHS)',
-                '₵ ${totalGhs?.toStringAsFixed(2) ?? '--'}',
+                '₵ ${totalGhs?.toStringAsFixed(0) ?? '--'}',
               ),
               _kv(
-                'Grand Total (FX)',
-                '${fxSym.isNotEmpty ? fxSym : ''} ${totalFx?.toStringAsFixed(2) ?? '--'}',
+                'Grand Total (${m['fxCode'] ?? 'FX'})',
+                '${fxSym.isNotEmpty ? fxSym : ''} ${totalFx?.toStringAsFixed(0) ?? '--'}',
               ),
               if (budget != null)
-                _kv('Budget (GHS)', '₵ ${budget.toStringAsFixed(2)}'),
+                _kv('Budget (GHS)', '₵ ${budget.toStringAsFixed(0)}'),
               const Divider(height: 24),
+
+              // ── Inputs ────────────────────────────────────────────────────
               Text('Inputs', style: Theme.of(context).textTheme.titleMedium),
               _kv('Region', region),
               _kv('Building Type', bt),
@@ -174,6 +194,47 @@ class EstimateViewPage extends StatelessWidget {
                   ),
                 );
               }),
+
+              // ── Phase breakdown ───────────────────────────────────────────
+              if (phaseBreakdown.isNotEmpty) ...[
+                const Divider(height: 28),
+                Text(
+                  'Phase Breakdown',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                ...phaseBreakdown.entries.map(
+                  (e) => _ExpandablePhaseRow(
+                    phase: e.key,
+                    amountLabel: ghsFmt(e.value),
+                  ),
+                ),
+              ],
+
+              // ── Add-ons ───────────────────────────────────────────────────
+              if (addOns.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'External Works',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                ...addOns.entries
+                    .map((e) => _kv(e.key, ghsFmt(e.value))),
+              ],
+
+              // ── Overheads & taxes ─────────────────────────────────────────
+              const Divider(height: 24),
+              Text(
+                'Overheads & Statutory',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              if (prelimGhs > 0) _kv('Preliminaries', ghsFmt(prelimGhs)),
+              if (ohpGhs > 0) _kv('Overhead & Profit', ghsFmt(ohpGhs)),
+              if (contingencyGhs > 0) _kv('Contingency', ghsFmt(contingencyGhs)),
+              ...taxLines.entries.map((e) => _kv(e.key, ghsFmt(e.value))),
+              if (permitGhs > 0) _kv('Permit fees', ghsFmt(permitGhs)),
+
               if (notes != null && notes.isNotEmpty) ...[
                 const Divider(height: 24),
                 Text('Notes', style: Theme.of(context).textTheme.titleMedium),
@@ -182,6 +243,12 @@ class EstimateViewPage extends StatelessWidget {
               ],
               const Divider(height: 32),
               _findVendorsButton(region: region.isNotEmpty ? region : null),
+              const SizedBox(height: 12),
+              _createProjectButton(
+                title: title,
+                totalGhs: totalGhs,
+                region: region.isNotEmpty ? region : null,
+              ),
               const SizedBox(height: 16),
             ],
           );
@@ -213,6 +280,35 @@ class EstimateViewPage extends StatelessWidget {
                     : 'Find Vendors',),
               ],
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _createProjectButton({
+    String? title,
+    double? totalGhs,
+    String? region,
+  }) {
+    return Builder(
+      builder: (context) {
+        final auth = context.read<AuthService>();
+        if (!auth.isSignedIn) return const SizedBox.shrink();
+        return SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => CreateProjectPage(
+                  initialTitle: title,
+                  initialBudget: totalGhs,
+                  initialRegion: region,
+                ),
+              ),
+            ),
+            icon: const Icon(Icons.add_business_outlined, size: 18),
+            label: const Text('Create Project from this Estimate'),
           ),
         );
       },
@@ -366,5 +462,186 @@ class EstimateViewPage extends StatelessWidget {
         SnackBar(content: Text('PDF export failed: $e')),
       );
     }
+  }
+}
+
+// ── Typical materials per phase (Ghana construction reference) ────────────────
+
+const Map<String, List<String>> _kPhaseMaterials = {
+  'Foundation': [
+    'Cement (42.5R bags)',
+    'Sharp sand',
+    'Granite / gravel (chippings)',
+    'Reinforcing rods Y12–Y16',
+    'Binding wire',
+    'Formwork timber & plywood',
+    'Hardcore / laterite fill',
+  ],
+  'Superstructure': [
+    'Sandcrete blocks (6" or 9")',
+    'Cement (42.5R bags)',
+    'Sand (fine)',
+    'Reinforcing rods Y10–Y20',
+    'Binding wire',
+    'DPC membrane',
+    'Lintels (pre-cast or cast in-situ)',
+  ],
+  'Roof': [
+    'Roof trusses (timber or steel)',
+    'Roofing sheets / clay / concrete tiles',
+    'Purlins (timber or galvanised)',
+    'Roof nails & bolts',
+    'Fascia & barge boards',
+    'Gutter & downpipe (PVC / aluminium)',
+    'Roofing felt / underlay',
+  ],
+  'Finishes': [
+    'Cement & sand for plastering',
+    'Floor tiles or terrazzo',
+    'Wall tiles (wet areas)',
+    'Paint — interior & exterior',
+    'Screeding mix',
+    'Ceiling boards (gypsum / PVC)',
+    'Ceiling battens',
+  ],
+  'Electrical': [
+    'PVC / XLPE cables (2.5mm², 4mm²)',
+    'Consumer unit / distribution board',
+    'Switch sockets & plates',
+    'Conduit pipes & fittings',
+    'Light fittings & bulbs',
+    'Earth cable & rods',
+  ],
+  'Plumbing': [
+    'HDPE / PVC pipes & fittings',
+    'WC suite, wash-hand basin, bath / shower',
+    'Electric or solar water heater',
+    'Ball valves & gate valves',
+    'Overhead / underground water tank',
+    'Soak-away rings & cover slab',
+  ],
+  'Joinery': [
+    'Timber / aluminium / UPVC door frames & leaves',
+    'Louvre & casement / sliding windows',
+    'Door hardware (hinges, locks, handles)',
+    'Kitchen cabinets & countertop',
+    'Wardrobes (built-in)',
+  ],
+  'External works': [
+    'Concrete kerbs & edging',
+    'Paving blocks / interlocking tiles',
+    'Compound wall blocks & cement',
+    'Septic tank rings & cover slabs',
+    'Entrance gate & posts',
+    'Landscaping / topsoil',
+  ],
+};
+
+// ── Expandable phase row ───────────────────────────────────────────────────────
+
+class _ExpandablePhaseRow extends StatefulWidget {
+  const _ExpandablePhaseRow({
+    required this.phase,
+    required this.amountLabel,
+  });
+
+  final String phase;
+  final String amountLabel;
+
+  @override
+  State<_ExpandablePhaseRow> createState() => _ExpandablePhaseRowState();
+}
+
+class _ExpandablePhaseRowState extends State<_ExpandablePhaseRow> {
+  bool _expanded = false;
+
+  // Find materials by matching the start of the phase name (case-insensitive).
+  List<String> get _materials {
+    final key = _kPhaseMaterials.keys.firstWhere(
+      (k) => widget.phase.toLowerCase().startsWith(k.toLowerCase()),
+      orElse: () => '',
+    );
+    return key.isNotEmpty ? _kPhaseMaterials[key]! : const [];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final hasMaterials = _materials.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: hasMaterials ? () => setState(() => _expanded = !_expanded) : null,
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.phase,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+                Text(
+                  widget.amountLabel,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                if (hasMaterials) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    size: 18,
+                    color: cs.outline,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        if (_expanded && hasMaterials)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Typical materials',
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelSmall
+                      ?.copyWith(color: cs.outline),
+                ),
+                const SizedBox(height: 6),
+                for (final m in _materials)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('• ', style: TextStyle(color: cs.primary)),
+                        Expanded(
+                          child: Text(
+                            m,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 }
