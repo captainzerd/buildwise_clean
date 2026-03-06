@@ -417,6 +417,18 @@ class ProjectService implements IProjectRepository {
 
   /// Add a cost entry and atomically update the project's `amountSpent`.
   @override
+  /// Returns the number of cost entries for [projectId] (used for free-tier gate).
+  Future<int> costEntryCount(String projectId) async {
+    final snap = await _db
+        .collection('projects')
+        .doc(projectId)
+        .collection('costs')
+        .count()
+        .get();
+    return snap.count ?? 0;
+  }
+
+  @override
   Future<void> addCostEntry(String projectId, CostEntry entry) async {
     try {
       final projectRef = _db.collection('projects').doc(projectId);

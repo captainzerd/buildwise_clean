@@ -1189,8 +1189,8 @@ export const activateSubscription = onCall(
     if (!reference) {
       throw new HttpsError("invalid-argument", "reference is required.");
     }
-    if (!tier || !["pro", "business"].includes(tier)) {
-      throw new HttpsError("invalid-argument", "Invalid tier. Must be pro or business.");
+    if (!tier || !["project_pass", "pro", "business"].includes(tier)) {
+      throw new HttpsError("invalid-argument", "Invalid tier. Must be project_pass, pro or business.");
     }
 
     const secretKey = paystackSecretKey.value();
@@ -1224,10 +1224,17 @@ export const activateSubscription = onCall(
       throw new HttpsError("failed-precondition", "Payment not confirmed by Paystack.");
     }
 
-    await db.collection("users").doc(uid).update({
+    const updateData: Record<string, unknown> = {
       subscriptionTier: tier,
       subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    };
+    if (tier === "project_pass") {
+      // Project Pass valid for 24 months from activation
+      const expiry = new Date();
+      expiry.setMonth(expiry.getMonth() + 24);
+      updateData["projectPassExpiresAt"] = expiry;
+    }
+    await db.collection("users").doc(uid).update(updateData);
 
     logger.info("activateSubscription: subscription activated", { uid, tier, reference });
     return { success: true };
@@ -1253,7 +1260,7 @@ export const createStripePaymentIntent = onCall(
     if (!amountCents || amountCents <= 0) {
       throw new HttpsError("invalid-argument", "amountCents must be a positive integer.");
     }
-    if (!tier || !["pro", "business"].includes(tier)) {
+    if (!tier || !["project_pass", "pro", "business"].includes(tier)) {
       throw new HttpsError("invalid-argument", "Invalid tier.");
     }
 
@@ -1307,7 +1314,7 @@ export const activateStripeSubscription = onCall(
     };
 
     if (!paymentIntentId) throw new HttpsError("invalid-argument", "paymentIntentId required.");
-    if (!tier || !["pro", "business"].includes(tier)) {
+    if (!tier || !["project_pass", "pro", "business"].includes(tier)) {
       throw new HttpsError("invalid-argument", "Invalid tier.");
     }
 
@@ -1344,10 +1351,16 @@ export const activateStripeSubscription = onCall(
       throw new HttpsError("permission-denied", "PaymentIntent does not belong to this user.");
     }
 
-    await db.collection("users").doc(uid).update({
+    const stripeUpdate: Record<string, unknown> = {
       subscriptionTier: tier,
       subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    };
+    if (tier === "project_pass") {
+      const expiry = new Date();
+      expiry.setMonth(expiry.getMonth() + 24);
+      stripeUpdate["projectPassExpiresAt"] = expiry;
+    }
+    await db.collection("users").doc(uid).update(stripeUpdate);
 
     logger.info("activateStripeSubscription: activated", { uid, tier, paymentIntentId });
     return { success: true };

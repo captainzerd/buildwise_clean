@@ -1,5 +1,8 @@
+import '../../core/config/service_locator.dart';
 // lib/features/project/projects_page.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -7,10 +10,12 @@ import '../../core/models/app_user.dart';
 import '../../core/models/project.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/project_service.dart';
+import '../../core/widgets/app_page_route.dart';
+import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/tip_banner.dart';
 import '../../core/state/builder_project_state.dart';
 import 'builder_marketplace_page.dart';
-import 'create_project_page.dart';
-import 'project_details_page.dart';
+import 'export_sheet.dart';
 
 class ProjectsPage extends StatelessWidget {
   const ProjectsPage({super.key});
@@ -40,18 +45,69 @@ class _OwnerProjectsViewState extends State<_OwnerProjectsView> {
   String _search = '';
   ProjectStatus? _statusFilter;
 
-  List<Project> _applyFilters(List<Project> all) {
-    var list = all;
+  List<Project> _projects = [];
+  DocumentSnapshot? _cursor;
+  bool _hasMore = true;
+  bool _loading = false;
+  String? _error;
+
+  static const _pageSize = 20;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadFirst());
+  }
+
+  Future<void> _loadFirst() async {
+    setState(() {
+      _projects = [];
+      _cursor = null;
+      _hasMore = true;
+      _error = null;
+    });
+    await _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    final projectService = sl<ProjectService>();
+    final uid = context.read<AuthService>().currentUser!.uid;
+    try {
+      final (page, lastDoc) = await projectService.fetchOwnerProjectsPage(
+        uid,
+        limit: _pageSize,
+        startAfter: _cursor,
+      );
+      setState(() {
+        _projects.addAll(page);
+        _cursor = lastDoc;
+        _hasMore = page.length >= _pageSize;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  List<Project> get _filtered {
+    var list = _projects;
     if (_statusFilter != null) {
       list = list.where((p) => p.status == _statusFilter).toList();
     }
     if (_search.trim().isNotEmpty) {
       final q = _search.trim().toLowerCase();
       list = list
-          .where((p) =>
-              p.title.toLowerCase().contains(q) ||
-              (p.location?.toLowerCase().contains(q) ?? false) ||
-              p.region.toLowerCase().contains(q),)
+          .where(
+            (p) =>
+                p.title.toLowerCase().contains(q) ||
+                (p.location?.toLowerCase().contains(q) ?? false) ||
+                p.region.toLowerCase().contains(q),
+          )
           .toList();
     }
     return list;
@@ -59,10 +115,6 @@ class _OwnerProjectsViewState extends State<_OwnerProjectsView> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthService>();
-    final projectService = context.read<ProjectService>();
-    final uid = auth.currentUser!.uid;
-
     return Scaffold(
       body: Column(
         children: [
@@ -84,79 +136,170 @@ class _OwnerProjectsViewState extends State<_OwnerProjectsView> {
             selected: _statusFilter,
             onSelected: (s) => setState(() => _statusFilter = s),
           ),
+          const TipBanner(
+            tipKey: 'tip_projects_assign_pm',
+            message:
+                'After creating a project, open it and assign a builder/PM from the Overview tab to give them access.',
+          ),
           Expanded(
-            child: StreamBuilder<List<Project>>(
-              stream: projectService.projectsForOwner(uid),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Error loading projects: ${snap.error}',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  );
-                }
-
-                final all = snap.data ?? [];
-                final projects = _applyFilters(all);
-
-                if (all.isEmpty) {
-                  return _EmptyState(
-                    onCreateTap: () => _openCreate(context),
-                  );
-                }
-
-                if (projects.isEmpty) {
-                  return const Center(
-                    child: Text('No projects match your search.'),
-                  );
-                }
-
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-                  itemCount: projects.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (_, i) => _ProjectCard(
-                    project: projects[i],
-                    onTap: () => _openDetails(context, projects[i]),
-                  ),
-                );
-              },
-            ),
+            child: _buildBody(context),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openCreate(context),
-        icon: const Icon(Icons.add),
-        label: const Text('New Project'),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.small(
+            heroTag: 'export_portfolio',
+            tooltip: 'Export Portfolio',
+            onPressed: () {
+              final auth = context.read<AuthService>();
+              showModalBottomSheet<void>(
+                context: context,
+                showDragHandle: true,
+                builder: (_) => ExportSheet(
+                  projectId: '',
+                  ownerUid: auth.currentUser?.uid ?? '',
+                ),
+              );
+            },
+            child: const Icon(Icons.download_outlined),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton.extended(
+            heroTag: 'new_project',
+            onPressed: () => _openCreate(context),
+            icon: const Icon(Icons.add),
+            label: const Text('New Project'),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    if (_loading && _projects.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null && _projects.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('Error loading projects: $_error', textAlign: TextAlign.center),
+        ),
+      );
+    }
+    if (_projects.isEmpty) {
+      return EmptyState(
+        icon: Icons.work_outline,
+        title: 'No projects yet',
+        message:
+            'Create your first project to start tracking costs and progress.',
+        actionLabel: 'New project',
+        onAction: () => _openCreate(context),
+      );
+    }
+
+    final projects = _filtered;
+    if (projects.isEmpty) {
+      return const Center(child: Text('No projects match your search.'));
+    }
+
+    Widget buildItem(int i) {
+      if (i == projects.length) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Center(
+            child: _loading
+                ? const CircularProgressIndicator()
+                : TextButton.icon(
+                    icon: const Icon(Icons.expand_more),
+                    label: const Text('Load more'),
+                    onPressed: _loadMore,
+                  ),
+          ),
+        );
+      }
+      return _ProjectCard(
+        project: projects[i],
+        onTap: () => _openDetails(context, projects[i]),
+      );
+    }
+
+    final itemCount = projects.length + (_hasMore || _loading ? 1 : 0);
+    const padding = EdgeInsets.fromLTRB(16, 12, 16, 96);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTablet = constraints.maxWidth >= 600;
+        return RefreshIndicator(
+          onRefresh: _loadFirst,
+          child: isTablet
+              ? GridView.builder(
+                  padding: padding,
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 2.1,
+                  ),
+                  itemCount: itemCount,
+                  itemBuilder: (_, i) => buildItem(i),
+                )
+              : ListView.separated(
+                  padding: padding,
+                  itemCount: itemCount,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (_, i) => buildItem(i),
+                ),
+        );
+      },
     );
   }
 
   void _openCreate(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const CreateProjectPage(),
-      ),
-    );
+    final auth = context.read<AuthService>();
+    final tier = auth.currentUser?.subscriptionTier ?? SubscriptionTier.free;
+    final maxProjects = tier.maxProjects;
+
+    // Free / Project Pass users are capped at 1 project.
+    if (_projects.length >= maxProjects) {
+      showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Project limit reached'),
+          content: Text(
+            tier == SubscriptionTier.free
+                ? 'The free plan supports 1 project.\n\n'
+                    'Upgrade to Project Pass (one-time GH₵349) for your full build, '
+                    'or to Pro for unlimited projects.'
+                : 'Project Pass supports 1 project.\n\n'
+                    'Upgrade to Pro for unlimited projects.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                context.push('/account/upgrade');
+              },
+              child: const Text('See plans'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    context.push('/projects/create');
   }
 
   void _openDetails(BuildContext context, Project project) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ProjectDetailsPage(
-          projectId: project.id,
-          projectTitle: project.title,
-        ),
-      ),
-    );
+    context.push('/projects/${project.id}', extra: project.title);
   }
 }
 
@@ -173,19 +316,70 @@ class _BuilderProjectsViewState extends State<_BuilderProjectsView> {
   String _search = '';
   ProjectStatus? _statusFilter;
 
-  List<Project> _applyFilters(List<Project> all) {
-    var list = all;
+  List<Project> _projects = [];
+  DocumentSnapshot? _cursor;
+  bool _hasMore = true;
+  bool _loading = false;
+  String? _error;
+
+  static const _pageSize = 20;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadFirst());
+  }
+
+  Future<void> _loadFirst() async {
+    setState(() {
+      _projects = [];
+      _cursor = null;
+      _hasMore = true;
+      _error = null;
+    });
+    await _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    final projectService = sl<ProjectService>();
+    final uid = context.read<AuthService>().currentUser!.uid;
+    try {
+      final (page, lastDoc) = await projectService.fetchBuilderProjectsPage(
+        uid,
+        limit: _pageSize,
+        startAfter: _cursor,
+      );
+      setState(() {
+        _projects.addAll(page);
+        _cursor = lastDoc;
+        _hasMore = page.length >= _pageSize;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  List<Project> get _filtered {
+    var list = _projects;
     if (_statusFilter != null) {
       list = list.where((p) => p.status == _statusFilter).toList();
     }
     if (_search.trim().isNotEmpty) {
       final q = _search.trim().toLowerCase();
       list = list
-          .where((p) =>
-              p.title.toLowerCase().contains(q) ||
-              (p.location?.toLowerCase().contains(q) ?? false) ||
-              p.region.toLowerCase().contains(q) ||
-              (p.ownerName?.toLowerCase().contains(q) ?? false),)
+          .where(
+            (p) =>
+                p.title.toLowerCase().contains(q) ||
+                (p.location?.toLowerCase().contains(q) ?? false) ||
+                p.region.toLowerCase().contains(q) ||
+                (p.ownerName?.toLowerCase().contains(q) ?? false),
+          )
           .toList();
     }
     return list;
@@ -193,10 +387,6 @@ class _BuilderProjectsViewState extends State<_BuilderProjectsView> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthService>();
-    final projectService = context.read<ProjectService>();
-    final uid = auth.currentUser!.uid;
-
     return Scaffold(
       body: Column(
         children: [
@@ -218,89 +408,74 @@ class _BuilderProjectsViewState extends State<_BuilderProjectsView> {
             selected: _statusFilter,
             onSelected: (s) => setState(() => _statusFilter = s),
           ),
-          Expanded(
-            child: StreamBuilder<List<Project>>(
-              stream: projectService.projectsForBuilder(uid),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Error loading projects: ${snap.error}',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  );
-                }
-
-                final all = snap.data ?? [];
-                final projects = _applyFilters(all);
-
-                if (all.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.engineering_outlined,
-                            size: 64,
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No assigned projects',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Projects assigned to you will appear here.',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Theme.of(context).colorScheme.outline,
-                                ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                if (projects.isEmpty) {
-                  return const Center(
-                    child: Text('No projects match your search.'),
-                  );
-                }
-
-                // Group filtered projects by ownerName
-                final groups = <String, List<Project>>{};
-                for (final p in projects) {
-                  final owner = p.ownerName ?? 'Unknown Owner';
-                  groups.putIfAbsent(owner, () => []).add(p);
-                }
-                final ownerNames = groups.keys.toList()..sort();
-
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-                  itemCount: ownerNames.length,
-                  itemBuilder: (context, gi) {
-                    final ownerName = ownerNames[gi];
-                    final ownerProjects = groups[ownerName]!;
-                    return _BuilderOwnerGroup(
-                      ownerName: ownerName,
-                      projects: ownerProjects,
-                    );
-                  },
-                );
-              },
-            ),
-          ),
+          Expanded(child: _buildBody(context)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    if (_loading && _projects.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null && _projects.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('Error loading projects: $_error', textAlign: TextAlign.center),
+        ),
+      );
+    }
+    if (_projects.isEmpty) {
+      return EmptyState(
+        icon: Icons.engineering_outlined,
+        title: 'No assigned projects',
+        message: 'Projects assigned to you will appear here.',
+        actionLabel: 'Complete your profile',
+        onAction: () => context.push('/account/profile/builder'),
+      );
+    }
+
+    final projects = _filtered;
+    if (projects.isEmpty) {
+      return const Center(child: Text('No projects match your search.'));
+    }
+
+    // Group by ownerName
+    final groups = <String, List<Project>>{};
+    for (final p in projects) {
+      final owner = p.ownerName ?? 'Unknown Owner';
+      groups.putIfAbsent(owner, () => []).add(p);
+    }
+    final ownerNames = groups.keys.toList()..sort();
+
+    return RefreshIndicator(
+      onRefresh: _loadFirst,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+        itemCount: ownerNames.length + (_hasMore || _loading ? 1 : 0),
+        itemBuilder: (context, gi) {
+          if (gi == ownerNames.length) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Center(
+                child: _loading
+                    ? const CircularProgressIndicator()
+                    : TextButton.icon(
+                        icon: const Icon(Icons.expand_more),
+                        label: const Text('Load more'),
+                        onPressed: _loadMore,
+                      ),
+              ),
+            );
+          }
+          final ownerName = ownerNames[gi];
+          final ownerProjects = groups[ownerName]!;
+          return _BuilderOwnerGroup(
+            ownerName: ownerName,
+            projects: ownerProjects,
+          );
+        },
       ),
     );
   }
@@ -455,14 +630,7 @@ class _BuilderProjectCard extends StatelessWidget {
     builderState.activate(project.id, project.title);
 
     if (context.mounted) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => ProjectDetailsPage(
-            projectId: project.id,
-            projectTitle: project.title,
-          ),
-        ),
-      );
+      context.push('/projects/${project.id}', extra: project.title);
     }
   }
 }
@@ -626,7 +794,7 @@ class _ProjectCard extends StatelessWidget {
                               ),
                         ),
                         onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
+                          AppPageRoute<void>(
                             builder: (_) => BuilderMarketplacePage(
                               initialRegion: project.region.isNotEmpty
                                   ? project.region
@@ -697,47 +865,3 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-// ── Empty state ────────────────────────────────────────────────────────────────
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.onCreateTap});
-  final VoidCallback onCreateTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.work_outline,
-              size: 64,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No projects yet',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Create your first project to start tracking costs and progress.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: onCreateTap,
-              icon: const Icon(Icons.add),
-              label: const Text('Create project'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

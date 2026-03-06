@@ -88,20 +88,22 @@ class _UpgradePageState extends State<UpgradePage> {
     final ghs = tier.amountPesewas / 100.0;
     if (_currency.code == 'GHS') return ghs;
     final converted = fx.convertFromGhs(amountGhs: ghs, to: _currency.code);
-    // Fall back to USD equivalent if rate unavailable
     return converted > 0 ? converted : tier.amountUsdCents / 100.0;
   }
 
   String _priceDisplay(SubscriptionTier tier, FxService fx) {
     if (tier == SubscriptionTier.free) return 'Free forever';
     final amount = _convertedAmount(tier, fx);
-    return '${_currency.symbol}${_fmt(amount)} / mo';
+    final suffix = tier == SubscriptionTier.projectPass ? ' one-time' : ' / mo';
+    return '${_currency.symbol}${_fmt(amount)}$suffix';
   }
 
   // Show the GHS base price as context for non-GHS users
   String? _ghsNote(SubscriptionTier tier) {
     if (_currency.code == 'GHS') return null;
-    return 'GH₵${(tier.amountPesewas / 100).round()} for Ghana residents';
+    final ghs = tier.amountPesewas / 100;
+    final suffix = tier == SubscriptionTier.projectPass ? ' one-time' : '/mo';
+    return 'GH₵$ghs $suffix for Ghana residents';
   }
 
   static String _fmt(double amount) {
@@ -182,12 +184,34 @@ class _UpgradePageState extends State<UpgradePage> {
             isCurrentPlan: currentTier == SubscriptionTier.free,
             priceDisplay: 'Free forever',
             features: const [
-              '2 active projects',
               'Unlimited cost estimates',
-              'Basic project tracking',
+              '1 active project',
+              'Up to 5 cost entries per project',
               'Builder & vendor marketplace browsing',
             ],
             onSelect: null,
+          ),
+          const SizedBox(height: 16),
+
+          // ── Project Pass ───────────────────────────────────────────────────
+          _PlanCard(
+            tier: SubscriptionTier.projectPass,
+            isCurrentPlan: currentTier == SubscriptionTier.projectPass,
+            priceDisplay: _priceDisplay(SubscriptionTier.projectPass, fx),
+            ghsNote: _ghsNote(SubscriptionTier.projectPass),
+            badge: 'Best for self-builders',
+            features: const [
+              '1 project — full access for 24 months',
+              'Unlimited cost entries & photos',
+              'PDF & CSV reports',
+              'Contract management',
+              'One-time payment — no subscription',
+            ],
+            onSelect: currentTier == SubscriptionTier.projectPass
+                ? null
+                : () => _selectPlan(
+                    context, SubscriptionTier.projectPass, email, uid, fx,
+                  ),
           ),
           const SizedBox(height: 16),
 
@@ -481,9 +505,11 @@ class _PaymentMethodSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final localDisplay = '${currency.symbol}${_fmt(localAmount)} / mo';
-    final ghsDisplay = 'GH₵${_fmt(ghsAmount)} / mo';
+    final suffix = tier == SubscriptionTier.projectPass ? '' : ' / mo';
+    final localDisplay = '${currency.symbol}${_fmt(localAmount)}$suffix';
+    final ghsDisplay = 'GH₵${_fmt(ghsAmount)}$suffix';
     final isGhs = currency.code == 'GHS';
+    final isOneTime = tier == SubscriptionTier.projectPass;
 
     return SafeArea(
       child: Padding(
@@ -501,7 +527,9 @@ class _PaymentMethodSheet extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Upgrading to ${tier.label} · $localDisplay',
+              isOneTime
+                  ? 'Project Pass · $localDisplay (one-time)'
+                  : 'Upgrading to ${tier.label} · $localDisplay',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: cs.onSurfaceVariant,
                   ),
@@ -667,6 +695,7 @@ class _PlanCard extends StatelessWidget {
     required this.priceDisplay,
     this.ghsNote,
     this.highlighted = false,
+    this.badge,
   });
 
   final SubscriptionTier tier;
@@ -675,7 +704,8 @@ class _PlanCard extends StatelessWidget {
   final List<String> features;
   final VoidCallback? onSelect;
   final String priceDisplay;
-  final String? ghsNote; // e.g. "GH₵99 for Ghana residents"
+  final String? ghsNote;
+  final String? badge; // e.g. "Best for self-builders"
 
   @override
   Widget build(BuildContext context) {
@@ -729,12 +759,12 @@ class _PlanCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (highlighted)
+                if (highlighted || badge != null)
                   Chip(
-                    label: const Text('Popular'),
-                    backgroundColor: cs.primary,
+                    label: Text(highlighted ? 'Popular' : badge!),
+                    backgroundColor: highlighted ? cs.primary : cs.tertiaryContainer,
                     labelStyle: TextStyle(
-                      color: cs.onPrimary,
+                      color: highlighted ? cs.onPrimary : cs.onTertiaryContainer,
                       fontSize: 11,
                     ),
                     padding: EdgeInsets.zero,
@@ -773,7 +803,11 @@ class _PlanCard extends StatelessWidget {
                       ? const SizedBox.shrink()
                       : FilledButton(
                           onPressed: onSelect,
-                          child: Text('Upgrade to ${tier.label}'),
+                          child: Text(
+                            tier == SubscriptionTier.projectPass
+                                ? 'Buy Project Pass'
+                                : 'Upgrade to ${tier.label}',
+                          ),
                         ),
             ),
           ],
@@ -814,7 +848,10 @@ class SubscriptionGate extends StatelessWidget {
 
     final allowed = switch (required) {
       SubscriptionTier.free => true,
-      SubscriptionTier.pro => tier != SubscriptionTier.free,
+      SubscriptionTier.projectPass =>
+        tier != SubscriptionTier.free,
+      SubscriptionTier.pro =>
+        tier == SubscriptionTier.pro || tier == SubscriptionTier.business,
       SubscriptionTier.business => tier == SubscriptionTier.business,
     };
 
