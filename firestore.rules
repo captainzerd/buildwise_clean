@@ -15,12 +15,11 @@ service cloud.firestore {
       return request.auth.uid == uid;
     }
 
-    // Safe admin check: uses exists() before get() to avoid null crash
-    // when the users/{uid} document hasn't been written yet.
+    // Admin check via custom claim — set by Cloud Function onUserRoleChange.
+    // Uses token claim instead of a Firestore document read for lower latency
+    // and to avoid billable reads inside security rules.
     function isAdmin() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn() && request.auth.token.role == 'admin';
     }
 
     function isEmailVerified() {
@@ -121,6 +120,57 @@ service cloud.firestore {
         allow update: if isEmailVerified() && (isProjectOwner() || isAdmin());
         allow delete: if isAdmin();
       }
+
+      match /chat/{messageId} {
+        // Any project member can read and send messages.
+        allow read: if isSignedIn() && isProjectMember();
+        allow create: if isEmailVerified() && isProjectMember();
+        // Messages are immutable once sent; only admin can delete.
+        allow update: if false;
+        allow delete: if isAdmin();
+      }
+
+      match /boq/{document=**} {
+        allow read: if isSignedIn() && isProjectMember();
+        allow write: if isEmailVerified() && isProjectMember();
+      }
+
+      match /due_diligence/{itemId} {
+        allow read: if isSignedIn() && isProjectMember();
+        // Owner seeds & updates status; Cloud Functions can write too.
+        allow write: if isEmailVerified() && isProjectMember();
+      }
+
+      match /snag_items/{snagId} {
+        allow read: if isSignedIn() && isProjectMember();
+        allow create: if isEmailVerified() && isProjectMember();
+        allow update: if isEmailVerified() && isProjectMember();
+        allow delete: if isSignedIn() && (isProjectOwner() || isAdmin());
+      }
+
+      match /labor_records/{recordId} {
+        allow read: if isSignedIn() && isProjectMember();
+        allow create: if isEmailVerified() && isProjectMember();
+        allow update: if isEmailVerified() && isProjectMember();
+        allow delete: if isSignedIn() && (isProjectOwner() || isAdmin());
+      }
+
+      match /variation_orders/{voId} {
+        // Any project member can read change orders.
+        allow read: if isSignedIn() && isProjectMember();
+        // Builder submits; owner can update (approve/reject).
+        allow create: if isEmailVerified() && isProjectMember();
+        allow update: if isEmailVerified() && (isProjectOwner() || isAdmin());
+        allow delete: if isAdmin();
+      }
+
+      match /site_visits/{visitId} {
+        // Any project member can read, create and update site visits.
+        allow read: if isSignedIn() && isProjectMember();
+        allow create: if isEmailVerified() && isProjectMember();
+        allow update: if isEmailVerified() && isProjectMember();
+        allow delete: if isSignedIn() && (isProjectOwner() || isAdmin());
+      }
     }
 
     // ─────────────────────────────────────────
@@ -170,6 +220,15 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────
+    // BOQ Unit Rates (admin publishes; public read)
+    // ─────────────────────────────────────────
+
+    match /boq_rates/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────
     // Contracts
     // Stored top-level so both owner and builder can query.
     // memberUids = [ownerUid, builderUid] — enables arrayContains queries
@@ -193,6 +252,58 @@ service cloud.firestore {
       );
 
       allow delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────
+    // Audit Log (immutable once written)
+    // ─────────────────────────────────────────
+
+    match /audit_log/{eventId} {
+      // Only the authenticated user can write audit events under their own uid.
+      allow create: if isSignedIn()
+        && request.resource.data.actorUid == request.auth.uid;
+      // Reads use denormalised ownerUid/actorUid fields — no get() billable reads.
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.ownerUid == request.auth.uid ||
+        resource.data.actorUid == request.auth.uid
+      );
+      // Audit events are immutable — no updates or deletes.
+      allow update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────
+    // RFQ Requests
+    // ─────────────────────────────────────────
+
+    match /rfq_requests/{rfqId} {
+      // Owner or vendor can read their own RFQs
+      allow read: if isSignedIn() && (
+        resource.data.ownerUid == request.auth.uid ||
+        resource.data.vendorId == request.auth.uid
+      );
+      // Email-verified users can create (prevents spam from throwaway accounts)
+      allow create: if isEmailVerified();
+      // Vendor can respond; owner can accept or decline
+      allow update: if isSignedIn() && (
+        resource.data.vendorId == request.auth.uid ||
+        resource.data.ownerUid == request.auth.uid
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────
+    // Project Templates (owner-private)
+    // ─────────────────────────────────────────
+
+    match /project_templates/{templateId} {
+      allow read: if isSignedIn()
+        && resource.data.ownerUid == request.auth.uid;
+      allow create: if isEmailVerified()
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow delete: if isSignedIn()
+        && resource.data.ownerUid == request.auth.uid;
+      allow update: if false; // templates are immutable
     }
 
     // ─────────────────────────────────────────

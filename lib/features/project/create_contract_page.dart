@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../core/config/service_locator.dart';
 import '../../core/models/builder_contract.dart';
 import '../../core/models/builder_profile.dart';
 import '../../core/services/contract_service.dart';
@@ -12,14 +14,12 @@ class CreateContractPage extends StatefulWidget {
     required this.projectTitle,
     required this.builder,
     required this.ownerUid,
-    required this.contractService,
   });
 
   final String projectId;
   final String projectTitle;
   final BuilderProfile builder;
   final String ownerUid;
-  final ContractService contractService;
 
   @override
   State<CreateContractPage> createState() => _CreateContractPageState();
@@ -33,6 +33,7 @@ class _CreateContractPageState extends State<CreateContractPage> {
 
   DateTime? _startDate;
   DateTime? _endDate;
+  DateTime? _dlpEndDate;
   bool _saving = false;
   String? _error;
 
@@ -67,6 +68,16 @@ class _CreateContractPageState extends State<CreateContractPage> {
     }
   }
 
+  Future<void> _pickDlpDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: (_endDate ?? DateTime.now()).add(const Duration(days: 365)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
+    );
+    if (picked != null) setState(() => _dlpEndDate = picked);
+  }
+
   void _addMilestone() {
     setState(() => _milestones.add(_MilestoneRow()));
   }
@@ -78,15 +89,35 @@ class _CreateContractPageState extends State<CreateContractPage> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Validate milestone sum equals contract total (±1 GHS)
+    if (_milestones.isNotEmpty) {
+      final total = double.tryParse(_totalCtrl.text.trim()) ?? 0;
+      final milestoneSum = _milestones.fold(
+        0.0,
+        (sum, m) => sum + (double.tryParse(m.amountCtrl.text.trim()) ?? 0),
+      );
+      if ((milestoneSum - total).abs() > 1.0) {
+        setState(() {
+          _error =
+              'Milestone amounts (₵${milestoneSum.toStringAsFixed(2)}) must equal '
+              'the contract total (₵${total.toStringAsFixed(2)}).';
+        });
+        return;
+      }
+    }
+
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
       final now = DateTime.now();
+      const uuid = Uuid();
       final milestones = _milestones
           .map(
             (m) => PaymentMilestone(
+              id: uuid.v4(),
               description: m.descCtrl.text.trim(),
               amountGhs: double.tryParse(m.amountCtrl.text.trim()) ?? 0,
             ),
@@ -104,6 +135,7 @@ class _CreateContractPageState extends State<CreateContractPage> {
         scope: _scopeCtrl.text.trim(),
         startDate: _startDate,
         endDate: _endDate,
+        dlpEndDate: _dlpEndDate,
         totalAmountGhs: double.tryParse(_totalCtrl.text.trim()) ?? 0,
         milestones: milestones,
         status: ContractStatus.pendingBuilder,
@@ -113,7 +145,7 @@ class _CreateContractPageState extends State<CreateContractPage> {
         updatedAt: now,
       );
 
-      await widget.contractService.createContract(contract);
+      await sl<ContractService>().createContract(contract);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -204,6 +236,12 @@ class _CreateContractPageState extends State<CreateContractPage> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            _DateField(
+              label: 'DLP end date (optional)',
+              value: _dlpEndDate != null ? fmt.format(_dlpEndDate!) : null,
+              onTap: _pickDlpDate,
             ),
             const SizedBox(height: 14),
 
@@ -450,6 +488,7 @@ class _MilestoneTile extends StatelessWidget {
             ),
           ),
           IconButton(
+            tooltip: 'Remove',
             icon: const Icon(Icons.remove_circle_outline, size: 20),
             color: Theme.of(context).colorScheme.error,
             onPressed: onRemove,

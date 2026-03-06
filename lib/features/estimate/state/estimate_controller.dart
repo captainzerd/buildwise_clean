@@ -1,4 +1,4 @@
-import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,54 +9,11 @@ import '../../../core/services/catalog_service.dart';
 import '../../../core/services/fx_service.dart';
 import '../../../core/services/regional_index_provider.dart';
 import '../../../core/storage/storage_service.dart';
+import '../../../core/use_cases/calculate_estimate.dart';
 
 export '../../../core/models/currency.dart' show CurrencyInfo;
-
-enum PermitMode { percent, manual }
-
-@immutable
-class FloorSpec {
-  const FloorSpec({required this.areaM2, required this.heightM});
-  final double areaM2;
-  final double heightM;
-
-  FloorSpec copyWith({double? areaM2, double? heightM}) => FloorSpec(
-        areaM2: areaM2 ?? this.areaM2,
-        heightM: heightM ?? this.heightM,
-      );
-}
-
-@immutable
-class TaxLine {
-  const TaxLine({required this.name, required this.pct});
-  final String name;
-  final double pct;
-}
-
-@immutable
-class EstimateResult {
-  const EstimateResult({
-    required this.totalBuiltUpArea,
-    required this.phaseBreakdownGhs,
-    required this.addOnsGhs,
-    required this.preliminariesGhs,
-    required this.ohpGhs,
-    required this.contingencyGhs,
-    required this.taxLinesGhs,
-    required this.permitGhs,
-    required this.totalPlannedGhs,
-  });
-
-  final double totalBuiltUpArea;
-  final Map<String, double> phaseBreakdownGhs;
-  final Map<String, double> addOnsGhs;
-  final double preliminariesGhs;
-  final double ohpGhs;
-  final double contingencyGhs;
-  final Map<String, double> taxLinesGhs;
-  final double permitGhs;
-  final double totalPlannedGhs;
-}
+export '../../../core/use_cases/calculate_estimate.dart'
+    show EstimateResult, FloorSpec, PermitMode, TaxLine;
 
 class EstimateController extends ChangeNotifier {
   EstimateController({
@@ -105,6 +62,9 @@ class EstimateController extends ChangeNotifier {
   List<TaxLine> taxLines = const [];
 
   double? budgetAmount;
+
+  bool professionalFeesEnabled = false;
+  double professionalFeesPct = 4.0;
 
   // ── Async state ──
   bool _isComputing = false;
@@ -161,8 +121,10 @@ class EstimateController extends ChangeNotifier {
   double get contingencyGhs => _result?.contingencyGhs ?? 0;
   double get taxesGhs =>
       _result?.taxLinesGhs.values.fold<double>(0, (a, b) => a + b) ?? 0;
+  double get professionalFeesGhs => _result?.professionalFeesGhs ?? 0;
 
   static const _prefKeyCurrency = 'estimate_currency_code';
+  static const _prefKeyDraft = 'estimate_draft_v1';
 
   // ── Lifecycle ──
   Future<void> init() async {
@@ -182,13 +144,122 @@ class EstimateController extends ChangeNotifier {
       if (match != null) currency = match;
     }
 
+    await restoreFormState();
     notifyListeners();
+  }
+
+  /// Persists current form inputs to SharedPreferences (draft auto-save).
+  Future<void> saveFormState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final map = {
+        'projectName': projectNameCtrl.text,
+        'region': region,
+        'buildingType': buildingType,
+        'quality': quality,
+        'foundation': foundation,
+        'soil': soil,
+        'roof': roof,
+        'storeys': storeys,
+        'floors': [
+          for (final f in floors)
+            {'areaM2': f.areaM2, 'heightM': f.heightM},
+        ],
+        'includeExternalWorks': includeExternalWorks,
+        'externalWallLenM': externalWallLenM,
+        'drivewayAreaM2': drivewayAreaM2,
+        'includeSeptic': includeSeptic,
+        'preliminariesPct': preliminariesPct,
+        'contingencyEnabled': contingencyEnabled,
+        'contingencyPct': contingencyPct,
+        'permitMode': permitMode.name,
+        'permitPct': permitPct,
+        'permitManualGhs': permitManualGhs,
+        'budgetAmount': budgetAmount,
+        'professionalFeesEnabled': professionalFeesEnabled,
+        'professionalFeesPct': professionalFeesPct,
+      };
+      await prefs.setString(_prefKeyDraft, jsonEncode(map));
+    } catch (e) {
+      debugPrint('EstimateController.saveFormState error: $e');
+    }
+  }
+
+  /// Restores form inputs from SharedPreferences draft.
+  Future<void> restoreFormState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_prefKeyDraft);
+      if (raw == null) return;
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      projectNameCtrl.text = map['projectName'] as String? ?? '';
+      region = map['region'] as String?;
+      buildingType = map['buildingType'] as String? ?? buildingType;
+      quality = map['quality'] as String? ?? quality;
+      foundation = map['foundation'] as String? ?? foundation;
+      soil = map['soil'] as String? ?? soil;
+      roof = map['roof'] as String? ?? roof;
+      storeys = (map['storeys'] as num?)?.toInt() ?? storeys;
+      final rawFloors = map['floors'] as List?;
+      if (rawFloors != null && rawFloors.isNotEmpty) {
+        floors
+          ..clear()
+          ..addAll(
+            rawFloors.cast<Map<String, dynamic>>().map(
+                  (f) => FloorSpec(
+                    areaM2: (f['areaM2'] as num?)?.toDouble() ?? 100,
+                    heightM: (f['heightM'] as num?)?.toDouble() ?? 3.0,
+                  ),
+                ),
+          );
+      }
+      includeExternalWorks =
+          map['includeExternalWorks'] as bool? ?? includeExternalWorks;
+      externalWallLenM =
+          (map['externalWallLenM'] as num?)?.toDouble() ?? externalWallLenM;
+      drivewayAreaM2 =
+          (map['drivewayAreaM2'] as num?)?.toDouble() ?? drivewayAreaM2;
+      includeSeptic = map['includeSeptic'] as bool? ?? includeSeptic;
+      preliminariesPct =
+          (map['preliminariesPct'] as num?)?.toDouble() ?? preliminariesPct;
+      contingencyEnabled =
+          map['contingencyEnabled'] as bool? ?? contingencyEnabled;
+      contingencyPct =
+          (map['contingencyPct'] as num?)?.toDouble() ?? contingencyPct;
+      final pmName = map['permitMode'] as String?;
+      if (pmName != null) {
+        permitMode = PermitMode.values.firstWhere(
+          (m) => m.name == pmName,
+          orElse: () => PermitMode.percent,
+        );
+      }
+      permitPct = (map['permitPct'] as num?)?.toDouble() ?? permitPct;
+      permitManualGhs = (map['permitManualGhs'] as num?)?.toDouble();
+      budgetAmount = (map['budgetAmount'] as num?)?.toDouble();
+      professionalFeesEnabled =
+          map['professionalFeesEnabled'] as bool? ?? professionalFeesEnabled;
+      professionalFeesPct =
+          (map['professionalFeesPct'] as num?)?.toDouble() ?? professionalFeesPct;
+    } catch (e) {
+      debugPrint('EstimateController.restoreFormState error: $e');
+    }
+  }
+
+  /// Removes saved draft (call after successful save).
+  Future<void> clearFormState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefKeyDraft);
+    } catch (e) {
+      debugPrint('EstimateController.clearFormState error: $e');
+    }
   }
 
   // ── Mutations ──
   void setRegion(String? r) {
     region = r;
     notifyListeners();
+    saveFormState();
   }
 
   void setCurrency(CurrencyInfo c) {
@@ -214,22 +285,26 @@ class EstimateController extends ChangeNotifier {
     roof = roof_ ?? roof;
     storeys = storeys_ ?? storeys;
     notifyListeners();
+    saveFormState();
   }
 
   void addFloor() {
     floors.add(const FloorSpec(areaM2: 100, heightM: 3.0));
     notifyListeners();
+    saveFormState();
   }
 
   void updateFloor(int i, {double? areaM2, double? heightM}) {
     floors[i] = floors[i].copyWith(areaM2: areaM2, heightM: heightM);
     notifyListeners();
+    saveFormState();
   }
 
   void removeFloor(int i) {
     if (floors.length <= 1) return;
     floors.removeAt(i);
     notifyListeners();
+    saveFormState();
   }
 
   void setExternalWorks({
@@ -280,6 +355,12 @@ class EstimateController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setProfessionalFees({bool? enabled, double? pct}) {
+    professionalFeesEnabled = enabled ?? professionalFeesEnabled;
+    professionalFeesPct = pct ?? professionalFeesPct;
+    notifyListeners();
+  }
+
   // ── Compute ──
   Future<void> compute() async {
     _computeError = null;
@@ -294,79 +375,37 @@ class EstimateController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final totalArea = floors.fold<double>(0, (p, f) => p + f.areaM2);
-
-      // Rates come from CatalogService (Firestore or built-in fallback).
-      final rate = catalogService.unitRatesGhsPerM2[quality] ??
-          catalogService.unitRatesGhsPerM2['Standard'] ??
-          4500.0;
-
-      final idx = regionalIndexProvider.indexFor(region);
-      final baseGhs = totalArea * rate * idx;
-
-      final Map<String, double> phaseGhs = {};
-      catalogService.phasePercents.forEach((name, pct) {
-        phaseGhs[name] = baseGhs * pct;
-      });
-
-      // Add-ons — rates from catalog, not hardcoded.
-      final Map<String, double> addOns = {};
-      double addOnsTotal = 0;
-      if (includeExternalWorks) {
-        if (externalWallLenM > 0) {
-          final wall =
-              externalWallLenM * catalogService.compoundWallRatePerM;
-          addOns['Compound wall'] = wall;
-          addOnsTotal += wall;
-        }
-        if (drivewayAreaM2 > 0) {
-          final drive = drivewayAreaM2 * catalogService.drivewayRatePerM2;
-          addOns['Driveway'] = drive;
-          addOnsTotal += drive;
-        }
-        if (includeSeptic) {
-          final septic = catalogService.septicLumpSum;
-          addOns['Septic/Soakaway'] = septic;
-          addOnsTotal += septic;
-        }
-      }
-
-      final prelimGhs = baseGhs * (preliminariesPct / 100.0);
-      final ohp =
-          (baseGhs + prelimGhs) * (catalogService.ohpDefaultPct / 100.0);
-      final contingency = contingencyEnabled
-          ? (baseGhs + prelimGhs + ohp + addOnsTotal) *
-              (contingencyPct / 100.0)
-          : 0.0;
-
-      final netBeforeTax =
-          baseGhs + prelimGhs + ohp + addOnsTotal + contingency;
-
-      final Map<String, double> taxLinesGhs = {};
-      double taxesTotal = 0;
-      for (final t in taxLines) {
-        final line = netBeforeTax * (t.pct / 100.0);
-        taxLinesGhs[t.name] = line;
-        taxesTotal += line;
-      }
-
-      final permit = permitMode == PermitMode.percent
-          ? (baseGhs + addOnsTotal) * (permitPct / 100.0)
-          : (permitManualGhs ?? 0.0);
-
-      final totalPlanned = netBeforeTax + taxesTotal + permit;
-
-      _result = EstimateResult(
-        totalBuiltUpArea: totalArea,
-        phaseBreakdownGhs: phaseGhs,
-        addOnsGhs: addOns,
-        preliminariesGhs: prelimGhs,
-        ohpGhs: ohp,
-        contingencyGhs: contingency,
-        taxLinesGhs: taxLinesGhs,
-        permitGhs: permit,
-        totalPlannedGhs: totalPlanned,
+      final input = EstimateInput(
+        floors: List.unmodifiable(floors),
+        quality: quality,
+        foundation: foundation,
+        soil: soil,
+        roof: roof,
+        buildingType: buildingType,
+        unitRateGhsPerM2: catalogService.unitRatesGhsPerM2[quality] ??
+            catalogService.unitRatesGhsPerM2['Standard'] ??
+            6200.0,
+        regionalIndex: regionalIndexProvider.indexFor(region),
+        phasePercents: catalogService.phasePercents,
+        includeExternalWorks: includeExternalWorks,
+        externalWallLenM: externalWallLenM,
+        drivewayAreaM2: drivewayAreaM2,
+        includeSeptic: includeSeptic,
+        compoundWallRatePerM: catalogService.compoundWallRatePerM,
+        drivewayRatePerM2: catalogService.drivewayRatePerM2,
+        septicLumpSum: catalogService.septicLumpSum,
+        preliminariesPct: preliminariesPct,
+        ohpPct: catalogService.ohpDefaultPct,
+        contingencyEnabled: contingencyEnabled,
+        contingencyPct: contingencyPct,
+        permitMode: permitMode,
+        permitPct: permitPct,
+        permitManualGhs: permitManualGhs,
+        taxLines: List.unmodifiable(taxLines),
+        professionalFeesEnabled: professionalFeesEnabled,
+        professionalFeesPct: professionalFeesPct,
       );
+      _result = const EstimationEngine().calculate(input);
     } catch (e) {
       _computeError = AppException.from(e).message;
       debugPrint('EstimateController.compute error: $e');
@@ -427,6 +466,7 @@ class EstimateController extends ChangeNotifier {
       'addOnsGhs': r.addOnsGhs,
       'preliminariesGhs': r.preliminariesGhs,
       'ohpGhs': r.ohpGhs,
+      'professionalFeesGhs': r.professionalFeesGhs,
       'contingencyGhs': r.contingencyGhs,
       'taxLinesGhs': r.taxLinesGhs,
       'permitGhs': r.permitGhs,

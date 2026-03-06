@@ -1,58 +1,174 @@
+import '../../core/config/service_locator.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/models/app_user.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/contract_service.dart';
-import '../estimate/saved_estimates_page.dart';
-import '../admin/admin_page.dart';
-import 'builder_profile_page.dart';
-import 'pending_contracts_page.dart';
-import 'pm_profile_page.dart';
+import '../../core/services/csv_service.dart';
+import '../../core/services/project_service.dart';
+import '../../core/state/theme_mode_controller.dart';
+import '../complaints/complaints_page.dart';
 
 class AccountPage extends StatelessWidget {
-  const AccountPage({super.key});
+  /// [embedded] — when true the widget renders as plain content with no
+  /// Scaffold or AppBar (used when hosted as a navigation tab in HomeShell).
+  /// [auth] — required in embedded mode so the widget doesn't re-read from
+  /// context (HomeShell already watches it).
+  const AccountPage({
+    super.key,
+    this.embedded = false,
+    this.auth,
+  });
+
+  final bool embedded;
+  final AuthService? auth;
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthService>();
-    final user = auth.currentUser;
+    final effectiveAuth = auth ?? context.watch<AuthService>();
+    final user = effectiveAuth.currentUser;
 
+    // ── Not signed in ───────────────────────────────────────────────────────
     if (user == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      final body = _SignedOutBody(
+        onSignIn: () => context.push('/sign-in'),
+      );
+      if (embedded) return body;
+      return Scaffold(
+        appBar: AppBar(title: const Text('Account')),
+        body: body,
       );
     }
 
+    // ── Signed in ───────────────────────────────────────────────────────────
+    final listView = ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        _AvatarHeader(user: user),
+        const SizedBox(height: 24),
+        _InfoSection(user: user),
+
+        // ── Profile section (pm role only) ─────────────────────────────────
+        if (user.role == UserRole.pm) ...[
+          const SizedBox(height: 24),
+          const _SectionHeader('Profile'),
+          const SizedBox(height: 8),
+          _BuilderProfileTile(),
+          const SizedBox(height: 8),
+          _PmProfileTile(),
+        ],
+
+        // ── Activity section ───────────────────────────────────────────────
+        const SizedBox(height: 24),
+        const _SectionHeader('Activity'),
+        const SizedBox(height: 8),
+        _SavedEstimatesTile(),
+        if (user.role == UserRole.pm) ...[
+          const SizedBox(height: 8),
+          _PendingContractsTile(uid: user.uid),
+          const SizedBox(height: 8),
+          _QuoteRequestsTile(uid: user.uid),
+        ],
+        const SizedBox(height: 8),
+        _ComplaintsTile(),
+
+        // ── Settings section ───────────────────────────────────────────────
+        const SizedBox(height: 24),
+        const _SectionHeader('Settings'),
+        const SizedBox(height: 8),
+        if (user.role == UserRole.admin) ...[
+          _AdminTile(),
+          const SizedBox(height: 8),
+        ],
+        _ThemeModeTile(),
+        const SizedBox(height: 8),
+        _UpgradeTile(),
+        const SizedBox(height: 8),
+        _NotificationPrefsTile(),
+        const SizedBox(height: 8),
+        _ChangePasswordTile(auth: effectiveAuth),
+        const SizedBox(height: 8),
+        _ExportDataTile(uid: user.uid),
+        const SizedBox(height: 8),
+        _PrivacyPolicyTile(),
+        const SizedBox(height: 8),
+        _TermsOfServiceTile(),
+
+        // ── Account section ────────────────────────────────────────────────
+        const SizedBox(height: 24),
+        const _SectionHeader('Account'),
+        const SizedBox(height: 8),
+        if (!user.emailVerified) ...[
+          _VerificationBanner(auth: effectiveAuth),
+          const SizedBox(height: 8),
+        ],
+        _SignOutButton(auth: effectiveAuth),
+        const SizedBox(height: 8),
+        _DeleteAccountButton(auth: effectiveAuth),
+        const SizedBox(height: 16),
+      ],
+    );
+
+    if (embedded) return listView;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Account')),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          _AvatarHeader(user: user),
-          const SizedBox(height: 32),
-          _InfoSection(user: user),
-          const SizedBox(height: 24),
-          if (user.role == UserRole.admin) ...[
-            _AdminTile(),
-            const SizedBox(height: 24),
-          ],
-          if (user.role == UserRole.pm) ...[
-            _BuilderProfileTile(),
-            const SizedBox(height: 16),
-            _PmProfileTile(),
-            const SizedBox(height: 16),
-            _PendingContractsTile(uid: user.uid),
-            const SizedBox(height: 24),
-          ],
-          _SavedEstimatesTile(),
-          const SizedBox(height: 24),
-          if (!user.emailVerified) _VerificationBanner(auth: auth),
-          const SizedBox(height: 32),
-          _SignOutButton(auth: auth),
-          const SizedBox(height: 8),
-          _DeleteAccountButton(auth: auth),
-        ],
+      body: listView,
+    );
+  }
+}
+
+// ── Signed-out body ────────────────────────────────────────────────────────
+
+class _SignedOutBody extends StatelessWidget {
+  const _SignedOutBody({required this.onSignIn});
+  final VoidCallback onSignIn;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.person_outline,
+                size: 64,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Your account',
+                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Sign in to manage your profile, view saved estimates, '
+                'and track your projects.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurfaceVariant,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 28),
+              FilledButton.icon(
+                onPressed: onSignIn,
+                icon: const Icon(Icons.login),
+                label: const Text('Sign in / Create account'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -76,8 +192,9 @@ class _AvatarHeader extends StatelessWidget {
         CircleAvatar(
           radius: 40,
           backgroundColor: cs.primaryContainer,
-          backgroundImage:
-              user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
+          backgroundImage: user.photoUrl != null
+              ? CachedNetworkImageProvider(user.photoUrl!)
+              : null,
           child: user.photoUrl == null
               ? Text(
                   initials,
@@ -260,9 +377,7 @@ class _AdminTile extends StatelessWidget {
         title: const Text('Admin Dashboard'),
         subtitle: const Text('Manage users, catalog and complaints'),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const AdminPage()),
-        ),
+        onTap: () => context.push('/admin'),
       ),
     );
   }
@@ -281,9 +396,7 @@ class _BuilderProfileTile extends StatelessWidget {
         title: const Text('Manage Builder Profile'),
         subtitle: const Text('Set up your public builder listing'),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const BuilderProfilePage()),
-        ),
+        onTap: () => context.push('/account/profile/builder'),
       ),
     );
   }
@@ -302,9 +415,7 @@ class _PmProfileTile extends StatelessWidget {
         title: const Text('Manage PM Profile'),
         subtitle: const Text('Set up your project manager listing'),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const PmProfilePage()),
-        ),
+        onTap: () => context.push('/account/profile/pm'),
       ),
     );
   }
@@ -320,7 +431,7 @@ class _PendingContractsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final service = context.read<ContractService>();
+    final service = sl<ContractService>();
     return StreamBuilder<List<Object>>(
       stream: service.pendingForBuilder(uid),
       builder: (ctx, snap) {
@@ -337,11 +448,7 @@ class _PendingContractsTile extends StatelessWidget {
                 ? '$count contract${count == 1 ? '' : 's'} awaiting your signature'
                 : 'No pending contracts',),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const PendingContractsPage(),
-              ),
-            ),
+            onTap: () => context.push('/account/contracts/pending'),
           ),
         );
       },
@@ -362,8 +469,49 @@ class _SavedEstimatesTile extends StatelessWidget {
         title: const Text('Saved Estimates'),
         subtitle: const Text('View your previously generated estimates'),
         trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/estimate/saved'),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Quote requests inbox (builder / vendor role)
+// ─────────────────────────────────────────────
+
+class _QuoteRequestsTile extends StatelessWidget {
+  const _QuoteRequestsTile({required this.uid});
+  final String uid;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.request_quote_outlined),
+        title: const Text('Quote Requests'),
+        subtitle: const Text('View and respond to incoming quote requests'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/account/rfq-inbox', extra: uid),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Complaints link (all signed-in users)
+// ─────────────────────────────────────────────
+
+class _ComplaintsTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.report_problem_outlined),
+        title: const Text('My Complaints'),
+        subtitle: const Text('View and submit complaints or issues'),
+        trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const SavedEstimatesPage()),
+          MaterialPageRoute<void>(builder: (_) => const ComplaintsPage()),
         ),
       ),
     );
@@ -454,11 +602,219 @@ class _VerificationBannerState extends State<_VerificationBanner> {
 }
 
 // ─────────────────────────────────────────────
+// Notification preferences link
+// ─────────────────────────────────────────────
+
+class _NotificationPrefsTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.notifications_outlined),
+        title: const Text('Notification Preferences'),
+        subtitle: const Text('Choose which notifications you receive'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/notifications/prefs'),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Change password
+// ─────────────────────────────────────────────
+
+class _ChangePasswordTile extends StatelessWidget {
+  const _ChangePasswordTile({required this.auth});
+  final AuthService auth;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.lock_reset_outlined),
+        title: const Text('Change Password'),
+        subtitle: const Text('Update your account password'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => showDialog<void>(
+          context: context,
+          builder: (_) => _ChangePasswordDialog(auth: auth),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChangePasswordDialog extends StatefulWidget {
+  const _ChangePasswordDialog({required this.auth});
+  final AuthService auth;
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _currentPassCtrl = TextEditingController();
+  final _newPassCtrl = TextEditingController();
+  final _confirmPassCtrl = TextEditingController();
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _currentPassCtrl.dispose();
+    _newPassCtrl.dispose();
+    _confirmPassCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await widget.auth.updatePassword(
+        _currentPassCtrl.text,
+        _newPassCtrl.text,
+      );
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Password updated')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change password'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_error != null) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _error!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            TextFormField(
+              controller: _currentPassCtrl,
+              obscureText: _obscureCurrent,
+              decoration: InputDecoration(
+                labelText: 'Current password',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  tooltip: _obscureCurrent ? 'Show password' : 'Hide password',
+                  icon: Icon(
+                    _obscureCurrent ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () =>
+                      setState(() => _obscureCurrent = !_obscureCurrent),
+                ),
+              ),
+              validator: (v) =>
+                  (v == null || v.isEmpty) ? 'Required' : null,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _newPassCtrl,
+              obscureText: _obscureNew,
+              decoration: InputDecoration(
+                labelText: 'New password',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  tooltip: _obscureNew ? 'Show password' : 'Hide password',
+                  icon: Icon(
+                    _obscureNew ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () =>
+                      setState(() => _obscureNew = !_obscureNew),
+                ),
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Required';
+                if (v.length < 8) return 'Must be at least 8 characters';
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _confirmPassCtrl,
+              obscureText: _obscureConfirm,
+              decoration: InputDecoration(
+                labelText: 'Confirm new password',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  tooltip: _obscureConfirm ? 'Show password' : 'Hide password',
+                  icon: Icon(
+                    _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () =>
+                      setState(() => _obscureConfirm = !_obscureConfirm),
+                ),
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Required';
+                if (v != _newPassCtrl.text) return 'Passwords do not match';
+                return null;
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _loading ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _loading ? null : _submit,
+          child: _loading
+              ? const SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Update password'),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
 // Sign out
 // ─────────────────────────────────────────────
 
 class _SignOutButton extends StatelessWidget {
-
   const _SignOutButton({required this.auth});
   final AuthService auth;
 
@@ -471,8 +827,27 @@ class _SignOutButton extends StatelessWidget {
         minimumSize: const Size.fromHeight(48),
       ),
       onPressed: () async {
-        await auth.signOut();
-        if (context.mounted) Navigator.of(context).pop();
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Sign out?'),
+            content: const Text(
+              'You will need to sign in again to access your projects.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Sign out'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed == true) await auth.signOut();
+        // No navigation needed — HomeShell rebuilds reactively via AuthService.
       },
       icon: const Icon(Icons.logout),
       label: const Text('Sign out'),
@@ -560,5 +935,190 @@ class _DeleteAccountButton extends StatelessWidget {
         SnackBar(content: Text('Could not delete account: $e')),
       );
     }
+  }
+}
+
+// ─────────────────────────────────────────────
+// Theme mode tile
+// ─────────────────────────────────────────────
+
+class _ThemeModeTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final themeCtrl = context.watch<ThemeModeController>();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.palette_outlined),
+                const SizedBox(width: 16),
+                Text(
+                  'Appearance',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<ThemeMode>(
+              segments: const [
+                ButtonSegment(
+                  value: ThemeMode.system,
+                  icon: Icon(Icons.brightness_auto, size: 18),
+                  label: Text('System'),
+                ),
+                ButtonSegment(
+                  value: ThemeMode.light,
+                  icon: Icon(Icons.light_mode, size: 18),
+                  label: Text('Light'),
+                ),
+                ButtonSegment(
+                  value: ThemeMode.dark,
+                  icon: Icon(Icons.dark_mode, size: 18),
+                  label: Text('Dark'),
+                ),
+              ],
+              selected: {themeCtrl.mode},
+              onSelectionChanged: (s) => themeCtrl.setMode(s.first),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Plans & Pricing tile
+// ─────────────────────────────────────────────
+
+class _UpgradeTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthService>();
+    final tier = auth.currentUser?.subscriptionTier ?? SubscriptionTier.free;
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.workspace_premium_outlined),
+        title: const Text('Plans & Pricing'),
+        subtitle: Text('Current plan: ${tier.label}'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/account/upgrade'),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Privacy Policy tile
+// ─────────────────────────────────────────────
+
+class _PrivacyPolicyTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Card(
+        child: ListTile(
+          leading: const Icon(Icons.privacy_tip_outlined),
+          title: const Text('Privacy Policy'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => context.push('/legal?tab=privacy'),
+        ),
+      );
+}
+
+// ─────────────────────────────────────────────
+// Terms of Service tile
+// ─────────────────────────────────────────────
+
+class _TermsOfServiceTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Card(
+        child: ListTile(
+          leading: const Icon(Icons.gavel_outlined),
+          title: const Text('Terms of Service'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => context.push('/legal?tab=terms'),
+        ),
+      );
+}
+
+// ─────────────────────────────────────────────
+// Export my data tile
+// ─────────────────────────────────────────────
+
+class _ExportDataTile extends StatefulWidget {
+  const _ExportDataTile({required this.uid});
+  final String uid;
+
+  @override
+  State<_ExportDataTile> createState() => _ExportDataTileState();
+}
+
+class _ExportDataTileState extends State<_ExportDataTile> {
+  bool _busy = false;
+
+  Future<void> _export() async {
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final projects = await sl<ProjectService>()
+          .projectsForOwner(widget.uid)
+          .first;
+      final file = await sl<CsvService>().exportUserData(widget.uid, projects);
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'BuildWise data export',
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: _busy
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.download_outlined),
+        title: const Text('Export my data'),
+        subtitle: const Text('Download all your project data as CSV'),
+        trailing: _busy ? null : const Icon(Icons.chevron_right),
+        onTap: _busy ? null : _export,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Section header
+// ─────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.title);
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 2),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w700,
+            ),
+      ),
+    );
   }
 }

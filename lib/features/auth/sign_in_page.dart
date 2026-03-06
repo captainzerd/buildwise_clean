@@ -1,11 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models/app_user.dart';
 import '../../core/services/auth_service.dart';
 import '../../widgets/validators.dart';
-import 'forgot_password_page.dart';
+
+// Google Sign-In is available via AuthService.signInWithGoogle()
 
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
@@ -92,7 +94,7 @@ class _SignInFormState extends State<_SignInForm> {
             email: _emailCtrl.text.trim(),
             password: _passwordCtrl.text,
           );
-      if (mounted) Navigator.of(context).maybePop();
+      if (mounted && context.canPop()) context.pop();
     } on FirebaseAuthException catch (e) {
       setState(() => _error = _friendlyError(e));
     } catch (e) {
@@ -135,6 +137,7 @@ class _SignInFormState extends State<_SignInForm> {
                 prefixIcon: const Icon(Icons.lock_outline),
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
+                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
                   icon: Icon(
                     _obscurePassword
                         ? Icons.visibility_outlined
@@ -153,11 +156,7 @@ class _SignInFormState extends State<_SignInForm> {
               child: TextButton(
                 onPressed: _busy
                     ? null
-                    : () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const ForgotPasswordPage(),
-                          ),
-                        ),
+                    : () => context.push('/forgot-password'),
                 child: const Text('Forgot password?'),
               ),
             ),
@@ -179,8 +178,74 @@ class _SignInFormState extends State<_SignInForm> {
                     )
                   : const Text('Sign in'),
             ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Expanded(child: Divider()),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'or',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                const Expanded(child: Divider()),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _GoogleSignInButton(busy: _busy),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Google Sign-In button
+// ─────────────────────────────────────────────
+
+class _GoogleSignInButton extends StatefulWidget {
+  const _GoogleSignInButton({required this.busy});
+  final bool busy;
+
+  @override
+  State<_GoogleSignInButton> createState() => _GoogleSignInButtonState();
+}
+
+class _GoogleSignInButtonState extends State<_GoogleSignInButton> {
+  bool _googleBusy = false;
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _googleBusy = true);
+    try {
+      await context.read<AuthService>().signInWithGoogle();
+      if (mounted && context.canPop()) context.pop();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Google sign-in failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _googleBusy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: (widget.busy || _googleBusy) ? null : _signInWithGoogle,
+      icon: _googleBusy
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.login, size: 20),
+      label: const Text('Continue with Google'),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(double.infinity, 48),
       ),
     );
   }
@@ -228,7 +293,7 @@ class _CreateAccountFormState extends State<_CreateAccountForm> {
             displayName: _nameCtrl.text.trim(),
             role: _role,
           );
-      if (mounted) Navigator.of(context).maybePop();
+      if (mounted && context.canPop()) context.pop();
     } on FirebaseAuthException catch (e) {
       setState(() => _error = _friendlyError(e));
     } catch (e) {
@@ -283,6 +348,7 @@ class _CreateAccountFormState extends State<_CreateAccountForm> {
                 prefixIcon: const Icon(Icons.lock_outline),
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
+                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
                   icon: Icon(
                     _obscurePassword
                         ? Icons.visibility_outlined

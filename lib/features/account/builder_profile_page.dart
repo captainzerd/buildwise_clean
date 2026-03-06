@@ -1,10 +1,13 @@
 import 'dart:io';
 
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/models/app_user.dart';
 import '../../core/models/builder_profile.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/builder_profile_service.dart';
@@ -27,16 +30,30 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
   final _specializationsCtrl = TextEditingController();
   final _minBudgetCtrl = TextEditingController();
   final _projectsDoneCtrl = TextEditingController();
+  final _graTinCtrl = TextEditingController();
+  final _giaCtrl = TextEditingController();
+  final _gioeCtrl = TextEditingController();
+  final _gredaCtrl = TextEditingController();
+  final _ghanaCardCtrl = TextEditingController();
 
   BuilderRole _role = BuilderRole.contractor;
   String? _region;
   String? _photoUrl;
+  String? _contractorGrade;
   bool _isActive = true;
   bool _availableForHire = true;
   bool _saving = false;
   bool _uploading = false;
   bool _loading = true;
   String? _error;
+
+  static const _contractorGrades = [
+    'D1', 'D2', 'D3', 'D4',
+    'G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8',
+  ];
+
+  static const _graTinPattern = r'^GHA-\d{9}-\d$';
+  static const _ghanaCardPattern = r'^GHA-\d{9}-\d$';
 
   @override
   void initState() {
@@ -65,12 +82,18 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
             snap.minimumBudgetGhs?.toStringAsFixed(0) ?? '';
         _projectsDoneCtrl.text =
             snap.projectsCompleted > 0 ? snap.projectsCompleted.toString() : '';
+        _graTinCtrl.text = snap.graTin ?? '';
+        _giaCtrl.text = snap.giaNumber ?? '';
+        _gioeCtrl.text = snap.gioeNumber ?? '';
+        _gredaCtrl.text = snap.gredaMembership ?? '';
+        _ghanaCardCtrl.text = snap.ghanaCardNumber ?? '';
         setState(() {
           _role = snap.role;
           _region = snap.region.isEmpty ? null : snap.region;
           _isActive = snap.isActive;
           _availableForHire = snap.availableForHire;
           _photoUrl = snap.photoUrl;
+          _contractorGrade = snap.contractorGrade;
         });
       }
     } finally {
@@ -88,6 +111,11 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
     _specializationsCtrl.dispose();
     _minBudgetCtrl.dispose();
     _projectsDoneCtrl.dispose();
+    _graTinCtrl.dispose();
+    _giaCtrl.dispose();
+    _gioeCtrl.dispose();
+    _gredaCtrl.dispose();
+    _ghanaCardCtrl.dispose();
     super.dispose();
   }
 
@@ -177,6 +205,22 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
         yearsExperience: int.tryParse(_yearsCtrl.text.trim()),
         minimumBudgetGhs: double.tryParse(_minBudgetCtrl.text.trim()),
         projectsCompleted: int.tryParse(_projectsDoneCtrl.text.trim()) ?? 0,
+        graTin: _graTinCtrl.text.trim().isEmpty
+            ? null
+            : _graTinCtrl.text.trim(),
+        giaNumber: _giaCtrl.text.trim().isEmpty
+            ? null
+            : _giaCtrl.text.trim(),
+        gioeNumber: _gioeCtrl.text.trim().isEmpty
+            ? null
+            : _gioeCtrl.text.trim(),
+        gredaMembership: _gredaCtrl.text.trim().isEmpty
+            ? null
+            : _gredaCtrl.text.trim(),
+        ghanaCardNumber: _ghanaCardCtrl.text.trim().isEmpty
+            ? null
+            : _ghanaCardCtrl.text.trim(),
+        contractorGrade: _contractorGrade,
         createdAt: now,
         updatedAt: now,
       );
@@ -222,7 +266,7 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
                     CircleAvatar(
                       radius: 44,
                       backgroundImage: _photoUrl != null
-                          ? NetworkImage(_photoUrl!) as ImageProvider
+                          ? CachedNetworkImageProvider(_photoUrl!) as ImageProvider
                           : null,
                       child: _photoUrl == null
                           ? Text(
@@ -406,6 +450,97 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
             ),
             const SizedBox(height: 14),
 
+            // ── Professional credentials ─────────────────────────────────
+            const SizedBox(height: 4),
+            Text(
+              'Professional Credentials',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            Text(
+              'These are verified by admin and unlock the trust badge on your '
+              'public profile.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _graTinCtrl,
+              decoration: const InputDecoration(
+                labelText: 'GRA TIN (optional)',
+                hintText: 'GHA-000000000-0',
+                border: OutlineInputBorder(),
+              ),
+              textCapitalization: TextCapitalization.characters,
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return null;
+                if (!RegExp(_graTinPattern).hasMatch(v.trim())) {
+                  return 'Format must be GHA-000000000-0';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _contractorGrade,
+              decoration: const InputDecoration(
+                labelText: 'Contractor Grade (optional)',
+                hintText: 'Select grade',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('— None —')),
+                for (final g in _contractorGrades)
+                  DropdownMenuItem(value: g, child: Text(g)),
+              ],
+              onChanged: (v) => setState(() => _contractorGrade = v),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _giaCtrl,
+              decoration: const InputDecoration(
+                labelText: 'GIA Membership No. (optional)',
+                hintText: 'Ghana Institution of Architects',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _gioeCtrl,
+              decoration: const InputDecoration(
+                labelText: 'GIOE Membership No. (optional)',
+                hintText: 'Ghana Institution of Engineers',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _gredaCtrl,
+              decoration: const InputDecoration(
+                labelText: 'GREDA Membership No. (optional)',
+                hintText: 'Ghana Real Estate Developers Association',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _ghanaCardCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Ghana Card Number (optional)',
+                hintText: 'GHA-000000000-0',
+                border: OutlineInputBorder(),
+              ),
+              textCapitalization: TextCapitalization.characters,
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return null;
+                if (!RegExp(_ghanaCardPattern).hasMatch(v.trim())) {
+                  return 'Format must be GHA-000000000-0';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 14),
+
             // Available for hire toggle
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
@@ -417,15 +552,33 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
               onChanged: (v) => setState(() => _availableForHire = v),
             ),
 
-            // Visible in marketplace toggle
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Visible in Find a Builder'),
-              subtitle: const Text(
-                'Turn off to hide your profile from property owners.',
-              ),
-              value: _isActive,
-              onChanged: (v) => setState(() => _isActive = v),
+            // Visible in marketplace toggle — requires Business tier
+            Builder(
+              builder: (context) {
+                final auth = context.watch<AuthService>();
+                final tier = auth.currentUser?.subscriptionTier ??
+                    SubscriptionTier.free;
+                final canList = tier.canListInMarketplace;
+                return SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Visible in Find a Builder'),
+                  subtitle: Text(
+                    canList
+                        ? 'Turn off to hide your profile from property owners.'
+                        : 'Requires the Business plan to list in the marketplace.',
+                  ),
+                  value: _isActive && canList,
+                  onChanged: canList
+                      ? (v) => setState(() => _isActive = v)
+                      : (_) => context.push(
+                            '/account/upgrade',
+                            extra: {
+                              'tier': SubscriptionTier.business.name,
+                              'feature': 'Builder Marketplace Listing',
+                            },
+                          ),
+                );
+              },
             ),
 
             if (_error != null) ...[

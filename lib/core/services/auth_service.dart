@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../models/app_user.dart';
 
@@ -109,10 +110,42 @@ class AuthService extends ChangeNotifier {
     required String email,
     required String password,
   }) async {
-    await FirebaseAuth.instance.signInWithEmailAndPassword(
+    final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
       email: email,
       password: password,
     );
+    // Force-refresh the ID token so the session immediately picks up any
+    // custom claims (role, admin) that were set by the Cloud Function.
+    await cred.user?.getIdToken(true);
+  }
+
+  /// Sign in or sign up with Google. Creates a Firestore user doc on first sign-in.
+  Future<void> signInWithGoogle() async {
+    final googleUser = await GoogleSignIn().signIn();
+    if (googleUser == null) return; // user cancelled
+    final googleAuth = await googleUser.authentication;
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+    final cred =
+        await FirebaseAuth.instance.signInWithCredential(credential);
+    final user = cred.user!;
+    // Create Firestore profile on first Google sign-in.
+    final db = FirebaseFirestore.instance;
+    final docRef = db.collection('users').doc(user.uid);
+    final snap = await docRef.get();
+    if (!snap.exists) {
+      final appUser = AppUser(
+        uid: user.uid,
+        email: user.email ?? '',
+        displayName: user.displayName ?? '',
+        role: UserRole.owner,
+        emailVerified: true,
+        createdAt: DateTime.now(),
+      );
+      await docRef.set(appUser.toMap());
+    }
   }
 
   Future<void> signOut() async {
@@ -125,6 +158,23 @@ class AuthService extends ChangeNotifier {
 
   Future<void> sendPasswordReset(String email) async {
     await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+  }
+
+  /// Changes the current user's password after re-authenticating.
+  Future<void> updatePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null || firebaseUser.email == null) {
+      throw Exception('No signed-in user.');
+    }
+    final credential = EmailAuthProvider.credential(
+      email: firebaseUser.email!,
+      password: currentPassword,
+    );
+    await firebaseUser.reauthenticateWithCredential(credential);
+    await firebaseUser.updatePassword(newPassword);
   }
 
   /// Permanently deletes the current user's account.

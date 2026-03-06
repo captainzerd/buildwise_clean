@@ -1,30 +1,109 @@
 // lib/core/services/project_service.dart
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../errors/app_exception.dart';
+import '../models/audit_event.dart';
 import '../models/cost_entry.dart';
 import '../models/phase.dart';
 import '../models/project.dart';
 import '../models/project_document.dart';
 import '../models/project_update.dart';
+import '../repositories/i_project_repository.dart';
+import 'audit_service.dart';
 
-class ProjectService {
-  final _db = FirebaseFirestore.instance;
-  final _storage = FirebaseStorage.instance;
+class ProjectService implements IProjectRepository {
+  /// [db] and [storage] are optional; defaults to Firebase singletons.
+  /// Pass explicit instances in tests to avoid requiring Firebase.initializeApp().
+  ProjectService({FirebaseFirestore? db, FirebaseStorage? storage})
+      : _db = db ?? FirebaseFirestore.instance,
+        _storageOverride = storage;
+
+  final FirebaseFirestore _db;
+  final FirebaseStorage? _storageOverride;
+
+  // Lazily falls back to FirebaseStorage.instance only when a storage method is called.
+  FirebaseStorage get _storage => _storageOverride ?? FirebaseStorage.instance;
+
+  // ── Stream caches (prevent duplicate Firestore listeners) ──
+  final _phasesCache = <String, Stream<List<Phase>>>{};
+  final _costsCache = <String, Stream<List<CostEntry>>>{};
+  final _updatesCache = <String, Stream<List<ProjectUpdate>>>{};
+
 
   // ── Projects ──
 
-  /// Stream of all projects owned by [ownerUid], newest first.
-  Stream<List<Project>> projectsForOwner(String ownerUid) {
+  // ── Cursor-based pagination ──
+
+  /// Fetch a single page of projects owned by [ownerUid], newest first.
+  /// Returns a tuple of (results, cursor) where cursor is the last document
+  /// snapshot used to fetch the *next* page. Null cursor means no more pages.
+  Future<(List<Project>, DocumentSnapshot?)> fetchOwnerProjectsPage(
+    String ownerUid, {
+    int limit = 20,
+    DocumentSnapshot? startAfter,
+  }) async {
+    var query = _db
+        .collection('projects')
+        .where('ownerUid', isEqualTo: ownerUid)
+        .orderBy('createdAt', descending: true)
+        .limit(limit);
+
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+
+    final snap = await query.get();
+    final docs = snap.docs;
+    final projects = docs
+        .map((d) => Project.fromDoc(d as DocumentSnapshot<Map<String, dynamic>>))
+        .toList();
+    final cursor = docs.isNotEmpty && docs.length >= limit ? docs.last : null;
+    return (projects, cursor);
+  }
+
+  /// Fetch a single page of projects assigned to [builderUid], newest first.
+  Future<(List<Project>, DocumentSnapshot?)> fetchBuilderProjectsPage(
+    String builderUid, {
+    int limit = 20,
+    DocumentSnapshot? startAfter,
+  }) async {
+    var query = _db
+        .collection('projects')
+        .where('assignedPmUid', isEqualTo: builderUid)
+        .orderBy('createdAt', descending: true)
+        .limit(limit);
+
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+
+    final snap = await query.get();
+    final docs = snap.docs;
+    final projects = docs
+        .map((d) => Project.fromDoc(d as DocumentSnapshot<Map<String, dynamic>>))
+        .toList();
+    final cursor = docs.isNotEmpty && docs.length >= limit ? docs.last : null;
+    return (projects, cursor);
+  }
+
+  /// Stream of projects owned by [ownerUid], newest first.
+  /// [limit] controls page size — increase to load more (triggers re-subscription).
+  @override
+  Stream<List<Project>> projectsForOwner(String ownerUid, {int limit = 20}) {
     return _db
         .collection('projects')
         .where('ownerUid', isEqualTo: ownerUid)
         .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map(
           (s) => s.docs
@@ -37,13 +116,19 @@ class ProjectService {
         );
   }
 
-  /// Stream of all projects assigned to [builderUid], newest first.
+  /// Stream of projects assigned to [builderUid], newest first.
   /// Uses the `assignedPmUid + createdAt` composite index.
-  Stream<List<Project>> projectsForBuilder(String builderUid) {
+  /// [limit] controls page size — increase to load more.
+  @override
+  Stream<List<Project>> projectsForBuilder(
+    String builderUid, {
+    int limit = 20,
+  }) {
     return _db
         .collection('projects')
         .where('assignedPmUid', isEqualTo: builderUid)
         .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map(
           (s) => s.docs
@@ -57,6 +142,7 @@ class ProjectService {
   }
 
   /// Stream of a single project doc.
+  @override
   Stream<Project?> projectStream(String projectId) {
     return _db
         .collection('projects')
@@ -70,6 +156,7 @@ class ProjectService {
   }
 
   /// Create a new project. Returns the new doc ID.
+  @override
   Future<String> createProject(Project project) async {
     try {
       final ref = _db.collection('projects').doc();
@@ -80,7 +167,31 @@ class ProjectService {
     }
   }
 
+  /// Save a frozen BOQ snapshot to `projects/{id}/boq/default`.
+  /// [items] is a list of BoqItem maps (from BoqItem.toMap()).
+  Future<void> saveBoq(
+    String projectId,
+    List<Map<String, dynamic>> items,
+    double floorAreaSqm,
+  ) async {
+    try {
+      await _db
+          .collection('projects')
+          .doc(projectId)
+          .collection('boq')
+          .doc('default')
+          .set({
+        'savedAt': FieldValue.serverTimestamp(),
+        'floorAreaSqm': floorAreaSqm,
+        'items': items,
+      });
+    } catch (e) {
+      throw AppException.from(e);
+    }
+  }
+
   /// Update mutable fields of a project.
+  @override
   Future<void> updateProject(
     String projectId,
     Map<String, dynamic> fields,
@@ -96,6 +207,7 @@ class ProjectService {
   }
 
   /// Delete a project root doc (sub-collections cleaned up by Cloud Function in prod).
+  @override
   Future<void> deleteProject(String projectId) async {
     try {
       await _db.collection('projects').doc(projectId).delete();
@@ -104,6 +216,35 @@ class ProjectService {
     }
   }
 
+  Future<void> setBudgetAlertThreshold(
+    String projectId,
+    double threshold,
+  ) =>
+      updateProject(projectId, {'budgetAlertThreshold': threshold});
+
+  /// Updates a project's budget and writes an audit log entry.
+  Future<void> updateProjectBudget(
+    String projectId,
+    double newBudget, {
+    String? actorUid,
+    String? actorName,
+    String? ownerUid,
+  }) async {
+    await updateProject(projectId, {'budget': newBudget});
+    if (actorUid != null && actorName != null) {
+      await AuditService().logEvent(
+        projectId: projectId,
+        type: AuditEventType.projectStatusChanged,
+        actorUid: actorUid,
+        actorName: actorName,
+        description:
+            'Budget amended to GHS ${newBudget.toStringAsFixed(2)}',
+        ownerUid: ownerUid,
+      );
+    }
+  }
+
+  @override
   Future<void> assignPm(
     String projectId, {
     required String pmUid,
@@ -114,6 +255,7 @@ class ProjectService {
         'assignedPmName': pmName,
       });
 
+  @override
   Future<void> removePm(String projectId) =>
       updateProject(projectId, {
         'assignedPmUid': FieldValue.delete(),
@@ -122,24 +264,30 @@ class ProjectService {
 
   // ── Phases ──
 
+  @override
   Stream<List<Phase>> phasesStream(String projectId) {
-    return _db
-        .collection('projects')
-        .doc(projectId)
-        .collection('phases')
-        .orderBy('order')
-        .snapshots()
-        .map(
-          (s) => s.docs
-              .map(
-                (d) => Phase.fromDoc(
-                  d as DocumentSnapshot<Map<String, dynamic>>,
-                ),
-              )
-              .toList(),
-        );
+    return _phasesCache.putIfAbsent(
+      projectId,
+      () => _db
+          .collection('projects')
+          .doc(projectId)
+          .collection('phases')
+          .orderBy('order')
+          .snapshots()
+          .map(
+            (s) => s.docs
+                .map(
+                  (d) => Phase.fromDoc(
+                    d as DocumentSnapshot<Map<String, dynamic>>,
+                  ),
+                )
+                .toList(),
+          )
+          .asBroadcastStream(),
+    );
   }
 
+  @override
   Future<String> addPhase(String projectId, Phase phase) async {
     try {
       final ref = _db
@@ -154,6 +302,7 @@ class ProjectService {
     }
   }
 
+  @override
   Future<void> updatePhase(
     String projectId,
     String phaseId,
@@ -171,6 +320,7 @@ class ProjectService {
     }
   }
 
+  @override
   Future<void> deletePhase(String projectId, String phaseId) async {
     try {
       await _db
@@ -184,27 +334,89 @@ class ProjectService {
     }
   }
 
+  @override
+  Future<void> submitPhaseForApproval(
+    String projectId,
+    String phaseId,
+  ) async {
+    try {
+      await _db
+          .collection('projects')
+          .doc(projectId)
+          .collection('phases')
+          .doc(phaseId)
+          .update({'status': PhaseStatus.pendingApproval.firestoreValue});
+    } catch (e) {
+      throw AppException.from(e);
+    }
+  }
+
+  @override
+  Future<void> approvePhase(String projectId, String phaseId) async {
+    try {
+      await _db
+          .collection('projects')
+          .doc(projectId)
+          .collection('phases')
+          .doc(phaseId)
+          .update({
+            'status': PhaseStatus.completed.firestoreValue,
+            'rejectionComment': FieldValue.delete(),
+          });
+    } catch (e) {
+      throw AppException.from(e);
+    }
+  }
+
+  @override
+  Future<void> rejectPhase(
+    String projectId,
+    String phaseId, {
+    String? comment,
+  }) async {
+    try {
+      await _db
+          .collection('projects')
+          .doc(projectId)
+          .collection('phases')
+          .doc(phaseId)
+          .update({
+            'status': PhaseStatus.inProgress.firestoreValue,
+            if (comment != null && comment.isNotEmpty)
+              'rejectionComment': comment,
+          });
+    } catch (e) {
+      throw AppException.from(e);
+    }
+  }
+
   // ── Cost entries ──
 
+  @override
   Stream<List<CostEntry>> costEntriesStream(String projectId) {
-    return _db
-        .collection('projects')
-        .doc(projectId)
-        .collection('costs')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map(
-          (s) => s.docs
-              .map(
-                (d) => CostEntry.fromDoc(
-                  d as DocumentSnapshot<Map<String, dynamic>>,
-                ),
-              )
-              .toList(),
-        );
+    return _costsCache.putIfAbsent(
+      projectId,
+      () => _db
+          .collection('projects')
+          .doc(projectId)
+          .collection('costs')
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map(
+            (s) => s.docs
+                .map(
+                  (d) => CostEntry.fromDoc(
+                    d as DocumentSnapshot<Map<String, dynamic>>,
+                  ),
+                )
+                .toList(),
+          )
+          .asBroadcastStream(),
+    );
   }
 
   /// Add a cost entry and atomically update the project's `amountSpent`.
+  @override
   Future<void> addCostEntry(String projectId, CostEntry entry) async {
     try {
       final projectRef = _db.collection('projects').doc(projectId);
@@ -219,17 +431,26 @@ class ProjectService {
           'amountSpent': current + entry.amountGhs,
           'updatedAt': FieldValue.serverTimestamp(),
         });
+        if (entry.phaseId != null && entry.phaseId!.isNotEmpty) {
+          final phaseRef = projectRef.collection('phases').doc(entry.phaseId);
+          final phaseSnap = await tx.get(phaseRef);
+          final cur =
+              (phaseSnap.data()?['actualCostGhs'] as num?)?.toDouble() ?? 0;
+          tx.update(phaseRef, {'actualCostGhs': cur + entry.amountGhs});
+        }
       });
     } catch (e) {
       throw AppException.from(e);
     }
   }
 
+  @override
   Future<void> deleteCostEntry(
     String projectId,
     String entryId,
-    double amountGhs,
-  ) async {
+    double amountGhs, {
+    String? phaseId,
+  }) async {
     try {
       final projectRef = _db.collection('projects').doc(projectId);
       final entryRef = projectRef.collection('costs').doc(entryId);
@@ -243,6 +464,15 @@ class ProjectService {
           'amountSpent': (current - amountGhs).clamp(0, double.infinity),
           'updatedAt': FieldValue.serverTimestamp(),
         });
+        if (phaseId != null && phaseId.isNotEmpty) {
+          final phaseRef = projectRef.collection('phases').doc(phaseId);
+          final phaseSnap = await tx.get(phaseRef);
+          final cur =
+              (phaseSnap.data()?['actualCostGhs'] as num?)?.toDouble() ?? 0;
+          tx.update(phaseRef, {
+            'actualCostGhs': (cur - amountGhs).clamp(0, double.infinity),
+          });
+        }
       });
     } catch (e) {
       throw AppException.from(e);
@@ -251,30 +481,38 @@ class ProjectService {
 
   // ── Updates / Notes ──
 
+  @override
   Stream<List<ProjectUpdate>> updatesStream(String projectId) {
-    return _db
-        .collection('projects')
-        .doc(projectId)
-        .collection('updates')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map(
-          (s) => s.docs
-              .map(
-                (d) => ProjectUpdate.fromDoc(
-                  d as DocumentSnapshot<Map<String, dynamic>>,
-                ),
-              )
-              .toList(),
-        );
+    return _updatesCache.putIfAbsent(
+      projectId,
+      () => _db
+          .collection('projects')
+          .doc(projectId)
+          .collection('updates')
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map(
+            (s) => s.docs
+                .map(
+                  (d) => ProjectUpdate.fromDoc(
+                    d as DocumentSnapshot<Map<String, dynamic>>,
+                  ),
+                )
+                .toList(),
+          )
+          .asBroadcastStream(),
+    );
   }
 
+  @override
   Future<void> addUpdate({
     required String projectId,
     required String authorUid,
     required String text,
     List<String> photoUrls = const [],
     double? costDelta,
+    double? photoLat,
+    double? photoLng,
   }) async {
     try {
       final update = ProjectUpdate(
@@ -284,6 +522,8 @@ class ProjectService {
         photoUrls: photoUrls,
         costDelta: costDelta,
         createdAt: DateTime.now(),
+        photoLat: photoLat,
+        photoLng: photoLng,
       );
 
       final projectRef = _db.collection('projects').doc(projectId);
@@ -386,6 +626,7 @@ class ProjectService {
     required DocumentCategory category,
     String? displayName,
     String? contentType,
+    DateTime? expiresAt,
   }) async {
     try {
       final storagePath =
@@ -407,18 +648,23 @@ class ProjectService {
 
       final sizeBytes = await file.length();
       final name =
-          (displayName != null && displayName.isNotEmpty) ? displayName : fileName;
-      await docRef.set(ProjectDocument(
-        id: docRef.id,
-        uploaderUid: uploaderUid,
-        name: name,
-        url: url,
-        category: category,
-        storagePath: storagePath,
-        contentType: contentType,
-        sizeBytes: sizeBytes,
-        createdAt: DateTime.now(),
-      ).toMap(),);
+          (displayName != null && displayName.isNotEmpty)
+              ? displayName
+              : fileName;
+      await docRef.set(
+        ProjectDocument(
+          id: docRef.id,
+          uploaderUid: uploaderUid,
+          name: name,
+          url: url,
+          category: category,
+          storagePath: storagePath,
+          contentType: contentType,
+          sizeBytes: sizeBytes,
+          createdAt: DateTime.now(),
+          expiresAt: expiresAt,
+        ).toMap(),
+      );
 
       return url;
     } catch (e) {
@@ -452,6 +698,34 @@ class ProjectService {
 
   // ── Photo upload ──
 
+  /// Compresses [file] to JPEG (max 1280px wide, quality 75) and returns the
+  /// compressed bytes. Falls back to the original file bytes on any error so
+  /// the upload always succeeds.
+  Future<Uint8List> _compressPhoto(File file) async {
+    try {
+      final tmpDir = await getTemporaryDirectory();
+      final ext = p.extension(file.path).toLowerCase();
+      final format = ext == '.png' ? CompressFormat.png : CompressFormat.jpeg;
+      final targetPath = p.join(
+        tmpDir.path,
+        '${const Uuid().v4()}${ext.isEmpty ? '.jpg' : ext}',
+      );
+      final result = await FlutterImageCompress.compressAndGetFile(
+        file.absolute.path,
+        targetPath,
+        quality: 75,
+        minWidth: 1280,
+        minHeight: 1,
+        format: format,
+        keepExif: false,
+      );
+      if (result != null) return await result.readAsBytes();
+    } catch (e) {
+      debugPrint('ProjectService: compression failed — $e');
+    }
+    return await file.readAsBytes();
+  }
+
   Future<List<String>> uploadUpdatePhotos({
     required String projectId,
     required String updateId,
@@ -459,11 +733,12 @@ class ProjectService {
   }) async {
     final urls = <String>[];
     for (final file in files) {
-      final name = file.path.split('/').last;
+      final name = '${const Uuid().v4()}.jpg';
       final ref =
           _storage.ref('project_uploads/$projectId/updates/$updateId/$name');
       try {
-        await ref.putFile(file);
+        final bytes = await _compressPhoto(file);
+        await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
         urls.add(await ref.getDownloadURL());
       } catch (e) {
         debugPrint('ProjectService: photo upload failed for $name — $e');
@@ -481,13 +756,13 @@ class ProjectService {
   }) async {
     final urls = <String>[];
     for (final file in files) {
-      final ext = file.path.split('.').last.toLowerCase();
-      final name = '${const Uuid().v4()}.$ext';
+      final name = '${const Uuid().v4()}.jpg';
       final ref = _storage.ref(
         'project_uploads/$projectId/phase_completions/$phaseId/$name',
       );
       try {
-        await ref.putFile(file, SettableMetadata(contentType: 'image/$ext'));
+        final bytes = await _compressPhoto(file);
+        await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
         urls.add(await ref.getDownloadURL());
       } catch (e) {
         debugPrint('ProjectService: phase photo upload failed — $e');
@@ -504,11 +779,12 @@ class ProjectService {
     required File file,
   }) async {
     try {
-      final ext = file.path.split('.').last.toLowerCase();
+      final name = '${const Uuid().v4()}.jpg';
       final ref = _storage.ref(
-        'project_uploads/$projectId/receipts/$receiptId.$ext',
+        'project_uploads/$projectId/receipts/$name',
       );
-      await ref.putFile(file, SettableMetadata(contentType: 'image/$ext'));
+      final bytes = await _compressPhoto(file);
+      await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
       return await ref.getDownloadURL();
     } catch (e) {
       throw AppException.from(e);

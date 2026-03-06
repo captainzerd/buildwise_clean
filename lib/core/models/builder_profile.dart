@@ -71,6 +71,13 @@ class BuilderProfile {
     this.projectsCompleted = 0,
     this.isVerified = false,
     this.whatsappNumber,
+    this.graTin,
+    this.giaNumber,
+    this.gioeNumber,
+    this.gredaMembership,
+    this.ghanaCardNumber,
+    this.verifiedAt,
+    this.contractorGrade,
   });
 
   final String uid;
@@ -98,6 +105,13 @@ class BuilderProfile {
   final int projectsCompleted;
   final bool isVerified;
   final String? whatsappNumber;
+  final String? graTin;
+  final String? giaNumber;
+  final String? gioeNumber;
+  final String? gredaMembership;
+  final String? ghanaCardNumber;
+  final DateTime? verifiedAt;
+  final String? contractorGrade;
 
   factory BuilderProfile.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
@@ -128,6 +142,13 @@ class BuilderProfile {
       projectsCompleted: (d['projectsCompleted'] as num?)?.toInt() ?? 0,
       isVerified: d['isVerified'] as bool? ?? false,
       whatsappNumber: d['whatsappNumber'] as String?,
+      graTin: d['graTin'] as String?,
+      giaNumber: d['giaNumber'] as String?,
+      gioeNumber: d['gioeNumber'] as String?,
+      gredaMembership: d['gredaMembership'] as String?,
+      ghanaCardNumber: d['ghanaCardNumber'] as String?,
+      verifiedAt: (d['verifiedAt'] as Timestamp?)?.toDate(),
+      contractorGrade: d['contractorGrade'] as String?,
     );
   }
 
@@ -154,6 +175,13 @@ class BuilderProfile {
         'projectsCompleted': projectsCompleted,
         'isVerified': isVerified,
         if (whatsappNumber != null) 'whatsappNumber': whatsappNumber,
+        if (graTin != null) 'graTin': graTin,
+        if (giaNumber != null) 'giaNumber': giaNumber,
+        if (gioeNumber != null) 'gioeNumber': gioeNumber,
+        if (gredaMembership != null) 'gredaMembership': gredaMembership,
+        if (ghanaCardNumber != null) 'ghanaCardNumber': ghanaCardNumber,
+        if (verifiedAt != null) 'verifiedAt': Timestamp.fromDate(verifiedAt!),
+        if (contractorGrade != null) 'contractorGrade': contractorGrade,
       };
 
   BuilderProfile copyWith({
@@ -172,6 +200,12 @@ class BuilderProfile {
     List<String>? portfolioImageUrls,
     int? projectsCompleted,
     String? whatsappNumber,
+    String? graTin,
+    String? giaNumber,
+    String? gioeNumber,
+    String? gredaMembership,
+    String? ghanaCardNumber,
+    String? contractorGrade,
   }) =>
       BuilderProfile(
         uid: uid,
@@ -197,5 +231,12 @@ class BuilderProfile {
         projectsCompleted: projectsCompleted ?? this.projectsCompleted,
         isVerified: isVerified,
         whatsappNumber: whatsappNumber ?? this.whatsappNumber,
+        graTin: graTin ?? this.graTin,
+        giaNumber: giaNumber ?? this.giaNumber,
+        gioeNumber: gioeNumber ?? this.gioeNumber,
+        gredaMembership: gredaMembership ?? this.gredaMembership,
+        ghanaCardNumber: ghanaCardNumber ?? this.ghanaCardNumber,
+        verifiedAt: verifiedAt,
+        contractorGrade: contractorGrade ?? this.contractorGrade,
       );
 }
