@@ -1,8 +1,7 @@
 // lib/features/onboarding/onboarding_page.dart
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import '../shell/home_shell.dart';
 
 const _kOnboardingDone = 'onboarding_done';
 
@@ -49,6 +48,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
       body: 'Browse rated contractors and project managers, '
           'send digital contracts, and source building materials from verified suppliers.',
     ),
+    // Role explanation slide — rendered separately as _RolesSlide
+    _PageData(
+      icon: Icons.person_outline,
+      title: 'Who are you building for?',
+      body: '',
+    ),
   ];
 
   void _next() {
@@ -65,9 +70,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Future<void> _finish() async {
     await _markOnboardingDone();
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const HomeShell()),
-    );
+    GoRouter.of(context).go('/');
   }
 
   @override
@@ -85,12 +88,18 @@ class _OnboardingPageState extends State<OnboardingPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // Skip button
-            Align(
-              alignment: Alignment.topRight,
-              child: TextButton(
-                onPressed: _finish,
-                child: const Text('Skip'),
+            // Logo + skip row
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Image.asset('assets/images/logo.png', height: 36),
+                  TextButton(
+                    onPressed: _finish,
+                    child: const Text('Skip'),
+                  ),
+                ],
               ),
             ),
 
@@ -100,7 +109,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 controller: _controller,
                 itemCount: _pages.length,
                 onPageChanged: (i) => setState(() => _page = i),
-                itemBuilder: (_, i) => _OnboardPage(data: _pages[i]),
+                itemBuilder: (_, i) => i == 3
+                    ? const _RolesSlide()
+                    : _OnboardPage(data: _pages[i]),
               ),
             ),
 
@@ -204,4 +215,115 @@ class _PageData {
   final IconData icon;
   final String title;
   final String body;
+}
+
+// ── Roles slide ────────────────────────────────────────────────────────────────
+
+class _RolesSlide extends StatelessWidget {
+  const _RolesSlide();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'Who are you building for?',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'BuildWise supports three types of accounts.',
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: cs.onSurfaceVariant),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 28),
+          _RoleCard(
+            icon: Icons.home_outlined,
+            title: 'Property Owner',
+            description:
+                'Create and manage your construction projects, '
+                'hire builders, approve payments, and track progress.',
+          ),
+          const SizedBox(height: 12),
+          _RoleCard(
+            icon: Icons.engineering_outlined,
+            title: 'Project Manager',
+            description:
+                'Oversee client projects, record costs, submit '
+                'site reports, and manage site teams on behalf of owners.',
+          ),
+          const SizedBox(height: 12),
+          _RoleCard(
+            icon: Icons.construction_outlined,
+            title: 'Builder / Contractor',
+            description:
+                'List your services in the marketplace, receive '
+                'project invitations, sign digital contracts, and get paid.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoleCard extends StatelessWidget {
+  const _RoleCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+  });
+  final IconData icon;
+  final String title;
+  final String description;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: cs.primary, size: 28),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

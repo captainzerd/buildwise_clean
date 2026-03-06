@@ -36,7 +36,7 @@ class _SignInPageState extends State<SignInPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BuildWise'),
+        title: Image.asset('assets/images/logo.png', height: 32),
         centerTitle: true,
         bottom: TabBar(
           controller: _tabs,

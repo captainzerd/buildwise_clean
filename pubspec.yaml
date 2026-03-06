@@ -59,6 +59,7 @@ dev_dependencies:
   mockito: ^5.4.5
   build_runner: ^2.4.9
   fake_cloud_firestore: ^3.0.0
+  flutter_launcher_icons: ^0.14.3
 
 flutter:
   uses-material-design: true
@@ -76,3 +77,18 @@ flutter:
         - asset: assets/fonts/NotoSans-Regular.ttf
         - asset: assets/fonts/NotoSans-Bold.ttf
           weight: 700
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/icon.png"
+  # Android adaptive icon (API 26+) — foreground image on a white circle background.
+  # Change the background colour below to match your brand.
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/icon.png"
+  web:
+    generate: false
+  windows:
+    generate: false
+  macos:
+    generate: false
