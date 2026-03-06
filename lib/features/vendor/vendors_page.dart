@@ -1,16 +1,28 @@
+import '../../core/config/service_locator.dart';
 // lib/features/vendor/vendors_page.dart
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../core/models/project.dart';
+import '../../core/models/rfq_request.dart';
 import '../../core/models/vendor.dart';
+import '../../core/services/auth_service.dart';
+import '../../core/services/project_service.dart';
+import '../../core/services/rfq_service.dart';
 import '../../core/services/vendor_service.dart';
 
 class VendorsPage extends StatefulWidget {
-  const VendorsPage({super.key, this.initialRegion});
+  const VendorsPage({super.key, this.initialRegion, this.embedded = false});
 
   /// Pre-filter by region (e.g. launched from an estimate).
   final String? initialRegion;
+
+  /// When [true] the page is hosted inside a tab shell that already provides
+  /// an AppBar, so this widget omits its own.
+  final bool embedded;
 
   @override
   State<VendorsPage> createState() => _VendorsPageState();
@@ -48,6 +60,13 @@ class _VendorsPageState extends State<VendorsPage> {
     final service = context.read<VendorService>();
 
     return Scaffold(
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              title: widget.initialRegion != null
+                  ? Text('Vendors in ${widget.initialRegion}')
+                  : const Text('Vendors'),
+            ),
       body: Column(
         children: [
           Padding(
@@ -99,21 +118,41 @@ class _VendorsPageState extends State<VendorsPage> {
                       const Expanded(child: _EmptyState())
                     else
                       Expanded(
-                        child: ListView.separated(
-                          padding:
-                              const EdgeInsets.fromLTRB(16, 12, 16, 96),
-                          itemCount: vendors.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (_, i) => _VendorCard(
-                            vendor: vendors[i],
-                            service: service,
-                            onEdit: () => _showEditVendor(
-                              context,
-                              service,
-                              vendors[i],
-                            ),
-                          ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isTablet = constraints.maxWidth >= 600;
+                            const padding =
+                                EdgeInsets.fromLTRB(16, 12, 16, 96);
+                            Widget buildCard(int i) => _VendorCard(
+                                  vendor: vendors[i],
+                                  service: service,
+                                  onEdit: () => _showEditVendor(
+                                    context,
+                                    service,
+                                    vendors[i],
+                                  ),
+                                );
+                            return isTablet
+                                ? GridView.builder(
+                                    padding: padding,
+                                    gridDelegate:
+                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      mainAxisSpacing: 10,
+                                      crossAxisSpacing: 10,
+                                      childAspectRatio: 2.0,
+                                    ),
+                                    itemCount: vendors.length,
+                                    itemBuilder: (_, i) => buildCard(i),
+                                  )
+                                : ListView.separated(
+                                    padding: padding,
+                                    itemCount: vendors.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(height: 10),
+                                    itemBuilder: (_, i) => buildCard(i),
+                                  );
+                          },
                         ),
                       ),
                   ],
@@ -206,6 +245,15 @@ class _VendorCard extends StatelessWidget {
   final Vendor vendor;
   final VendorService service;
   final VoidCallback onEdit;
+
+  void _showRequestQuote(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _NewRfqSheet(vendor: vendor),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -325,6 +373,14 @@ class _VendorCard extends StatelessWidget {
                 ),
               ),
             ],
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.tonal(
+                onPressed: () => _showRequestQuote(context),
+                child: const Text('Request Quote'),
+              ),
+            ),
             const SizedBox(height: 10),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -393,6 +449,7 @@ class _VendorCard extends StatelessWidget {
             children: [
               for (int i = 1; i <= 5; i++)
                 IconButton(
+                  tooltip: '$i star${i > 1 ? 's' : ''}',
                   icon: Icon(
                     i <= picked ? Icons.star_rounded : Icons.star_outline,
                     color: Colors.amber,
@@ -785,6 +842,187 @@ class _EmptyState extends StatelessWidget {
           Text(
             'Tap + to add your first vendor.',
             style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// RFQ (Request for Quote) sheet
+// ─────────────────────────────────────────────
+
+class _NewRfqSheet extends StatefulWidget {
+  const _NewRfqSheet({required this.vendor});
+  final Vendor vendor;
+
+  @override
+  State<_NewRfqSheet> createState() => _NewRfqSheetState();
+}
+
+class _NewRfqSheetState extends State<_NewRfqSheet> {
+  final _descCtrl = TextEditingController();
+  DateTime? _dueDate;
+  Project? _selectedProject;
+  List<Project> _projects = [];
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProjects();
+  }
+
+  Future<void> _loadProjects() async {
+    final auth = context.read<AuthService>();
+    final uid = auth.currentUser?.uid ?? '';
+    if (uid.isEmpty) return;
+    final projectService = sl<ProjectService>();
+    final list = await projectService
+        .projectsForOwner(uid, limit: 50)
+        .first;
+    if (mounted) setState(() => _projects = list);
+  }
+
+  @override
+  void dispose() {
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDueDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dueDate ?? DateTime.now().add(const Duration(days: 7)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2035),
+    );
+    if (picked != null && mounted) setState(() => _dueDate = picked);
+  }
+
+  Future<void> _send() async {
+    if (_descCtrl.text.trim().isEmpty || _selectedProject == null) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final auth = context.read<AuthService>();
+      final rfqService = sl<RfqService>();
+      final now = DateTime.now();
+      final rfq = RfqRequest(
+        id: const Uuid().v4(),
+        projectId: _selectedProject!.id,
+        projectTitle: _selectedProject!.title,
+        ownerUid: auth.currentUser?.uid ?? '',
+        vendorId: widget.vendor.id,
+        vendorName: widget.vendor.name,
+        description: _descCtrl.text.trim(),
+        dueDate: _dueDate,
+        status: RfqStatus.sent,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await rfqService.createRfq(rfq);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFmt = DateFormat('d MMM yyyy');
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Request Quote from ${widget.vendor.name}',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 16),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                _error!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          // Project picker
+          if (_projects.isEmpty)
+            const Text(
+              'No projects found. Create a project first.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            )
+          else
+            DropdownButtonFormField<Project>(
+              decoration: const InputDecoration(
+                labelText: 'Project *',
+                border: OutlineInputBorder(),
+              ),
+              initialValue: _selectedProject,
+              items: [
+                for (final p in _projects)
+                  DropdownMenuItem(value: p, child: Text(p.title)),
+              ],
+              onChanged: (p) => setState(() => _selectedProject = p),
+            ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _descCtrl,
+            decoration: const InputDecoration(
+              labelText: 'What do you need quoted? *',
+              border: OutlineInputBorder(),
+            ),
+            maxLines: 3,
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            onTap: _pickDueDate,
+            borderRadius: BorderRadius.circular(8),
+            child: InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'Quote due by (optional)',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              child: Text(
+                _dueDate != null ? dateFmt.format(_dueDate!) : 'Tap to set',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: _dueDate != null ? null : Colors.grey,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: (_saving ||
+                      _descCtrl.text.trim().isEmpty ||
+                      _selectedProject == null)
+                  ? null
+                  : _send,
+              child: Text(_saving ? 'Sending…' : 'Send Request'),
+            ),
           ),
         ],
       ),

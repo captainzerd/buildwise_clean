@@ -1,3 +1,4 @@
+import '../../core/config/service_locator.dart';
 // lib/features/complaints/complaints_page.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -15,10 +16,11 @@ class ComplaintsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
-    final service = context.read<ComplaintService>();
+    final service = sl<ComplaintService>();
     final uid = auth.currentUser!.uid;
 
     return Scaffold(
+      appBar: AppBar(title: const Text('My Complaints')),
       body: StreamBuilder<List<Complaint>>(
         stream: service.listForUser(uid),
         builder: (ctx, snap) {
@@ -56,7 +58,7 @@ class ComplaintsPage extends StatelessWidget {
     ComplaintService service,
     String uid,
   ) {
-    final projectService = context.read<ProjectService>();
+    final projectService = sl<ProjectService>();
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,

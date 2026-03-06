@@ -14,8 +14,10 @@ import { BigQuery } from "@google-cloud/bigquery";
 
 // Firebase Secret Manager — set with:
 //   firebase functions:secrets:set PAYSTACK_SECRET_KEY
+//   firebase functions:secrets:set STRIPE_SECRET_KEY
 // Then deploy: cd functions && npm run build && firebase deploy --only functions
 const paystackSecretKey = defineSecret("PAYSTACK_SECRET_KEY");
+const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 
 // Initialize Admin SDK once
 if (admin.apps.length === 0) {
@@ -1228,6 +1230,126 @@ export const activateSubscription = onCall(
     });
 
     logger.info("activateSubscription: subscription activated", { uid, tier, reference });
+    return { success: true };
+  },
+);
+
+// ── Stripe: create PaymentIntent ─────────────────────────────────────────────
+// Called by flutter_stripe PaymentSheet before presenting the sheet.
+// Returns { clientSecret } — the secret key never leaves the server.
+export const createStripePaymentIntent = onCall(
+  { secrets: [stripeSecretKey] },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Must be signed in.");
+
+    const { amountCents, currency, email, tier } = request.data as {
+      amountCents?: number;
+      currency?: string;
+      email?: string;
+      tier?: string;
+    };
+
+    if (!amountCents || amountCents <= 0) {
+      throw new HttpsError("invalid-argument", "amountCents must be a positive integer.");
+    }
+    if (!tier || !["pro", "business"].includes(tier)) {
+      throw new HttpsError("invalid-argument", "Invalid tier.");
+    }
+
+    const key = stripeSecretKey.value();
+    if (!key) throw new HttpsError("internal", "Stripe key not configured.");
+
+    const body = new URLSearchParams({
+      amount: String(amountCents),
+      currency: currency || "usd",
+      "metadata[uid]": uid,
+      "metadata[tier]": tier,
+    });
+    if (email) body.set("receipt_email", email);
+
+    const resp = await fetch("https://api.stripe.com/v1/payment_intents", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: body.toString(),
+    });
+
+    const json = (await resp.json()) as {
+      client_secret?: string;
+      error?: { message: string };
+    };
+
+    if (json.error) {
+      logger.error("createStripePaymentIntent: Stripe error", { message: json.error.message });
+      throw new HttpsError("internal", json.error.message);
+    }
+
+    logger.info("createStripePaymentIntent: intent created", { uid, tier, amountCents });
+    return { clientSecret: json.client_secret };
+  },
+);
+
+// ── Stripe: activate subscription after successful payment ───────────────────
+// Called client-side after Stripe PaymentSheet completes successfully.
+// Verifies the PaymentIntent status with Stripe, then updates Firestore.
+export const activateStripeSubscription = onCall(
+  { secrets: [stripeSecretKey] },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Must be signed in.");
+
+    const { paymentIntentId, tier } = request.data as {
+      paymentIntentId?: string;
+      tier?: string;
+    };
+
+    if (!paymentIntentId) throw new HttpsError("invalid-argument", "paymentIntentId required.");
+    if (!tier || !["pro", "business"].includes(tier)) {
+      throw new HttpsError("invalid-argument", "Invalid tier.");
+    }
+
+    const key = stripeSecretKey.value();
+    if (!key) throw new HttpsError("internal", "Stripe key not configured.");
+
+    // Verify the PaymentIntent with Stripe
+    let piStatus: string | undefined;
+    let piUid: string | undefined;
+    try {
+      const resp = await fetch(
+        `https://api.stripe.com/v1/payment_intents/${encodeURIComponent(paymentIntentId)}`,
+        { headers: { Authorization: `Bearer ${key}` } },
+      );
+      const pi = (await resp.json()) as {
+        status?: string;
+        metadata?: { uid?: string; tier?: string };
+        error?: { message: string };
+      };
+      if (pi.error) throw new Error(pi.error.message);
+      piStatus = pi.status;
+      piUid = pi.metadata?.uid;
+    } catch (e: unknown) {
+      logger.error("activateStripeSubscription: Stripe verify failed", {
+        error: (e as Error).message,
+      });
+      throw new HttpsError("internal", "Payment verification failed.");
+    }
+
+    if (piStatus !== "succeeded") {
+      throw new HttpsError("failed-precondition", "Payment not completed.");
+    }
+    if (piUid !== uid) {
+      throw new HttpsError("permission-denied", "PaymentIntent does not belong to this user.");
+    }
+
+    await db.collection("users").doc(uid).update({
+      subscriptionTier: tier,
+      subscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    logger.info("activateStripeSubscription: activated", { uid, tier, paymentIntentId });
     return { success: true };
   },
 );

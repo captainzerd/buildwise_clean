@@ -1,13 +1,17 @@
+import '../../core/config/service_locator.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../project/create_project_page.dart';
-import '../vendor/vendors_page.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/models/boq_item.dart';
+import '../../core/services/boq_service.dart';
+import 'boq_page.dart';
 
 import 'edit_saved_estimate_page.dart';
 import 'package:path_provider/path_provider.dart';
@@ -249,6 +253,14 @@ class EstimateViewPage extends StatelessWidget {
                 totalGhs: totalGhs,
                 region: region.isNotEmpty ? region : null,
               ),
+              const SizedBox(height: 12),
+              if (phaseBreakdown.isNotEmpty)
+                _viewBoqButton(
+                  phaseBreakdown: phaseBreakdown,
+                  floors: floors,
+                  savedBoqItems: m['boqItems'] as List?,
+                  projectName: title,
+                ),
               const SizedBox(height: 16),
             ],
           );
@@ -265,10 +277,9 @@ class EstimateViewPage extends StatelessWidget {
         return SizedBox(
           width: double.infinity,
           child: FilledButton.tonal(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => VendorsPage(initialRegion: region),
-              ),
+            onPressed: () => context.push(
+              '/vendors',
+              extra: region,
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -312,6 +323,46 @@ class EstimateViewPage extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _viewBoqButton({
+    required Map<String, dynamic> phaseBreakdown,
+    required List floors,
+    List? savedBoqItems,
+    String? projectName,
+  }) {
+    final floorAreaSqm = floors.fold<double>(
+      0,
+      (acc, f) => acc + ((f as Map?)?['areaM2'] as num? ?? 0).toDouble(),
+    );
+    final phaseDoubles = phaseBreakdown.map(
+      (k, v) => MapEntry(k, (v as num?)?.toDouble() ?? 0.0),
+    );
+    // Use the frozen items saved with the estimate when available so the BOQ
+    // doesn't change if unit rates are updated in Firestore later.
+    final precomputed = savedBoqItems
+        ?.map((e) => BoqItem.fromMap(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    return Builder(
+      builder: (context) => SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => BoqPage(
+                phaseBreakdown: phaseDoubles,
+                floorAreaSqm: floorAreaSqm > 0 ? floorAreaSqm : 100,
+                boqService: sl<BoqService>(),
+                precomputedItems: precomputed,
+                projectName: projectName,
+              ),
+            ),
+          ),
+          icon: const Icon(Icons.table_chart_outlined, size: 18),
+          label: const Text('View Bill of Quantities (BoQ)'),
+        ),
+      ),
     );
   }
 

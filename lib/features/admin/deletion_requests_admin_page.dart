@@ -1,8 +1,8 @@
 // lib/features/admin/deletion_requests_admin_page.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 
+import '../../core/config/service_locator.dart';
 import '../../core/models/deletion_request.dart';
 import '../../core/services/deletion_request_service.dart';
 
@@ -11,7 +11,7 @@ class DeletionRequestsAdminPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final service = context.read<DeletionRequestService>();
+    final service = sl<DeletionRequestService>();
     return Scaffold(
       appBar: AppBar(title: const Text('Pending Deletion Requests')),
       body: StreamBuilder<List<DeletionRequest>>(

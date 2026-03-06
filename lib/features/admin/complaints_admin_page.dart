@@ -1,8 +1,8 @@
 // lib/features/admin/complaints_admin_page.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 
+import '../../core/config/service_locator.dart';
 import '../../core/models/complaint.dart';
 import '../../core/services/complaint_service.dart';
 
@@ -11,7 +11,7 @@ class ComplaintsAdminPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final service = context.read<ComplaintService>();
+    final service = sl<ComplaintService>();
 
     return Scaffold(
       appBar: AppBar(title: const Text('All Complaints')),

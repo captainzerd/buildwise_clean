@@ -4,11 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
-import 'catalog_admin_page.dart';
-import 'complaints_admin_page.dart';
-import 'deletion_requests_admin_page.dart';
-import 'users_admin_page.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -77,11 +74,7 @@ class _AdminPageState extends State<AdminPage> {
             icon: Icons.price_change_outlined,
             title: 'Cost Catalog',
             subtitle: 'View rates and publish new catalog versions',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const CatalogAdminPage(),
-              ),
-            ),
+            onTap: () => context.push('/admin/catalog'),
           ),
 
           const SizedBox(height: 12),
@@ -91,11 +84,7 @@ class _AdminPageState extends State<AdminPage> {
             icon: Icons.people_outline,
             title: 'Users',
             subtitle: 'View all users and change roles',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const UsersAdminPage(),
-              ),
-            ),
+            onTap: () => context.push('/admin/users'),
           ),
 
           const SizedBox(height: 12),
@@ -105,11 +94,7 @@ class _AdminPageState extends State<AdminPage> {
             icon: Icons.report_problem_outlined,
             title: 'Complaints',
             subtitle: 'View all complaints and update their status',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const ComplaintsAdminPage(),
-              ),
-            ),
+            onTap: () => context.push('/admin/complaints'),
           ),
 
           const SizedBox(height: 12),
@@ -119,11 +104,47 @@ class _AdminPageState extends State<AdminPage> {
             icon: Icons.delete_sweep_outlined,
             title: 'Pending Deletions',
             subtitle: 'Review and approve builder deletion requests',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const DeletionRequestsAdminPage(),
-              ),
-            ),
+            onTap: () => context.push('/admin/deletion-requests'),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ── Audit log ──
+          _AdminTile(
+            icon: Icons.history_outlined,
+            title: 'Audit Log',
+            subtitle: 'View all project events across all users',
+            onTap: () => context.push('/admin/audit'),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ── BOQ Unit Rates ──
+          _AdminTile(
+            icon: Icons.construction,
+            title: 'BOQ Unit Rates',
+            subtitle: 'Edit Bill of Quantities unit rates for all phases',
+            onTap: () => context.push('/admin/boq-rates'),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ── Change orders ──
+          _AdminTile(
+            icon: Icons.change_circle_outlined,
+            title: 'Change Orders',
+            subtitle: 'Review variation orders across all projects',
+            onTap: () => context.push('/admin/variation-orders'),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ── Site inspections ──
+          _AdminTile(
+            icon: Icons.location_city_outlined,
+            title: 'Site Inspections',
+            subtitle: 'View scheduled and completed site visits',
+            onTap: () => context.push('/admin/site-visits'),
           ),
 
           const SizedBox(height: 12),

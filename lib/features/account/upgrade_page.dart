@@ -3,19 +3,32 @@
 // Paywall / plans & pricing screen.
 // Shown when a user tries to access a Pro or Business feature on the Free tier.
 // Also reachable from Account → Plans & Pricing.
+//
+// Pricing: authoritative base in GHS, shown in user's local currency via FxService.
+// Payment flows:
+//   • Mobile Money (Ghana) — Paystack WebView → activateSubscription CF (always GHS)
+//   • Card / Apple Pay / Google Pay — Stripe PaymentSheet → activateStripeSubscription CF
+
+import 'dart:ui' as ui;
 
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../core/config/service_locator.dart';
 import '../../core/models/app_user.dart';
+import '../../core/models/currency.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/fx_service.dart';
 import '../../core/services/paystack_service.dart';
+import '../../core/services/stripe_service.dart';
 
-class UpgradePage extends StatelessWidget {
+class UpgradePage extends StatefulWidget {
   /// When [requiredTier] is provided, a banner is shown explaining why the
   /// user was redirected here (e.g. "Analytics requires Pro").
   const UpgradePage({super.key, this.requiredTier, this.featureName});
@@ -24,10 +37,87 @@ class UpgradePage extends StatelessWidget {
   final String? featureName;
 
   @override
+  State<UpgradePage> createState() => _UpgradePageState();
+}
+
+class _UpgradePageState extends State<UpgradePage> {
+  late CurrencyInfo _currency;
+
+  @override
+  void initState() {
+    super.initState();
+    _currency = _detectLocaleCurrency();
+  }
+
+  // ── Locale → currency ──────────────────────────────────────────────────────
+
+  static CurrencyInfo _detectLocaleCurrency() {
+    final locale = ui.PlatformDispatcher.instance.locale;
+    final country = locale.countryCode?.toUpperCase() ?? '';
+    return switch (country) {
+      'GH' => CurrencyInfo.ghs,
+      'GB' => CurrencyInfo.gbp,
+      'CA' => CurrencyInfo.cad,
+      'AU' => CurrencyInfo.aud,
+      'NG' => CurrencyInfo.ngn,
+      'DE' ||
+      'FR' ||
+      'ES' ||
+      'IT' ||
+      'NL' ||
+      'BE' ||
+      'PT' ||
+      'AT' ||
+      'FI' ||
+      'IE' ||
+      'GR' ||
+      'LU' ||
+      'SI' ||
+      'SK' ||
+      'EE' ||
+      'LV' ||
+      'LT' =>
+        CurrencyInfo.eur,
+      _ => CurrencyInfo.usd,
+    };
+  }
+
+  // ── Price helpers ──────────────────────────────────────────────────────────
+
+  double _convertedAmount(SubscriptionTier tier, FxService fx) {
+    final ghs = tier.amountPesewas / 100.0;
+    if (_currency.code == 'GHS') return ghs;
+    final converted = fx.convertFromGhs(amountGhs: ghs, to: _currency.code);
+    // Fall back to USD equivalent if rate unavailable
+    return converted > 0 ? converted : tier.amountUsdCents / 100.0;
+  }
+
+  String _priceDisplay(SubscriptionTier tier, FxService fx) {
+    if (tier == SubscriptionTier.free) return 'Free forever';
+    final amount = _convertedAmount(tier, fx);
+    return '${_currency.symbol}${_fmt(amount)} / mo';
+  }
+
+  // Show the GHS base price as context for non-GHS users
+  String? _ghsNote(SubscriptionTier tier) {
+    if (_currency.code == 'GHS') return null;
+    return 'GH₵${(tier.amountPesewas / 100).round()} for Ghana residents';
+  }
+
+  static String _fmt(double amount) {
+    if (amount >= 1000) return NumberFormat('#,##0').format(amount.round());
+    return amount.round().toString();
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
+    final fx = context.watch<FxService>();
     final currentTier = auth.currentUser?.subscriptionTier ?? SubscriptionTier.free;
     final email = auth.currentUser?.email ?? '';
+    final uid = auth.currentUser?.uid ?? '';
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -35,8 +125,8 @@ class UpgradePage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // ── Feature-locked banner ─────────────────────────────────────────
-          if (featureName != null) ...[
+          // ── Feature-locked banner ──────────────────────────────────────────
+          if (widget.featureName != null) ...[
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -49,7 +139,8 @@ class UpgradePage extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      '$featureName requires the ${requiredTier?.label ?? 'Pro'} plan.',
+                      '${widget.featureName} requires the '
+                      '${widget.requiredTier?.label ?? 'Pro'} plan.',
                       style: TextStyle(
                         color: cs.onPrimaryContainer,
                         fontWeight: FontWeight.w600,
@@ -69,22 +160,30 @@ class UpgradePage extends StatelessWidget {
                 .headlineSmall
                 ?.copyWith(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
             'Upgrade anytime. Cancel anytime.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: cs.onSurfaceVariant,
                 ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+
+          // ── Currency picker ────────────────────────────────────────────────
+          _CurrencyPicker(
+            selected: _currency,
+            onChanged: (c) => setState(() => _currency = c),
+          ),
+          const SizedBox(height: 20),
 
           // ── Free tier ─────────────────────────────────────────────────────
           _PlanCard(
             tier: SubscriptionTier.free,
             isCurrentPlan: currentTier == SubscriptionTier.free,
+            priceDisplay: 'Free forever',
             features: const [
               '2 active projects',
-              '1 cost estimate per month',
+              'Unlimited cost estimates',
               'Basic project tracking',
               'Builder & vendor marketplace browsing',
             ],
@@ -97,9 +196,10 @@ class UpgradePage extends StatelessWidget {
             tier: SubscriptionTier.pro,
             isCurrentPlan: currentTier == SubscriptionTier.pro,
             highlighted: true,
+            priceDisplay: _priceDisplay(SubscriptionTier.pro, fx),
+            ghsNote: _ghsNote(SubscriptionTier.pro),
             features: const [
               'Unlimited projects',
-              'Unlimited estimates',
               'Analytics dashboard',
               'PDF & CSV export',
               'Contract management',
@@ -107,7 +207,7 @@ class UpgradePage extends StatelessWidget {
             ],
             onSelect: currentTier == SubscriptionTier.pro
                 ? null
-                : () => _selectPlan(context, SubscriptionTier.pro, email),
+                : () => _selectPlan(context, SubscriptionTier.pro, email, uid, fx),
           ),
           const SizedBox(height: 16),
 
@@ -115,6 +215,8 @@ class UpgradePage extends StatelessWidget {
           _PlanCard(
             tier: SubscriptionTier.business,
             isCurrentPlan: currentTier == SubscriptionTier.business,
+            priceDisplay: _priceDisplay(SubscriptionTier.business, fx),
+            ghsNote: _ghsNote(SubscriptionTier.business),
             features: const [
               'Everything in Pro',
               'Listed in builder/PM marketplace',
@@ -124,18 +226,38 @@ class UpgradePage extends StatelessWidget {
             ],
             onSelect: currentTier == SubscriptionTier.business
                 ? null
-                : () => _selectPlan(context, SubscriptionTier.business, email),
+                : () => _selectPlan(
+                    context, SubscriptionTier.business, email, uid, fx,
+                  ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 28),
 
-          // ── FAQ note ──────────────────────────────────────────────────────
-          Text(
-            'Payments are processed securely by Paystack in GHS. '
-            'You can cancel your subscription at any time from the Account page.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: cs.onSurfaceVariant,
+          // ── Rate freshness note ────────────────────────────────────────────
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (fx.isLoading)
+                const SizedBox(
+                  height: 10,
+                  width: 10,
+                  child: CircularProgressIndicator(strokeWidth: 1.5),
+                )
+              else
+                Icon(Icons.refresh, size: 12, color: cs.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  fx.lastUpdated != null
+                      ? 'Rates updated ${_rateAge(fx.lastUpdated!)} · '
+                          'Pay by mobile money (Ghana) or card worldwide'
+                      : 'Pay by mobile money (Ghana) or card worldwide',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                  textAlign: TextAlign.center,
                 ),
-            textAlign: TextAlign.center,
+              ),
+            ],
           ),
           const SizedBox(height: 16),
         ],
@@ -143,21 +265,55 @@ class UpgradePage extends StatelessWidget {
     );
   }
 
+  static String _rateAge(DateTime t) {
+    final diff = DateTime.now().difference(t);
+    if (diff.inMinutes < 2) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    return '${diff.inHours}h ago';
+  }
+
+  // ── Payment flows ──────────────────────────────────────────────────────────
+
   Future<void> _selectPlan(
+    BuildContext context,
+    SubscriptionTier tier,
+    String email,
+    String uid,
+    FxService fx,
+  ) async {
+    final localAmount = _convertedAmount(tier, fx);
+    final ghsAmount = tier.amountPesewas / 100.0;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _PaymentMethodSheet(
+        tier: tier,
+        currency: _currency,
+        localAmount: localAmount,
+        ghsAmount: ghsAmount,
+        onPaystack: () => _paystackFlow(context, tier, email),
+        onStripe: () => _stripeFlow(context, tier, email, uid, localAmount),
+      ),
+    );
+  }
+
+  Future<void> _paystackFlow(
     BuildContext context,
     SubscriptionTier tier,
     String email,
   ) async {
     final paystack = PaystackService();
-    final amountGhs = tier == SubscriptionTier.pro ? 150.0 : 300.0;
     final ref = const Uuid().v4();
 
     try {
       final result = await paystack.initTransaction(
-        amountGhs: amountGhs,
+        amountGhs: tier.amountPesewas / 100,
         email: email,
         reference: ref,
-        metadata: {'planTier': tier.name, 'uid': email},
+        metadata: {'planTier': tier.name},
       );
 
       if (!context.mounted) return;
@@ -172,31 +328,19 @@ class UpgradePage extends StatelessWidget {
       );
 
       if (!context.mounted) return;
+      if (success != true) return;
 
-      if (success == true) {
-        // Call Cloud Function to verify and activate
-        try {
-          final fn = FirebaseFunctions.instance
-              .httpsCallable('activateSubscription');
-          await fn.call({
-            'reference': result.reference,
-            'tier': tier.name,
-          });
-
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Successfully upgraded to ${tier.label}!'),
-              backgroundColor: Theme.of(context).colorScheme.primary,
-            ),
-          );
-          context.pop();
-        } catch (e) {
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Subscription activation failed: $e')),
-          );
-        }
+      try {
+        await FirebaseFunctions.instance
+            .httpsCallable('activateSubscription')
+            .call({'reference': result.reference, 'tier': tier.name});
+        if (!context.mounted) return;
+        _showSuccess(context, tier);
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Activation failed: $e')),
+        );
       }
     } catch (e) {
       if (!context.mounted) return;
@@ -204,6 +348,255 @@ class UpgradePage extends StatelessWidget {
         SnackBar(content: Text('Payment initialisation failed: $e')),
       );
     }
+  }
+
+  Future<void> _stripeFlow(
+    BuildContext context,
+    SubscriptionTier tier,
+    String email,
+    String uid,
+    double localAmount,
+  ) async {
+    final stripe = sl<StripeService>();
+    final currency = _currency.code.toLowerCase();
+    final minorUnits = (localAmount * 100).round();
+
+    try {
+      final paymentIntentId = await stripe.presentPaymentSheet(
+        email: email,
+        amountMinorUnits: minorUnits,
+        currency: currency,
+        tier: tier.name,
+        uid: uid,
+      );
+
+      if (!context.mounted) return;
+
+      try {
+        await FirebaseFunctions.instance
+            .httpsCallable('activateStripeSubscription')
+            .call({'paymentIntentId': paymentIntentId, 'tier': tier.name});
+        if (!context.mounted) return;
+        _showSuccess(context, tier);
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Activation failed: $e')),
+        );
+      }
+    } on StripeException catch (e) {
+      // User cancelled — no error shown
+      if (e.error.code == FailureCode.Canceled) return;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment failed: ${e.error.localizedMessage}')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment error: $e')),
+      );
+    }
+  }
+
+  void _showSuccess(BuildContext context, SubscriptionTier tier) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Successfully upgraded to ${tier.label}!'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+      ),
+    );
+    context.pop();
+  }
+}
+
+// ── Currency picker ───────────────────────────────────────────────────────────
+
+class _CurrencyPicker extends StatelessWidget {
+  const _CurrencyPicker({required this.selected, required this.onChanged});
+
+  final CurrencyInfo selected;
+  final ValueChanged<CurrencyInfo> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Show prices in:',
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: CurrencyInfo.values.map((c) {
+              final isSelected = c == selected;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text('${c.symbol} ${c.code}'),
+                  selected: isSelected,
+                  onSelected: (_) => onChanged(c),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Payment method picker ─────────────────────────────────────────────────────
+
+class _PaymentMethodSheet extends StatelessWidget {
+  const _PaymentMethodSheet({
+    required this.tier,
+    required this.currency,
+    required this.localAmount,
+    required this.ghsAmount,
+    required this.onPaystack,
+    required this.onStripe,
+  });
+
+  final SubscriptionTier tier;
+  final CurrencyInfo currency;
+  final double localAmount;
+  final double ghsAmount;
+  final VoidCallback onPaystack;
+  final VoidCallback onStripe;
+
+  static String _fmt(double amount) {
+    if (amount >= 1000) return NumberFormat('#,##0').format(amount.round());
+    return amount.round().toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final localDisplay = '${currency.symbol}${_fmt(localAmount)} / mo';
+    final ghsDisplay = 'GH₵${_fmt(ghsAmount)} / mo';
+    final isGhs = currency.code == 'GHS';
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Choose payment method',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Upgrading to ${tier.label} · $localDisplay',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 20),
+            _MethodTile(
+              icon: Icons.phone_android_outlined,
+              title: 'Mobile Money (Ghana)',
+              subtitle: 'MTN · Vodafone · AirtelTigo · $ghsDisplay',
+              onTap: () {
+                Navigator.pop(context);
+                onPaystack();
+              },
+            ),
+            const SizedBox(height: 12),
+            _MethodTile(
+              icon: Icons.credit_card_outlined,
+              title: 'Card / Apple Pay / Google Pay',
+              subtitle: isGhs
+                  ? 'Visa · Mastercard · $ghsDisplay'
+                  : 'Visa · Mastercard · $localDisplay',
+              onTap: () {
+                Navigator.pop(context);
+                onStripe();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MethodTile extends StatelessWidget {
+  const _MethodTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(color: cs.outlineVariant),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: cs.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: cs.onPrimaryContainer, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -271,6 +664,8 @@ class _PlanCard extends StatelessWidget {
     required this.isCurrentPlan,
     required this.features,
     required this.onSelect,
+    required this.priceDisplay,
+    this.ghsNote,
     this.highlighted = false,
   });
 
@@ -279,6 +674,8 @@ class _PlanCard extends StatelessWidget {
   final bool highlighted;
   final List<String> features;
   final VoidCallback? onSelect;
+  final String priceDisplay;
+  final String? ghsNote; // e.g. "GH₵99 for Ghana residents"
 
   @override
   Widget build(BuildContext context) {
@@ -313,12 +710,22 @@ class _PlanCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        tier.priceLabel,
+                        priceDisplay,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                               color: cs.primary,
                               fontWeight: FontWeight.w600,
                             ),
                       ),
+                      if (ghsNote != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          ghsNote!,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

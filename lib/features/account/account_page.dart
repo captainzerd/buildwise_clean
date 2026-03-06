@@ -11,7 +11,6 @@ import '../../core/services/contract_service.dart';
 import '../../core/services/csv_service.dart';
 import '../../core/services/project_service.dart';
 import '../../core/state/theme_mode_controller.dart';
-import '../complaints/complaints_page.dart';
 
 class AccountPage extends StatelessWidget {
   /// [embedded] — when true the widget renders as plain content with no
@@ -91,6 +90,8 @@ class AccountPage extends StatelessWidget {
         _NotificationPrefsTile(),
         const SizedBox(height: 8),
         _ChangePasswordTile(auth: effectiveAuth),
+        const SizedBox(height: 8),
+        _SwitchRoleTile(auth: effectiveAuth),
         const SizedBox(height: 8),
         _ExportDataTile(uid: user.uid),
         const SizedBox(height: 8),
@@ -189,22 +190,43 @@ class _AvatarHeader extends StatelessWidget {
 
     return Column(
       children: [
-        CircleAvatar(
-          radius: 40,
-          backgroundColor: cs.primaryContainer,
-          backgroundImage: user.photoUrl != null
-              ? CachedNetworkImageProvider(user.photoUrl!)
-              : null,
-          child: user.photoUrl == null
-              ? Text(
-                  initials,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: cs.onPrimaryContainer,
+        Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            CircleAvatar(
+              radius: 40,
+              backgroundColor: cs.primaryContainer,
+              backgroundImage: user.photoUrl != null
+                  ? CachedNetworkImageProvider(user.photoUrl!)
+                  : null,
+              child: user.photoUrl == null
+                  ? Text(
+                      initials,
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: cs.onPrimaryContainer,
+                      ),
+                    )
+                  : null,
+            ),
+            Material(
+              shape: const CircleBorder(),
+              color: cs.primary,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => context.push('/account/edit'),
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Icon(
+                    Icons.edit_outlined,
+                    size: 14,
+                    color: cs.onPrimary,
                   ),
-                )
-              : null,
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         Text(
@@ -510,9 +532,7 @@ class _ComplaintsTile extends StatelessWidget {
         title: const Text('My Complaints'),
         subtitle: const Text('View and submit complaints or issues'),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const ComplaintsPage()),
-        ),
+        onTap: () => context.push('/complaints'),
       ),
     );
   }
@@ -1095,6 +1115,257 @@ class _ExportDataTileState extends State<_ExportDataTile> {
         subtitle: const Text('Download all your project data as CSV'),
         trailing: _busy ? null : const Icon(Icons.chevron_right),
         onTap: _busy ? null : _export,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Switch role tile
+// ─────────────────────────────────────────────
+
+class _SwitchRoleTile extends StatelessWidget {
+  const _SwitchRoleTile({required this.auth});
+  final AuthService auth;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentRole = auth.currentUser?.role ?? UserRole.owner;
+    // Admins cannot switch role via this tile
+    if (currentRole == UserRole.admin) return const SizedBox.shrink();
+
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.swap_horiz_outlined),
+        title: const Text('Switch role'),
+        subtitle: Text(
+          currentRole == UserRole.owner
+              ? 'Current: Property Owner — switch to Builder / PM'
+              : 'Current: Builder / PM — switch to Property Owner',
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _showRoleSheet(context),
+      ),
+    );
+  }
+
+  void _showRoleSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _RoleSwitchSheet(auth: auth),
+    );
+  }
+}
+
+class _RoleSwitchSheet extends StatefulWidget {
+  const _RoleSwitchSheet({required this.auth});
+  final AuthService auth;
+
+  @override
+  State<_RoleSwitchSheet> createState() => _RoleSwitchSheetState();
+}
+
+class _RoleSwitchSheetState extends State<_RoleSwitchSheet> {
+  UserRole? _selected;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.auth.currentUser?.role ?? UserRole.owner;
+  }
+
+  Future<void> _confirm() async {
+    if (_selected == null ||
+        _selected == widget.auth.currentUser?.role) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Switch role?'),
+        content: Text(
+          'Your account will be switched to ${_selected!.label}. '
+          'You can switch back at any time.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Switch'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _saving = true);
+    try {
+      await widget.auth.updateRole(_selected!);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not switch role: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final current = widget.auth.currentUser?.role ?? UserRole.owner;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Switch role',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Your role determines which features are available to you.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 20),
+          _RoleCard(
+            title: 'Property Owner',
+            subtitle: 'Create projects, hire builders, track costs',
+            icon: Icons.home_outlined,
+            selected: _selected == UserRole.owner,
+            isCurrent: current == UserRole.owner,
+            onTap: () => setState(() => _selected = UserRole.owner),
+          ),
+          const SizedBox(height: 12),
+          _RoleCard(
+            title: 'Builder / PM / Architect',
+            subtitle: 'Manage builds, respond to contracts and quotes',
+            icon: Icons.engineering_outlined,
+            selected: _selected == UserRole.pm,
+            isCurrent: current == UserRole.pm,
+            onTap: () => setState(() => _selected = UserRole.pm),
+          ),
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: _saving ? null : _confirm,
+            child: _saving
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoleCard extends StatelessWidget {
+  const _RoleCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.selected,
+    required this.isCurrent,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool selected;
+  final bool isCurrent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? cs.primary : cs.outlineVariant,
+            width: selected ? 2 : 1,
+          ),
+          color: selected
+              ? cs.primaryContainer.withValues(alpha: 0.4)
+              : cs.surface,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: selected ? cs.primary : cs.onSurfaceVariant,
+              size: 28,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: selected ? cs.primary : null,
+                        ),
+                      ),
+                      if (isCurrent) ...[
+                        const SizedBox(width: 8),
+                        Chip(
+                          label: const Text('Current'),
+                          visualDensity: VisualDensity.compact,
+                          labelStyle: TextStyle(
+                            fontSize: 10,
+                            color: cs.onSecondaryContainer,
+                          ),
+                          backgroundColor: cs.secondaryContainer,
+                          padding: EdgeInsets.zero,
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            if (selected)
+              Icon(Icons.check_circle, color: cs.primary, size: 20),
+          ],
+        ),
       ),
     );
   }
