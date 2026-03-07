@@ -70,6 +70,8 @@ extension ProfessionalTypeInfo on ProfessionalType {
         'bankLender' => ProfessionalType.bankLender,
         'governmentRegulator' => ProfessionalType.governmentRegulator,
         'admin' => ProfessionalType.admin,
+        'owner' => ProfessionalType.homeowner,      // legacy Firestore migration
+        'pm' => ProfessionalType.contractor,        // legacy Firestore migration
         _ => ProfessionalType.homeowner,
       };
 
@@ -81,6 +83,8 @@ extension ProfessionalTypeInfo on ProfessionalType {
         ProfessionalType.inspector ||
         ProfessionalType.materialSupplier =>
           true,
+        // homeowner, realEstateDeveloper, bankLender, governmentRegulator → isClient
+        // admin → isAdmin
         _ => false,
       };
 
@@ -238,7 +242,7 @@ class AppUser {
       uid: doc.id,
       email: (d['email'] as String?) ?? '',
       displayName: (d['displayName'] as String?) ?? '',
-      role: _professionalTypeFromString(d['role'] as String?),
+      role: ProfessionalTypeInfo.fromString(d['role'] as String?),
       emailVerified: (d['emailVerified'] as bool?) ?? false,
       createdAt: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       firstName: d['firstName'] as String?,
@@ -324,11 +328,4 @@ class AppUser {
         _ => t.name,
       };
 
-  // Maps Firestore 'role' field → ProfessionalType.
-  // Handles legacy values ('owner', 'pm') and all current ProfessionalType names.
-  static ProfessionalType _professionalTypeFromString(String? s) => switch (s) {
-        'owner' => ProfessionalType.homeowner,   // legacy migration
-        'pm' => ProfessionalType.contractor,     // legacy migration
-        _ => ProfessionalTypeInfo.fromString(s), // handles all 10 new values + null→homeowner
-      };
 }
