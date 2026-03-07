@@ -34,6 +34,7 @@ import '../builder_marketplace_page.dart';
 
 class OverviewTab extends StatelessWidget {
   const OverviewTab({
+    super.key,
     required this.project,
     required this.projectId,
     required this.projectService,
@@ -152,7 +153,7 @@ class OverviewTab extends StatelessWidget {
                     final uri = Uri.parse(project.architecturePlanUrl!);
                     if (await canLaunchUrl(uri)) {
                       await launchUrl(uri,
-                          mode: LaunchMode.externalApplication);
+                          mode: LaunchMode.externalApplication,);
                     }
                   },
                   child: Row(
@@ -766,7 +767,7 @@ class OverviewTab extends StatelessWidget {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) {
           Widget starRow(
-              String label, double current, void Function(double) onChanged) {
+              String label, double current, void Function(double) onChanged,) {
             return Row(
               children: [
                 SizedBox(
@@ -1128,7 +1129,7 @@ class _StageStep extends StatelessWidget {
                   ? const Icon(Icons.check, size: 14, color: Colors.white)
                   : isActive
                       ? const Icon(Icons.play_arrow,
-                          size: 14, color: Colors.white)
+                          size: 14, color: Colors.white,)
                       : Text(
                           '${index + 1}',
                           style: TextStyle(
@@ -1293,13 +1294,11 @@ class _QuickActionCard extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
-    this.badge,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final int? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -1312,34 +1311,7 @@ class _QuickActionCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Icon(icon, color: cs.primary),
-                  if (badge != null && badge! > 0)
-                    Positioned(
-                      top: -4,
-                      right: -4,
-                      child: Container(
-                        width: 14,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: cs.error,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            '$badge',
-                            style: const TextStyle(
-                              fontSize: 8,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+              Icon(icon, color: cs.primary),
               const SizedBox(width: 8),
               Expanded(
                 child:
@@ -1502,7 +1474,7 @@ class _TeamMembersCard extends StatelessWidget {
                             ),
                             trailing: IconButton(
                               icon: Icon(Icons.cancel_outlined,
-                                  color: cs.error, size: 20),
+                                  color: cs.error, size: 20,),
                               tooltip: 'Cancel invitation',
                               onPressed: () async {
                                 await sl<InvitationService>()
@@ -1951,7 +1923,7 @@ class _InviteTabState extends State<_InviteTab> {
                       Clipboard.setData(ClipboardData(text: _link!));
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                            content: Text('Link copied to clipboard')),
+                            content: Text('Link copied to clipboard'),),
                       );
                     },
                   ),

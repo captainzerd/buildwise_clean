@@ -37,6 +37,7 @@ enum _WorkSection { phases, monitor, issues, siteLog }
 
 class WorkTab extends StatefulWidget {
   const WorkTab({
+    super.key,
     required this.projectId,
     required this.projectService,
     required this.isOwner,
@@ -430,7 +431,7 @@ class _EvSummaryCard extends StatelessWidget {
                     label: 'EV',
                     tooltip: 'Earned Value: budget for work physically done.',
                     value: NumberFormat.compactCurrency(
-                            symbol: 'GHS ', decimalDigits: 0)
+                            symbol: 'GHS ', decimalDigits: 0,)
                         .format(ev),
                     color: cs.onSurfaceVariant,
                   ),
@@ -467,7 +468,7 @@ class _EvKpi extends StatelessWidget {
             Text(
               label,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,),
             ),
             Text(
               value,
@@ -819,7 +820,7 @@ class _PhaseStatusChip extends StatelessWidget {
 }
 
 class BoqTab extends StatelessWidget {
-  const BoqTab({required this.projectId});
+  const BoqTab({super.key, required this.projectId});
 
   final String projectId;
 
@@ -947,6 +948,7 @@ class BoqTab extends StatelessWidget {
 
 class CostsTab extends StatefulWidget {
   const CostsTab({
+    super.key,
     required this.projectId,
     required this.currencySymbol,
     required this.projectService,
@@ -2007,6 +2009,7 @@ class _ContractorAccountabilityCard extends StatelessWidget {
 
 class ProjectAddIssueSheet extends StatefulWidget {
   const ProjectAddIssueSheet({
+    super.key,
     required this.projectId,
     required this.snagService,
     required this.auth,
@@ -2206,7 +2209,7 @@ class _SiteLogTab extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
           itemCount: sections.fold<int>(
             0,
-            (sum, e) => sum + 1 + e.value.length,
+            (total, e) => total + 1 + e.value.length,
           ),
           itemBuilder: (_, idx) {
             var offset = 0;
@@ -2399,6 +2402,7 @@ class _UpdateCard extends StatelessWidget {
 
 class ProjectAddPhaseSheet extends StatefulWidget {
   const ProjectAddPhaseSheet({
+    super.key,
     required this.projectId,
     required this.existingCount,
     required this.projectService,
@@ -2547,7 +2551,7 @@ class ProjectAddPhaseSheetState extends State<ProjectAddPhaseSheet> {
               widget.projectId,
               widget.editing!.id,
               {
-                'completionPhotoUrls': [...existing, ...urls]
+                'completionPhotoUrls': [...existing, ...urls],
               },
             );
           }
@@ -2826,7 +2830,7 @@ class ProjectAddPhaseSheetState extends State<ProjectAddPhaseSheet> {
             child: FilledButton(
               onPressed: _saving ? null : _save,
               child: Text(
-                  _saving ? 'Saving…' : (editing ? 'Update' : 'Add phase')),
+                  _saving ? 'Saving…' : (editing ? 'Update' : 'Add phase'),),
             ),
           ),
         ],
@@ -2840,6 +2844,7 @@ class ProjectAddPhaseSheetState extends State<ProjectAddPhaseSheet> {
 
 class ProjectAddCostSheet extends StatefulWidget {
   const ProjectAddCostSheet({
+    super.key,
     required this.projectId,
     required this.authorUid,
     required this.projectService,
@@ -3096,6 +3101,7 @@ class ProjectAddCostSheetState extends State<ProjectAddCostSheet> {
 
 class ProjectAddUpdateSheet extends StatefulWidget {
   const ProjectAddUpdateSheet({
+    super.key,
     required this.projectId,
     required this.authorUid,
     required this.projectService,

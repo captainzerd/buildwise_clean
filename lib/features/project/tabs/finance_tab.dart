@@ -28,6 +28,7 @@ enum _FinanceSection { costs, payments, estimates, boq }
 
 class FinanceTab extends StatefulWidget {
   const FinanceTab({
+    super.key,
     required this.projectId,
     required this.project,
     required this.projectService,
@@ -266,6 +267,7 @@ class _EstimateTile extends StatelessWidget {
 
 class ProjectAttachEstimateSheet extends StatefulWidget {
   const ProjectAttachEstimateSheet({
+    super.key,
     required this.projectId,
     required this.uploaderUid,
     required this.projectService,
@@ -760,7 +762,7 @@ class _PaymentCard extends StatelessWidget {
                     builder: (_) => AlertDialog(
                       title: const Text('Delete payment?'),
                       content: const Text(
-                          'This record will be permanently removed.'),
+                          'This record will be permanently removed.',),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context, false),
@@ -790,6 +792,7 @@ class _PaymentCard extends StatelessWidget {
 
 class ProjectAddPaymentSheet extends StatefulWidget {
   const ProjectAddPaymentSheet({
+    super.key,
     required this.projectId,
     required this.authorUid,
     required this.paymentService,
@@ -1202,7 +1205,7 @@ class _PaystackButtonState extends State<_PaystackButton> {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white),
+                    strokeWidth: 2, color: Colors.white,),
               )
             : const Icon(Icons.credit_card_outlined, size: 18),
         label: const Text('Pay via Paystack'),
