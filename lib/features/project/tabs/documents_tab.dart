@@ -65,6 +65,16 @@ class _DocsTabState extends State<DocsTab> {
                 d.category == DocumentCategory.structuralDrawing,
           )
           .toList();
+    } else if (_filterCategory == DocumentCategory.other) {
+      // "Other" chip covers other, indenture, and receipt
+      filtered = docs
+          .where(
+            (d) =>
+                d.category == DocumentCategory.other ||
+                d.category == DocumentCategory.indenture ||
+                d.category == DocumentCategory.receipt,
+          )
+          .toList();
     } else {
       filtered = docs.where((d) => d.category == _filterCategory).toList();
     }
@@ -93,6 +103,7 @@ class _DocsTabState extends State<DocsTab> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (_) => ProjectUploadDocSheet(
         projectId: widget.projectId,
         uploaderUid: widget.currentUserUid,
@@ -391,10 +402,10 @@ class ProjectUploadDocSheet extends StatefulWidget {
   final ProjectService projectService;
 
   @override
-  State<ProjectUploadDocSheet> createState() => ProjectUploadDocSheetState();
+  State<ProjectUploadDocSheet> createState() => _ProjectUploadDocSheetState();
 }
 
-class ProjectUploadDocSheetState extends State<ProjectUploadDocSheet> {
+class _ProjectUploadDocSheetState extends State<ProjectUploadDocSheet> {
   DocumentCategory _category = DocumentCategory.other;
   DocumentVisibility _visibility = DocumentVisibility.all;
   PlatformFile? _picked;
