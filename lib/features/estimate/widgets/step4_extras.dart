@@ -164,7 +164,7 @@ class Step4Extras extends StatelessWidget {
             initiallyExpanded: true,
             title: const Text('Commercials'),
             children: [
-              LabeledSlider(
+              _LabeledSlider(
                 label: 'Preliminaries',
                 value: controller.preliminariesPct,
                 min: 0,
@@ -179,7 +179,7 @@ class Step4Extras extends StatelessWidget {
                 onChanged: controller.setContingencyEnabled,
               ),
               if (controller.contingencyEnabled)
-                LabeledSlider(
+                _LabeledSlider(
                   label: 'Contingency %',
                   value: controller.contingencyPct,
                   min: 0,
@@ -197,7 +197,7 @@ class Step4Extras extends StatelessWidget {
                 onChanged: (v) => controller.setProfessionalFees(enabled: v),
               ),
               if (controller.professionalFeesEnabled)
-                LabeledSlider(
+                _LabeledSlider(
                   label: 'Professional fees %',
                   value: controller.professionalFeesPct,
                   min: 1,
@@ -286,8 +286,8 @@ class Step4Extras extends StatelessWidget {
 
 // ── Labeled slider ─────────────────────────────────────────────────────────────
 
-class LabeledSlider extends StatelessWidget {
-  const LabeledSlider({
+class _LabeledSlider extends StatelessWidget {
+  const _LabeledSlider({
     super.key,
     required this.label,
     required this.value,
