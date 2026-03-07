@@ -730,7 +730,7 @@ class _AddSnagSheetState extends State<_AddSnagSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<SnagCategory>(
-              value: _category,
+              initialValue: _category,
               decoration: const InputDecoration(
                 labelText: 'Category',
                 border: OutlineInputBorder(),
@@ -739,7 +739,7 @@ class _AddSnagSheetState extends State<_AddSnagSheet> {
                   .map((c) => DropdownMenuItem(
                         value: c,
                         child: Text(c.displayName),
-                      ))
+                      ),)
                   .toList(),
               onChanged: (v) =>
                   setState(() => _category = v ?? SnagCategory.other),
