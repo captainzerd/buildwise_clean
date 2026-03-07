@@ -131,7 +131,14 @@ export const onUserRoleChange = onDocumentWritten(
     if (!newData) return; // document deleted — no claims to set
 
     const role = newData.role as string | undefined;
-    if (!role) return;
+    // If role is absent in this write (e.g. a payment webhook only updating
+    // subscriptionTier), fall back to the existing claim so we don't skip
+    // syncing the subscription tier.
+    let resolvedRole = role;
+    if (!resolvedRole) {
+      const existingUser = await admin.auth().getUser(uid);
+      resolvedRole = (existingUser.customClaims?.["role"] as string | undefined) ?? "homeowner";
+    }
 
     try {
       const tier = (newData.subscriptionTier as string | undefined) ?? "free";
@@ -139,12 +146,12 @@ export const onUserRoleChange = onDocumentWritten(
         ? (newData.projectPassExpiresAt as admin.firestore.Timestamp).toDate().getTime()
         : null;
       await admin.auth().setCustomUserClaims(uid, {
-        role,
-        admin: role === "admin",
+        role: resolvedRole,
+        admin: resolvedRole === "admin",
         subscriptionTier: tier,
         projectPassExpiresAt: passExpiry,
       });
-      logger.info("onUserRoleChange: custom claims set", { uid, role, tier });
+      logger.info("onUserRoleChange: custom claims set", { uid, role: resolvedRole, tier });
     } catch (e: unknown) {
       const err = e as Error;
       logger.error("onUserRoleChange: setCustomUserClaims failed", {
