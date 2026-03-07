@@ -173,6 +173,13 @@ class EstimateController extends ChangeNotifier {
           for (final f in floors)
             {'areaM2': f.areaM2, 'heightM': f.heightM},
         ],
+        'enhancedServices': enhancedServices,
+        'curtainWall': curtainWall,
+        'includeWaterTank': includeWaterTank,
+        'includeGeneratorHouse': includeGeneratorHouse,
+        'includeSwimmingPool': includeSwimmingPool,
+        'swimmingPoolGhs': swimmingPoolGhs,
+        'securityWallLenM': securityWallLenM,
         'includeExternalWorks': includeExternalWorks,
         'externalWallLenM': externalWallLenM,
         'drivewayAreaM2': drivewayAreaM2,
@@ -221,6 +228,13 @@ class EstimateController extends ChangeNotifier {
                 ),
           );
       }
+      enhancedServices = (map['enhancedServices'] as bool?) ?? false;
+      curtainWall = (map['curtainWall'] as bool?) ?? false;
+      includeWaterTank = (map['includeWaterTank'] as bool?) ?? false;
+      includeGeneratorHouse = (map['includeGeneratorHouse'] as bool?) ?? false;
+      includeSwimmingPool = (map['includeSwimmingPool'] as bool?) ?? false;
+      swimmingPoolGhs = (map['swimmingPoolGhs'] as num?)?.toDouble() ?? 62500;
+      securityWallLenM = (map['securityWallLenM'] as num?)?.toDouble() ?? 0;
       includeExternalWorks =
           map['includeExternalWorks'] as bool? ?? includeExternalWorks;
       externalWallLenM =

@@ -346,7 +346,7 @@ class EstimationEngine {
     };
     if (i.typology != BuildingTypology.residentialStandard) {
       specBreakdown[
-              'Typology ${i.typology.costMultiplier > 1 ? "premium" : "discount"}'] =
+              'Building typology ${i.typology.costMultiplier > 1 ? "premium" : "discount"}'] =
           adjustedDirectCost - baselineDirect;
     }
     final subBaseline = baselinePhases.entries
