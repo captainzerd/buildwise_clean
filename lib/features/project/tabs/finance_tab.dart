@@ -314,7 +314,7 @@ class ProjectAttachEstimateSheetState extends State<ProjectAttachEstimateSheet> 
     } catch (e) {
       if (mounted) {
         setState(() => _attaching = false);
-        messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+        messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
       }
     }
   }
@@ -627,7 +627,7 @@ class _PaymentsTabState extends State<_PaymentsTab> {
         const SnackBar(content: Text('Deletion request sent to owner.')),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
     }
   }
 }
@@ -888,7 +888,7 @@ class ProjectAddPaymentSheetState extends State<ProjectAddPaymentSheet> {
       );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -1186,7 +1186,7 @@ class _PaystackButtonState extends State<_PaystackButton> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Paystack error: $e')),
+          SnackBar(content: Text('Paystack error: $e'), duration: const Duration(seconds: 10)),
         );
       }
     } finally {

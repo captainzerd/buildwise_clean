@@ -240,6 +240,7 @@ class _SnagListPageState extends State<SnagListPage> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (_) => _AddSnagSheet(
         projectId: widget.projectId,
         snagService: sl<SnagService>(),
@@ -661,7 +662,7 @@ class _AddSnagSheetState extends State<_AddSnagSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
         );
       }
     } finally {

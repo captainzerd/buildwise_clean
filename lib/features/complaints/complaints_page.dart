@@ -169,7 +169,7 @@ class _ComplaintCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'BuildWise team',
+                            'WyseBrix team',
                             style: Theme.of(context)
                                 .textTheme
                                 .labelSmall
@@ -220,7 +220,7 @@ class _ComplaintCard extends StatelessWidget {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
+            SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
           );
         }
       }
@@ -311,7 +311,7 @@ class _SubmitComplaintSheetState extends State<_SubmitComplaintSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
         );
       }
     } finally {

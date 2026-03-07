@@ -52,7 +52,7 @@ class _LaborTrackingPageState extends State<LaborTrackingPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e')),
+          SnackBar(content: Text('Export failed: $e'), duration: const Duration(seconds: 10)),
         );
       }
     } finally {
@@ -73,6 +73,7 @@ class _LaborTrackingPageState extends State<LaborTrackingPage> {
   void _showRateReference(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
+      showDragHandle: true,
       builder: (_) => const _RateReferenceSheet(),
     );
   }
@@ -80,6 +81,7 @@ class _LaborTrackingPageState extends State<LaborTrackingPage> {
   void _showAddSheet(LaborService laborService) {
     showModalBottomSheet<void>(
       context: context,
+      showDragHandle: true,
       isScrollControlled: true,
       builder: (_) => _AddLaborSheet(
         projectId: widget.projectId,
@@ -410,7 +412,7 @@ class _AddLaborSheetState extends State<_AddLaborSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
         );
       }
     } finally {

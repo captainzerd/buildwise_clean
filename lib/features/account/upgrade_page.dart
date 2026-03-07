@@ -310,9 +310,7 @@ class _UpgradePageState extends State<UpgradePage> {
 
     await showModalBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      showDragHandle: true,
       builder: (_) => _PaymentMethodSheet(
         tier: tier,
         currency: _currency,
@@ -413,12 +411,12 @@ class _UpgradePageState extends State<UpgradePage> {
       if (e.error.code == FailureCode.Canceled) return;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Payment failed: ${e.error.localizedMessage}')),
+        SnackBar(content: Text('Payment failed: ${e.error.localizedMessage}'), duration: const Duration(seconds: 10)),
       );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Payment error: $e')),
+        SnackBar(content: Text('Payment error: $e'), duration: const Duration(seconds: 10)),
       );
     }
   }

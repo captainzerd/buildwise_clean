@@ -368,7 +368,7 @@ class _VendorCard extends StatelessWidget {
                   onPressed: () => _launchWhatsApp(
                     context,
                     vendor.whatsappNumber!,
-                    'Hi ${vendor.name}, I found you on BuildWise.',
+                    'Hi ${vendor.name}, I found you on WyseBrix.',
                   ),
                 ),
               ),
@@ -479,7 +479,7 @@ class _VendorCard extends StatelessWidget {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
+            SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
           );
         }
       }
@@ -514,7 +514,7 @@ class _VendorCard extends StatelessWidget {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
+            SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
           );
         }
       }
@@ -679,7 +679,7 @@ class _AddVendorSheetState extends State<_AddVendorSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
         );
       }
     } finally {
