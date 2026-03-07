@@ -1,4 +1,5 @@
 import '../../core/config/service_locator.dart';
+import '../../core/data/ghana_labour_rates.dart';
 // lib/features/project/labor_tracking_page.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -69,6 +70,13 @@ class _LaborTrackingPageState extends State<LaborTrackingPage> {
         .fold<double>(0, (s, r) => s + r.totalGhs);
   }
 
+  void _showRateReference(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => const _RateReferenceSheet(),
+    );
+  }
+
   void _showAddSheet(LaborService laborService) {
     showModalBottomSheet<void>(
       context: context,
@@ -89,6 +97,11 @@ class _LaborTrackingPageState extends State<LaborTrackingPage> {
       appBar: AppBar(
         title: Text('Labour — ${widget.projectTitle}'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'Rate reference',
+            onPressed: () => _showRateReference(context),
+          ),
           if (_exporting)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
@@ -283,6 +296,56 @@ class _LaborTile extends StatelessWidget {
                   laborService.deleteRecord(projectId, record.id),
             )
           : null,
+    );
+  }
+}
+
+// ── Rate reference sheet ───────────────────────────────────────────────────────
+
+class _RateReferenceSheet extends StatelessWidget {
+  const _RateReferenceSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              'Ghana Labour Rate Reference (2024)',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Text(
+              'Standard daily rates (GH₵) — GhBC / MESW guidelines',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('Trade')),
+                DataColumn(label: Text('Daily Rate (GH₵)'), numeric: true),
+              ],
+              rows: GhanaLabourRates.dailyRates.entries
+                  .map(
+                    (e) => DataRow(cells: [
+                      DataCell(Text(e.key)),
+                      DataCell(Text(e.value.toStringAsFixed(0))),
+                    ]),
+                  )
+                  .toList(),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
     );
   }
 }
