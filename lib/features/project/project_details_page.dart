@@ -211,7 +211,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                         final auth = context.read<AuthService>();
                         final currentUserUid = auth.currentUser?.uid ?? '';
                         final isOwner = project.ownerUid == currentUserUid;
-                        final isBuilder = auth.role == UserRole.pm;
+                        final isBuilder = auth.role.isProfessional;
                         final deletionService = sl<DeletionRequestService>();
                         return TabBarView(
                           controller: _tabs,
@@ -682,7 +682,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
         if (context.mounted) {
           final auth = context.read<AuthService>();
           final isOwner = project.ownerUid == auth.currentUser?.uid;
-          final isBuilder = auth.role == UserRole.pm;
+          final isBuilder = auth.role.isProfessional;
           context.push(
             '/projects/${widget.projectId}/snag',
             extra: {

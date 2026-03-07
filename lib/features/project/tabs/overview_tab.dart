@@ -494,7 +494,7 @@ class OverviewTab extends StatelessWidget {
                   final auth = context.read<AuthService>();
                   final isOwnerLocal =
                       project.ownerUid == auth.currentUser?.uid;
-                  final isBuilderLocal = auth.role == UserRole.pm;
+                  final isBuilderLocal = auth.role.isProfessional;
                   context.push(
                     '/projects/$projectId/snag',
                     extra: {
@@ -849,7 +849,7 @@ class OverviewTab extends StatelessWidget {
           const SnackBar(content: Text('Rating submitted')),
         );
       } catch (e) {
-        messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+        messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
       }
     }
     commentCtrl.dispose();
@@ -2059,7 +2059,7 @@ class _DeletionRequestsSection extends StatelessWidget {
         const SnackBar(content: Text('Item deleted.')),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
     }
   }
 
@@ -2074,7 +2074,7 @@ class _DeletionRequestsSection extends StatelessWidget {
         const SnackBar(content: Text('Deletion request denied.')),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
     }
   }
 }

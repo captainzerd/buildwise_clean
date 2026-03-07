@@ -25,8 +25,8 @@ class VariationOrdersPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
     final service = context.watch<VariationOrderService>();
-    final isOwner = auth.currentUser?.role == UserRole.owner;
-    final isPm = auth.currentUser?.role == UserRole.pm;
+    final isOwner = auth.role.isClient;
+    final isPm = auth.role.isProfessional;
 
     return Scaffold(
       appBar: AppBar(
@@ -88,6 +88,7 @@ class VariationOrdersPage extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (_) => _SubmitVoSheet(
         projectId: projectId,
         projectBudgetGhs: projectBudgetGhs,
@@ -336,7 +337,7 @@ class _VoCard extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
         );
       }
     }
@@ -409,7 +410,7 @@ class _VoCard extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
         );
       }
     }
@@ -483,7 +484,7 @@ class _SubmitVoSheetState extends State<_SubmitVoSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+        messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
       }
     }
   }
