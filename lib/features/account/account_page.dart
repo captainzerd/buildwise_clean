@@ -1231,7 +1231,7 @@ class _RoleSwitchSheet extends StatefulWidget {
 }
 
 class _RoleSwitchSheetState extends State<_RoleSwitchSheet> {
-  ProfessionalType? _selected;
+  ProfessionalType _selected = ProfessionalType.homeowner;
   bool _saving = false;
 
   @override
@@ -1241,8 +1241,7 @@ class _RoleSwitchSheetState extends State<_RoleSwitchSheet> {
   }
 
   Future<void> _confirm() async {
-    if (_selected == null ||
-        _selected == widget.auth.currentUser?.role) {
+    if (_selected == widget.auth.currentUser?.role) {
       Navigator.of(context).pop();
       return;
     }
@@ -1252,7 +1251,7 @@ class _RoleSwitchSheetState extends State<_RoleSwitchSheet> {
       builder: (_) => AlertDialog(
         title: const Text('Switch role?'),
         content: Text(
-          'Your account will be switched to ${_selected!.label}. '
+          'Your account will be switched to ${_selected.label}. '
           'You can switch back at any time.',
         ),
         actions: [
@@ -1271,7 +1270,7 @@ class _RoleSwitchSheetState extends State<_RoleSwitchSheet> {
 
     setState(() => _saving = true);
     try {
-      await widget.auth.updateRole(_selected!);
+      await widget.auth.updateRole(_selected);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
