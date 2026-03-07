@@ -4,9 +4,17 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/account/builder_profile_page.dart';
+import '../../features/account/certifications_page.dart';
 import '../../features/account/edit_profile_page.dart';
+import '../../features/account/id_verification_page.dart';
+import '../../features/account/login_activity_page.dart';
+import '../../features/account/portfolio_page.dart';
+import '../../features/account/work_experience_page.dart';
+import '../../features/project/join_project_page.dart';
 import '../../features/admin/complaints_admin_page.dart';
 import '../../features/admin/deletion_requests_admin_page.dart';
+import '../../features/admin/id_verification_admin_page.dart';
+import '../../features/admin/licence_verification_admin_page.dart';
 import '../../features/complaints/complaints_page.dart';
 import '../../features/vendor/vendors_page.dart';
 import '../../features/account/pending_contracts_page.dart';
@@ -21,6 +29,7 @@ import '../../features/admin/users_admin_page.dart';
 import '../../features/admin/variation_orders_admin_page.dart';
 import '../../features/auth/email_verification_page.dart';
 import '../../features/auth/forgot_password_page.dart';
+import '../../features/auth/otp_verification_page.dart';
 import '../../features/auth/sign_in_page.dart';
 import '../../features/onboarding/onboarding_page.dart';
 import '../../features/estimate/estimate_result_page.dart';
@@ -32,7 +41,7 @@ import '../../features/project/create_contract_page.dart';
 import '../../features/project/create_project_page.dart';
 import '../../features/project/invoice_page.dart';
 import '../../features/project/labor_tracking_page.dart';
-import '../../features/project/land_due_diligence_page.dart';
+import '../../features/project/land_ownership_page.dart';
 import '../../features/project/project_audit_page.dart';
 import '../../features/project/project_details_page.dart';
 import '../../features/project/project_quotes_page.dart';
@@ -167,6 +176,8 @@ final appRouter = GoRouter(
         return VariationOrdersPage(
           projectId: state.pathParameters['id']!,
           projectTitle: extra['projectTitle'] as String? ?? '',
+          projectBudgetGhs:
+              (extra['projectBudgetGhs'] as num?)?.toDouble() ?? 0.0,
         );
       },
     ),
@@ -174,7 +185,7 @@ final appRouter = GoRouter(
       path: '/projects/:id/due-diligence',
       builder: (_, state) {
         final extra = state.extra as Map<String, dynamic>;
-        return LandDueDiligencePage(
+        return LandOwnershipPage(
           projectId: state.pathParameters['id']!,
           projectTitle: extra['projectTitle'] as String? ?? '',
           isOwner: extra['isOwner'] as bool? ?? false,
@@ -356,6 +367,56 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/admin/deletion-requests',
       builder: (_, __) => const DeletionRequestsAdminPage(),
+    ),
+    GoRoute(
+      path: '/admin/id-verification',
+      builder: (_, __) => const IdVerificationAdminPage(),
+    ),
+    GoRoute(
+      path: '/admin/licence-verification',
+      builder: (_, __) => const LicenceVerificationAdminPage(),
+    ),
+
+    // ── OTP verification ─────────────────────────────────────────────────────
+    GoRoute(
+      path: '/verify-otp',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return OtpVerificationPage(
+          phone: extra['phone'] as String? ?? '',
+          verificationId: extra['verificationId'] as String? ?? '',
+        );
+      },
+    ),
+
+    // ── Account — Identity ────────────────────────────────────────────────────
+    GoRoute(
+      path: '/account/id-verification',
+      builder: (_, __) => const IdVerificationPage(),
+    ),
+    GoRoute(
+      path: '/account/work-history',
+      builder: (_, __) => const WorkExperiencePage(),
+    ),
+    GoRoute(
+      path: '/account/certifications',
+      builder: (_, __) => const CertificationsPage(),
+    ),
+    GoRoute(
+      path: '/account/login-activity',
+      builder: (_, __) => const LoginActivityPage(),
+    ),
+    GoRoute(
+      path: '/account/portfolio',
+      builder: (_, __) => const PortfolioPage(),
+    ),
+
+    // ── Project Invitation / Join ──────────────────────────────────────────────
+    GoRoute(
+      path: '/join',
+      builder: (_, state) => JoinProjectPage(
+        token: state.uri.queryParameters['token'] ?? '',
+      ),
     ),
   ],
 );

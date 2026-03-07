@@ -710,7 +710,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
         if (context.mounted) {
           context.push(
             '/projects/${widget.projectId}/variation-orders',
-            extra: {'projectTitle': project.title},
+            extra: {
+              'projectTitle': project.title,
+              'projectBudgetGhs': project.budget,
+            },
           );
         }
       case _MenuAction.siteVisits:

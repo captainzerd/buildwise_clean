@@ -184,11 +184,25 @@ service cloud.firestore {
       }
 
       match /variation_orders/{voId} {
+        // True when the VO amount exceeds 5% of project budget.
+        function voRequiresCertification() {
+          let budget = resource.data.get('projectBudgetGhs', 0);
+          let amount = resource.data.get('costDeltaGhs', 0);
+          return budget > 0 && (amount > budget * 0.05 || amount < -(budget * 0.05));
+        }
+
         // Any project member can read change orders.
         allow read: if isSignedIn() && isProjectMember();
-        // Builder submits; owner can update (approve/reject).
+        // Builder submits; owner can update (approve/reject); PM can certify.
         allow create: if isEmailVerified() && isProjectMember();
-        allow update: if isEmailVerified() && (isProjectOwner() || isAdmin());
+        // Owner cannot approve a high-value VO that hasn't been certified by a PM.
+        allow update: if isEmailVerified()
+          && (isProjectOwner() || isAssignedPm() || isAdmin())
+          && !(
+            request.resource.data.status == 'approved'
+            && voRequiresCertification()
+            && resource.data.get('certifiedByUid', null) == null
+          );
         allow delete: if isAdmin();
       }
 
