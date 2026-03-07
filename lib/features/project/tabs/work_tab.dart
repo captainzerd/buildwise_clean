@@ -973,6 +973,7 @@ class CostsTab extends StatefulWidget {
 class CostsTabState extends State<CostsTab> {
   String _costQuery = '';
   final _searchCtrl = TextEditingController();
+  int _costsLimit = 50;
 
   @override
   void dispose() {
@@ -983,7 +984,7 @@ class CostsTabState extends State<CostsTab> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<CostEntry>>(
-      stream: widget.projectService.costEntriesStream(widget.projectId),
+      stream: widget.projectService.costEntriesStream(widget.projectId, limit: _costsLimit),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -1070,54 +1071,69 @@ class CostsTabState extends State<CostsTab> {
                   ? const Center(child: Text('No matching costs'))
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                      itemCount: entries.length,
+                      itemCount: entries.length +
+                          (allEntries.length >= _costsLimit ? 1 : 0),
                       separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) => _CostEntryTile(
-                        entry: entries[i],
-                        currencySymbol: widget.currencySymbol,
-                        isBuilder: widget.isBuilder,
-                        onDelete: () async {
-                          final confirmed = await showDialog<bool>(
-                            context: context,
-                            builder: (dlgCtx) => AlertDialog(
-                              title: const Text('Delete cost entry?'),
-                              content: Text(
-                                'Delete "${entries[i].category}" — '
-                                'GH₵${NumberFormat('#,##0.00').format(entries[i].amountGhs)}?\n\n'
-                                'This action cannot be undone.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(dlgCtx, false),
-                                  child: const Text('Cancel'),
-                                ),
-                                FilledButton(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor:
-                                        Theme.of(context).colorScheme.error,
-                                    foregroundColor:
-                                        Theme.of(context).colorScheme.onError,
-                                  ),
-                                  onPressed: () => Navigator.pop(dlgCtx, true),
-                                  child: const Text('Delete'),
-                                ),
-                              ],
+                      itemBuilder: (_, i) {
+                        if (i == entries.length) {
+                          // "Load more" footer
+                          return Center(
+                            child: TextButton(
+                              onPressed: () =>
+                                  setState(() => _costsLimit += 50),
+                              child: const Text('Load more'),
                             ),
                           );
-                          if (confirmed == true && context.mounted) {
-                            await widget.projectService.deleteCostEntry(
-                              widget.projectId,
-                              entries[i].id,
-                              entries[i].amountGhs,
-                              phaseId: entries[i].phaseId,
+                        }
+                        return _CostEntryTile(
+                          entry: entries[i],
+                          currencySymbol: widget.currencySymbol,
+                          isBuilder: widget.isBuilder,
+                          onDelete: () async {
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (dlgCtx) => AlertDialog(
+                                title: const Text('Delete cost entry?'),
+                                content: Text(
+                                  'Delete "${entries[i].category}" — '
+                                  'GH₵${NumberFormat('#,##0.00').format(entries[i].amountGhs)}?\n\n'
+                                  'This action cannot be undone.',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(dlgCtx, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  FilledButton(
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor:
+                                          Theme.of(context).colorScheme.error,
+                                      foregroundColor:
+                                          Theme.of(context).colorScheme.onError,
+                                    ),
+                                    onPressed: () =>
+                                        Navigator.pop(dlgCtx, true),
+                                    child: const Text('Delete'),
+                                  ),
+                                ],
+                              ),
                             );
-                          }
-                        },
-                        onRequestDeletion: () => _requestDeletion(
-                          context,
-                          entries[i],
-                        ),
-                      ),
+                            if (confirmed == true && context.mounted) {
+                              await widget.projectService.deleteCostEntry(
+                                widget.projectId,
+                                entries[i].id,
+                                entries[i].amountGhs,
+                                phaseId: entries[i].phaseId,
+                              );
+                            }
+                          },
+                          onRequestDeletion: () => _requestDeletion(
+                            context,
+                            entries[i],
+                          ),
+                        );
+                      },
                     ),
             ),
           ],

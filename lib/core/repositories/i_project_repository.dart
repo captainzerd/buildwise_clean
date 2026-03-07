@@ -39,7 +39,7 @@ abstract class IProjectRepository {
 
   // ── Phases ────────────────────────────────────────────────────────────────
 
-  Stream<List<Phase>> phasesStream(String projectId);
+  Stream<List<Phase>> phasesStream(String projectId, {int limit = 50});
 
   Future<String> addPhase(String projectId, Phase phase);
 
@@ -66,7 +66,7 @@ abstract class IProjectRepository {
 
   // ── Cost entries ──────────────────────────────────────────────────────────
 
-  Stream<List<CostEntry>> costEntriesStream(String projectId);
+  Stream<List<CostEntry>> costEntriesStream(String projectId, {int limit = 50});
 
   Future<int> costEntryCount(String projectId);
 
@@ -81,7 +81,7 @@ abstract class IProjectRepository {
 
   // ── Updates ───────────────────────────────────────────────────────────────
 
-  Stream<List<ProjectUpdate>> updatesStream(String projectId);
+  Stream<List<ProjectUpdate>> updatesStream(String projectId, {int limit = 50});
 
   Future<void> addUpdate({
     required String projectId,

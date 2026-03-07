@@ -34,11 +34,6 @@ class ProjectService implements IProjectRepository {
   // Lazily falls back to FirebaseStorage.instance only when a storage method is called.
   FirebaseStorage get _storage => _storageOverride ?? FirebaseStorage.instance;
 
-  // ── Stream caches (prevent duplicate Firestore listeners) ──
-  final _phasesCache = <String, Stream<List<Phase>>>{};
-  final _costsCache = <String, Stream<List<CostEntry>>>{};
-  final _updatesCache = <String, Stream<List<ProjectUpdate>>>{};
-
   // ── Projects ──
 
   // ── Cursor-based pagination ──
@@ -353,26 +348,23 @@ class ProjectService implements IProjectRepository {
   // ── Phases ──
 
   @override
-  Stream<List<Phase>> phasesStream(String projectId) {
-    return _phasesCache.putIfAbsent(
-      projectId,
-      () => _db
-          .collection('projects')
-          .doc(projectId)
-          .collection('phases')
-          .orderBy('order')
-          .snapshots()
-          .map(
-            (s) => s.docs
-                .map(
-                  (d) => Phase.fromDoc(
-                    d as DocumentSnapshot<Map<String, dynamic>>,
-                  ),
-                )
-                .toList(),
-          )
-          .asBroadcastStream(),
-    );
+  Stream<List<Phase>> phasesStream(String projectId, {int limit = 50}) {
+    return _db
+        .collection('projects')
+        .doc(projectId)
+        .collection('phases')
+        .orderBy('order')
+        .limit(limit)
+        .snapshots()
+        .map(
+          (s) => s.docs
+              .map(
+                (d) => Phase.fromDoc(
+                  d as DocumentSnapshot<Map<String, dynamic>>,
+                ),
+              )
+              .toList(),
+        );
   }
 
   @override
@@ -502,26 +494,23 @@ class ProjectService implements IProjectRepository {
   // ── Cost entries ──
 
   @override
-  Stream<List<CostEntry>> costEntriesStream(String projectId) {
-    return _costsCache.putIfAbsent(
-      projectId,
-      () => _db
-          .collection('projects')
-          .doc(projectId)
-          .collection('costs')
-          .orderBy('createdAt', descending: true)
-          .snapshots()
-          .map(
-            (s) => s.docs
-                .map(
-                  (d) => CostEntry.fromDoc(
-                    d as DocumentSnapshot<Map<String, dynamic>>,
-                  ),
-                )
-                .toList(),
-          )
-          .asBroadcastStream(),
-    );
+  Stream<List<CostEntry>> costEntriesStream(String projectId, {int limit = 50}) {
+    return _db
+        .collection('projects')
+        .doc(projectId)
+        .collection('costs')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map(
+          (s) => s.docs
+              .map(
+                (d) => CostEntry.fromDoc(
+                  d as DocumentSnapshot<Map<String, dynamic>>,
+                ),
+              )
+              .toList(),
+        );
   }
 
   /// Add a cost entry and atomically update the project's `amountSpent`.
@@ -602,26 +591,23 @@ class ProjectService implements IProjectRepository {
   // ── Updates / Notes ──
 
   @override
-  Stream<List<ProjectUpdate>> updatesStream(String projectId) {
-    return _updatesCache.putIfAbsent(
-      projectId,
-      () => _db
-          .collection('projects')
-          .doc(projectId)
-          .collection('updates')
-          .orderBy('createdAt', descending: true)
-          .snapshots()
-          .map(
-            (s) => s.docs
-                .map(
-                  (d) => ProjectUpdate.fromDoc(
-                    d as DocumentSnapshot<Map<String, dynamic>>,
-                  ),
-                )
-                .toList(),
-          )
-          .asBroadcastStream(),
-    );
+  Stream<List<ProjectUpdate>> updatesStream(String projectId, {int limit = 50}) {
+    return _db
+        .collection('projects')
+        .doc(projectId)
+        .collection('updates')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map(
+          (s) => s.docs
+              .map(
+                (d) => ProjectUpdate.fromDoc(
+                  d as DocumentSnapshot<Map<String, dynamic>>,
+                ),
+              )
+              .toList(),
+        );
   }
 
   @override
@@ -720,12 +706,13 @@ class ProjectService implements IProjectRepository {
 
   // ── Documents ──
 
-  Stream<List<ProjectDocument>> documentsStream(String projectId) {
+  Stream<List<ProjectDocument>> documentsStream(String projectId, {int limit = 50}) {
     return _db
         .collection('projects')
         .doc(projectId)
         .collection('documents')
         .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map(
           (s) => s.docs
