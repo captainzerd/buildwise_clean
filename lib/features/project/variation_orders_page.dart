@@ -232,7 +232,7 @@ class _VoCard extends StatelessWidget {
               Row(
                 children: [
                   Icon(Icons.warning_amber_rounded,
-                      size: 14, color: cs.error),
+                      size: 14, color: cs.error,),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
