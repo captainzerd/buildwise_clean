@@ -60,7 +60,7 @@ class ProjectService implements IProjectRepository {
     final docs = snap.docs;
     final projects = docs
         .map(
-            (d) => Project.fromDoc(d as DocumentSnapshot<Map<String, dynamic>>))
+            (d) => Project.fromDoc(d as DocumentSnapshot<Map<String, dynamic>>),)
         .toList();
     final cursor = docs.isNotEmpty && docs.length >= limit ? docs.last : null;
     return (projects, cursor);
