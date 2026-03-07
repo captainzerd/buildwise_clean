@@ -317,7 +317,6 @@ class _BuilderProjectsViewState extends State<_BuilderProjectsView> {
   ProjectStatus? _statusFilter;
 
   List<Project> _projects = [];
-  DocumentSnapshot? _cursor;
   bool _hasMore = true;
   bool _loading = false;
   String? _error;
@@ -333,7 +332,6 @@ class _BuilderProjectsViewState extends State<_BuilderProjectsView> {
   Future<void> _loadFirst() async {
     setState(() {
       _projects = [];
-      _cursor = null;
       _hasMore = true;
       _error = null;
     });
@@ -345,17 +343,13 @@ class _BuilderProjectsViewState extends State<_BuilderProjectsView> {
     setState(() => _loading = true);
     final uid = context.read<AuthService>().currentUser!.uid;
     try {
-      final (page, lastDoc) = await sl<ProjectService>().fetchBuilderProjectsPage(
+      final (page, _) = await sl<ProjectService>().fetchBuilderProjectsPage(
         uid,
         limit: _pageSize,
-        startAfter: _cursor,
       );
       setState(() {
-        for (final p in page) {
-          if (_projects.every((e) => e.id != p.id)) _projects.add(p);
-        }
-        _cursor = lastDoc;
-        _hasMore = page.length >= _pageSize;
+        _projects = page; // full fetch, already deduped and sorted in service
+        _hasMore = false; // builder list is fully loaded in one call
         _loading = false;
       });
     } catch (e) {

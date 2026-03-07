@@ -78,20 +78,24 @@ class ProjectService implements IProjectRepository {
     int limit = 20,
     DocumentSnapshot? startAfter,
   }) async {
-    var q1 = _db
-        .collection('projects')
-        .where('assignedPmUid', isEqualTo: builderUid)
-        .orderBy('createdAt', descending: true)
-        .limit(limit);
-    if (startAfter != null) q1 = q1.startAfterDocument(startAfter);
+    // True cursor-based pagination across two independent Firestore queries
+    // is not possible (cursors are query-specific). Builders typically have
+    // few projects, so we do a full fetch from both queries and merge in memory.
+    final results = await Future.wait([
+      _db
+          .collection('projects')
+          .where('assignedPmUid', isEqualTo: builderUid)
+          .orderBy('createdAt', descending: true)
+          .limit(limit * 2)
+          .get(),
+      _db
+          .collection('projects')
+          .where('teamMemberUids', arrayContains: builderUid)
+          .orderBy('createdAt', descending: true)
+          .limit(limit * 2)
+          .get(),
+    ]);
 
-    final q2 = _db
-        .collection('projects')
-        .where('teamMemberUids', arrayContains: builderUid)
-        .orderBy('createdAt', descending: true)
-        .limit(limit);
-
-    final results = await Future.wait([q1.get(), q2.get()]);
     final seen = <String>{};
     final merged = <Project>[];
     for (final snap in results) {
@@ -104,12 +108,10 @@ class ProjectService implements IProjectRepository {
       }
     }
     merged.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    if (merged.length > limit) merged.removeRange(limit, merged.length);
-    final cursor = results[0].docs.isNotEmpty &&
-            results[0].docs.length >= limit
-        ? results[0].docs.last
-        : null;
-    return (merged, cursor);
+
+    // Return null cursor — builder list is small enough for a full fetch.
+    // _loadMore will see cursor == null and set _hasMore = false.
+    return (merged.take(limit).toList(), null);
   }
 
   /// Stream of projects owned by [ownerUid], newest first.
