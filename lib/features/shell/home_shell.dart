@@ -19,6 +19,7 @@ import '../../core/models/deletion_request.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/deletion_request_service.dart';
 import '../../core/services/notification_service.dart';
+import '../../core/widgets/coach_mark_overlay.dart';
 import '../../core/widgets/offline_banner.dart';
 import '../account/account_page.dart';
 import '../analytics/analytics_page.dart';
@@ -72,7 +73,13 @@ class _HomeShellState extends State<HomeShell> {
       appBar: onAccountTab
           ? null // AccountPage supplies its own AppBar
           : AppBar(
-              title: Image.asset('assets/images/logo.png', height: 32),
+              title: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset('assets/images/logo.png', height: 26),
+                  const Text('WyseBrix', style: TextStyle(fontSize: 11)),
+                ],
+              ),
               centerTitle: true,
               actions: [
                 const ThemeModeAction(),
@@ -83,7 +90,9 @@ class _HomeShellState extends State<HomeShell> {
       body: Column(
         children: [
           const OfflineBanner(),
-          Expanded(child: _buildBody(auth)),
+          Expanded(
+            child: CoachMarkOverlay(child: _buildBody(auth)),
+          ),
         ],
       ),
       bottomNavigationBar: isOwner
