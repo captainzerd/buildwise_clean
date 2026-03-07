@@ -25,9 +25,17 @@ class EstimateResultPage extends StatefulWidget {
   State<EstimateResultPage> createState() => _EstimateResultPageState();
 }
 
-class _EstimateResultPageState extends State<EstimateResultPage> {
+class _EstimateResultPageState extends State<EstimateResultPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController = TabController(length: 2, vsync: this);
   bool _saving = false;
   bool _saved = false;
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,21 +109,25 @@ class _EstimateResultPageState extends State<EstimateResultPage> {
             const SizedBox(height: 16),
           ],
 
-          // ── Phase breakdown pie chart ────────────────────────────────────
-          if (r.phaseBreakdownGhs.isNotEmpty)
-            _PhaseChart(
-              phases: r.phaseBreakdownGhs,
-              moneyFn: controller.money,
+          // ── Tab toggle ─────────────────────────────────────────────────
+          Card(
+            clipBehavior: Clip.antiAlias,
+            child: TabBar(
+              controller: _tabController,
+              tabs: const [
+                Tab(text: 'Phase Breakdown'),
+                Tab(text: 'Specification'),
+              ],
             ),
+          ),
+          const SizedBox(height: 8),
 
-          const SizedBox(height: 16),
-
-          // ── Trade breakdown ──────────────────────────────────────────────
-          _TradeBreakdownCard(
-            phases: r.phaseBreakdownGhs,
+          // ── Tab content ────────────────────────────────────────────────
+          _TabContent(
+            tabController: _tabController,
+            r: r,
             moneyFn: controller.money,
           ),
-
           const SizedBox(height: 16),
 
           // ── Detailed line items ──────────────────────────────────────────
@@ -231,13 +243,13 @@ class _EstimateResultPageState extends State<EstimateResultPage> {
   void _shareEstimate(BuildContext context, EstimateController controller) {
     final r = controller.result!;
     final name = controller.projectNameCtrl.text.trim();
-    final title = name.isEmpty ? 'BuildWise Estimate' : name;
+    final title = name.isEmpty ? 'WyseBrix Estimate' : name;
     final total = controller.money(r.totalPlannedGhs);
     final area = r.totalBuiltUpArea.toStringAsFixed(0);
 
     final buf = StringBuffer();
     buf.writeln(title);
-    buf.writeln('Generated with BuildWise (buildwise.app)');
+    buf.writeln('Generated with WyseBrix (wysebrix.com)');
     buf.writeln();
     buf.writeln('Total: $total');
     buf.writeln('Built-up area: ${area}m²');
@@ -287,6 +299,110 @@ class _EstimateResultPageState extends State<EstimateResultPage> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+}
+
+// ── Tab content (Phase Breakdown / Specification toggle) ─────────────────────
+
+class _TabContent extends StatelessWidget {
+  const _TabContent({
+    required this.tabController,
+    required this.r,
+    required this.moneyFn,
+  });
+
+  final TabController tabController;
+  final EstimateResult r;
+  final String Function(double) moneyFn;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: tabController,
+      builder: (context, _) {
+        if (tabController.index == 0) {
+          return Column(
+            children: [
+              if (r.phaseBreakdownGhs.isNotEmpty)
+                _PhaseChart(
+                  phases: r.phaseBreakdownGhs,
+                  moneyFn: moneyFn,
+                ),
+              const SizedBox(height: 16),
+              _TradeBreakdownCard(
+                phases: r.phaseBreakdownGhs,
+                moneyFn: moneyFn,
+              ),
+            ],
+          );
+        }
+        return _SpecificationBreakdownCard(
+          breakdown: r.specificationBreakdownGhs,
+          moneyFn: moneyFn,
+        );
+      },
+    );
+  }
+}
+
+// ── Specification breakdown card ─────────────────────────────────────────────
+
+class _SpecificationBreakdownCard extends StatelessWidget {
+  const _SpecificationBreakdownCard({
+    required this.breakdown,
+    required this.moneyFn,
+  });
+
+  final Map<String, double> breakdown;
+  final String Function(double) moneyFn;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    if (breakdown.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text('No specification breakdown available.'),
+        ),
+      );
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Cost by Specification',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            ...breakdown.entries.map((e) {
+              final isNegative = e.value < 0;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(child: Text(e.key)),
+                    Text(
+                      '${isNegative ? '-' : '+'}${moneyFn(e.value.abs())}',
+                      style: TextStyle(
+                        color: isNegative ? cs.error : cs.primary,
+                        fontWeight: e.key == 'Baseline'
+                            ? FontWeight.bold
+                            : null,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
   }
 }
 
