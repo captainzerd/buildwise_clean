@@ -338,7 +338,7 @@ class _RateReferenceSheet extends StatelessWidget {
                     (e) => DataRow(cells: [
                       DataCell(Text(e.key)),
                       DataCell(Text(e.value.toStringAsFixed(0))),
-                    ]),
+                    ],),
                   )
                   .toList(),
             ),
