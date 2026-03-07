@@ -288,7 +288,6 @@ class Step4Extras extends StatelessWidget {
 
 class _LabeledSlider extends StatelessWidget {
   const _LabeledSlider({
-    super.key,
     required this.label,
     required this.value,
     required this.min,
