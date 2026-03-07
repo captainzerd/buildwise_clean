@@ -13,7 +13,7 @@ import '../../../core/use_cases/calculate_estimate.dart';
 
 export '../../../core/models/currency.dart' show CurrencyInfo;
 export '../../../core/use_cases/calculate_estimate.dart'
-    show EstimateResult, FloorSpec, PermitMode, TaxLine;
+    show BuildingTypology, EstimateResult, FloorSpec, PermitMode, TaxLine;
 
 class EstimateController extends ChangeNotifier {
   EstimateController({
@@ -35,7 +35,15 @@ class EstimateController extends ChangeNotifier {
   String? region;
   CurrencyInfo currency = CurrencyInfo.ghs;
 
-  String buildingType = 'Residential';
+  BuildingTypology typology = BuildingTypology.residentialStandard;
+  bool enhancedServices = false;
+  bool curtainWall = false;
+  bool includeWaterTank = false;
+  bool includeGeneratorHouse = false;
+  bool includeSwimmingPool = false;
+  double swimmingPoolGhs = 62500;
+  double securityWallLenM = 0;
+  static const double _securityWallRatePerM = 1400.0;
   String quality = 'Standard';
   String foundation = 'Strip';
   String soil = 'Firm';
@@ -155,7 +163,7 @@ class EstimateController extends ChangeNotifier {
       final map = {
         'projectName': projectNameCtrl.text,
         'region': region,
-        'buildingType': buildingType,
+        'typology': typology.name,
         'quality': quality,
         'foundation': foundation,
         'soil': soil,
@@ -194,7 +202,7 @@ class EstimateController extends ChangeNotifier {
       final map = jsonDecode(raw) as Map<String, dynamic>;
       projectNameCtrl.text = map['projectName'] as String? ?? '';
       region = map['region'] as String?;
-      buildingType = map['buildingType'] as String? ?? buildingType;
+      typology = BuildingTypology.fromString(map['typology'] as String?);
       quality = map['quality'] as String? ?? quality;
       foundation = map['foundation'] as String? ?? foundation;
       soil = map['soil'] as String? ?? soil;
@@ -271,21 +279,52 @@ class EstimateController extends ChangeNotifier {
   }
 
   void setProgramme({
-    String? buildingType_,
+    BuildingTypology? typology_,
     String? quality_,
     String? foundation_,
     String? soil_,
     String? roof_,
     int? storeys_,
   }) {
-    buildingType = buildingType_ ?? buildingType;
-    quality = quality_ ?? quality;
-    foundation = foundation_ ?? foundation;
-    soil = soil_ ?? soil;
-    roof = roof_ ?? roof;
-    storeys = storeys_ ?? storeys;
+    if (typology_ != null) typology = typology_;
+    if (quality_ != null) quality = quality_;
+    if (foundation_ != null) foundation = foundation_;
+    if (soil_ != null) soil = soil_;
+    if (roof_ != null) roof = roof_;
+    if (storeys_ != null) storeys = storeys_;
     notifyListeners();
     saveFormState();
+  }
+
+  void setEnhancedServices(bool v) {
+    enhancedServices = v;
+    notifyListeners();
+  }
+
+  void setCurtainWall(bool v) {
+    curtainWall = v;
+    notifyListeners();
+  }
+
+  void setWaterTank(bool v) {
+    includeWaterTank = v;
+    notifyListeners();
+  }
+
+  void setGeneratorHouse(bool v) {
+    includeGeneratorHouse = v;
+    notifyListeners();
+  }
+
+  void setSwimmingPool({bool? enabled, double? amountGhs}) {
+    if (enabled != null) includeSwimmingPool = enabled;
+    if (amountGhs != null) swimmingPoolGhs = amountGhs;
+    notifyListeners();
+  }
+
+  void setSecurityWall(double lenM) {
+    securityWallLenM = lenM;
+    notifyListeners();
   }
 
   void addFloor() {
@@ -381,7 +420,15 @@ class EstimateController extends ChangeNotifier {
         foundation: foundation,
         soil: soil,
         roof: roof,
-        buildingType: buildingType,
+        typology: typology,
+        enhancedServices: enhancedServices,
+        curtainWall: curtainWall,
+        includeWaterTank: includeWaterTank,
+        includeGeneratorHouse: includeGeneratorHouse,
+        includeSwimmingPool: includeSwimmingPool,
+        swimmingPoolGhs: swimmingPoolGhs,
+        securityWallLenM: securityWallLenM,
+        securityWallRatePerM: _securityWallRatePerM,
         unitRateGhsPerM2: catalogService.unitRatesGhsPerM2[quality] ??
             catalogService.unitRatesGhsPerM2['Standard'] ??
             6200.0,
@@ -445,7 +492,7 @@ class EstimateController extends ChangeNotifier {
     return {
       'projectName': projectNameCtrl.text.trim(),
       'region': region ?? '',
-      'buildingType': buildingType,
+      'typology': typology.name,
       'quality': quality,
       'foundation': foundation,
       'soil': soil,
