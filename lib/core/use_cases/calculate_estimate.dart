@@ -212,6 +212,12 @@ class EstimateInput {
 class EstimationEngine {
   const EstimationEngine();
 
+  // Fixed lump-sum rates for add-ons (GhBC 2024)
+  static const double _waterTankGhs = 5000.0;
+  static const double _generatorHouseGhs = 12000.0;
+  static const double _storeyPremiumPerFloor = 0.10;
+  static const double _curtainWallExtraOpeningsPct = 0.04;
+
   EstimateResult calculate(EstimateInput i) {
     final totalArea = i.floors.fold<double>(0, (p, f) => p + f.areaM2);
 
@@ -244,7 +250,7 @@ class EstimationEngine {
     final typologyMul = i.typology.costMultiplier;
     final servicesMul = i.enhancedServices ? 1.18 : 1.00;
     final storeyPremium =
-        i.floors.length > 1 ? 1.0 + (i.floors.length - 1) * 0.10 : 1.00;
+        i.floors.length > 1 ? 1.0 + (i.floors.length - 1) * _storeyPremiumPerFloor : 1.00;
 
     for (final key in phaseGhs.keys.toList()) {
       final lc = key.toLowerCase();
@@ -261,6 +267,15 @@ class EstimationEngine {
           lc.contains('electrical')) {
         phaseGhs[key] = phaseGhs[key]! * typologyMul * servicesMul;
       }
+    }
+
+    // Curtain wall / large glazing: adds an extra 4% of baseGhs (on top of the
+    // standard 4% already embedded in phase percents via the catalog).
+    // Net effect: openings allocation doubles from 4% → 8%.
+    if (i.curtainWall) {
+      const curtainWallPct = _curtainWallExtraOpeningsPct;
+      final curtainWallCost = baseGhs * curtainWallPct;
+      phaseGhs['Curtain wall / glazing'] = curtainWallCost;
     }
 
     final adjustedDirectCost =
@@ -287,12 +302,12 @@ class EstimationEngine {
       }
     }
     if (i.includeWaterTank) {
-      addOns['Water storage tank'] = 5000.0;
-      addOnsTotal += 5000.0;
+      addOns['Water storage tank'] = _waterTankGhs;
+      addOnsTotal += _waterTankGhs;
     }
     if (i.includeGeneratorHouse) {
-      addOns['Generator house'] = 12000.0;
-      addOnsTotal += 12000.0;
+      addOns['Generator house'] = _generatorHouseGhs;
+      addOnsTotal += _generatorHouseGhs;
     }
     if (i.includeSwimmingPool) {
       addOns['Swimming pool'] = i.swimmingPoolGhs;
@@ -382,6 +397,9 @@ class EstimationEngine {
     if (servicesMul != 1.00) {
       specBreakdown['Services tier uplift'] =
           serviceBaseline * typologyMul * (servicesMul - 1.0);
+    }
+    if (i.curtainWall) {
+      specBreakdown['Curtain wall uplift'] = baseGhs * _curtainWallExtraOpeningsPct;
     }
     if (addOnsTotal > 0) {
       specBreakdown['External works'] = addOnsTotal;
