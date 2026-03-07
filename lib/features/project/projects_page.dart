@@ -23,9 +23,8 @@ class ProjectsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
-    final role = auth.role;
 
-    if (role == UserRole.pm) {
+    if (auth.role.isProfessional) {
       return const _BuilderProjectsView();
     }
     return const _OwnerProjectsView();

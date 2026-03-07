@@ -50,7 +50,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
-    final isOwner = auth.isSignedIn && auth.role == UserRole.owner;
+    final isOwner = auth.isSignedIn && auth.role.isClient;
 
     // Reset to Estimate tab when user signs out from a protected tab.
     if (_wasSignedIn && !auth.isSignedIn &&
@@ -63,7 +63,7 @@ class _HomeShellState extends State<HomeShell> {
 
     // Projects tab label is role-aware.
     final projectsLabel =
-        auth.isSignedIn && auth.role == UserRole.pm ? 'My Work' : 'Projects';
+        auth.isSignedIn && auth.role.isProfessional ? 'My Work' : 'Projects';
 
     // Account tab is rendered as the full page (embedded — no inner AppBar).
     // All other tabs are wrapped in the outer Scaffold AppBar.
