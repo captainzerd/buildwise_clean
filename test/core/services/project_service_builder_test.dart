@@ -142,4 +142,58 @@ void main() {
     expect(projects.first.id, 'new');
     expect(projects.last.id, 'old');
   });
+
+  test('projectsForBuilder stream includes assignedPmUid and teamMemberUids projects', () async {
+    final db = FakeFirebaseFirestore();
+    await db.collection('projects').doc('p1').set({
+      'ownerUid': 'owner1',
+      'title': 'P1',
+      'assignedPmUid': 'builder1',
+      'teamMemberUids': <String>[],
+      'collaboratorUids': <String>[],
+      'observerUids': <String>[],
+      'createdAt': DateTime(2024, 6, 1),
+      'updatedAt': DateTime(2024, 6, 1),
+      'status': 'active',
+      'budget': 0,
+      'estimateTotalGhs': 0,
+      'amountSpent': 0,
+      'region': '',
+      'currency': 'GHS',
+      'currencySymbol': 'GH₵',
+      'budgetAlertThreshold': 0.8,
+      'teamMembers': <Map>[],
+      'contingencyGhs': 0,
+      'schemaVersion': 1,
+    });
+    await db.collection('projects').doc('p2').set({
+      'ownerUid': 'owner2',
+      'title': 'P2',
+      'assignedPmUid': null,
+      'teamMemberUids': ['builder1'],
+      'collaboratorUids': <String>[],
+      'observerUids': <String>[],
+      'createdAt': DateTime(2024, 1, 1),
+      'updatedAt': DateTime(2024, 1, 1),
+      'status': 'active',
+      'budget': 0,
+      'estimateTotalGhs': 0,
+      'amountSpent': 0,
+      'region': '',
+      'currency': 'GHS',
+      'currencySymbol': 'GH₵',
+      'budgetAlertThreshold': 0.8,
+      'teamMembers': <Map>[],
+      'contingencyGhs': 0,
+      'schemaVersion': 1,
+    });
+
+    final svc = ProjectService(db: db);
+    final stream = svc.projectsForBuilder('builder1');
+    final projects = await stream.first;
+
+    expect(projects.map((p) => p.id), containsAll(['p1', 'p2']));
+    expect(projects.length, 2);
+    expect(projects.first.id, 'p1'); // p1 newer, appears first
+  });
 }
