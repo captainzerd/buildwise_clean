@@ -194,7 +194,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                 Tab(icon: Icon(Icons.build_outlined), text: 'Progress'),
                 Tab(
                     icon: Icon(Icons.account_balance_wallet_outlined),
-                    text: 'Finance'),
+                    text: 'Finance',),
                 Tab(icon: Icon(Icons.folder_outlined), text: 'Documents'),
                 Tab(icon: Icon(Icons.warning_amber_outlined), text: 'Risks'),
                 Tab(icon: Icon(Icons.forum_outlined), text: 'Chat'),
@@ -824,7 +824,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Error saving template: $e')),
+        SnackBar(content: Text('Error saving template: $e'), duration: const Duration(seconds: 10)),
       );
     }
   }
@@ -866,7 +866,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Report failed: $e')),
+        SnackBar(content: Text('Report failed: $e'), duration: const Duration(seconds: 10)),
       );
     } finally {
       if (mounted) setState(() => _generatingReport = false);

@@ -12,7 +12,7 @@ import '../../../core/services/auth_service.dart';
 import '../../../core/services/task_service.dart';
 
 class ProjectFullScreenPhoto extends StatelessWidget {
-  const ProjectFullScreenPhoto({required this.url, required this.title});
+  const ProjectFullScreenPhoto({super.key, required this.url, required this.title});
   final String url;
   final String title;
 
@@ -33,7 +33,7 @@ class ProjectFullScreenPhoto extends StatelessWidget {
 // ── Multi-photo gallery with swipe carousel ─────────────────────────────────
 
 class ProjectPhotoGallery extends StatefulWidget {
-  const ProjectPhotoGallery({required this.urls, required this.initialIndex});
+  const ProjectPhotoGallery({super.key, required this.urls, required this.initialIndex});
   final List<String> urls;
   final int initialIndex;
 
@@ -84,7 +84,7 @@ class ProjectPhotoGalleryState extends State<ProjectPhotoGallery> {
 // ── Shared pinch-to-zoom image ───────────────────────────────────────────────
 
 class ProjectZoomableNetworkImage extends StatelessWidget {
-  const ProjectZoomableNetworkImage({required this.url});
+  const ProjectZoomableNetworkImage({super.key, required this.url});
   final String url;
 
   @override
@@ -113,7 +113,7 @@ class ProjectZoomableNetworkImage extends StatelessWidget {
 }
 
 class ProjectTasksSheet extends StatelessWidget {
-  const ProjectTasksSheet({required this.projectId});
+  const ProjectTasksSheet({super.key, required this.projectId});
   final String projectId;
 
   @override
@@ -182,7 +182,7 @@ class ProjectTasksSheet extends StatelessWidget {
 }
 
 class ProjectTaskTile extends StatelessWidget {
-  const ProjectTaskTile({required this.task, required this.projectId});
+  const ProjectTaskTile({super.key, required this.task, required this.projectId});
   final TaskItem task;
   final String projectId;
 
@@ -255,7 +255,7 @@ class ProjectTaskTile extends StatelessWidget {
 
 /// Task detail sheet showing task info and comment thread.
 class ProjectTaskDetailSheet extends StatefulWidget {
-  const ProjectTaskDetailSheet({required this.task, required this.projectId});
+  const ProjectTaskDetailSheet({super.key, required this.task, required this.projectId});
   final TaskItem task;
   final String projectId;
 
@@ -319,20 +319,20 @@ class ProjectTaskDetailSheetState extends State<ProjectTaskDetailSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(task.title,
-                    style: Theme.of(context).textTheme.titleMedium),
+                    style: Theme.of(context).textTheme.titleMedium,),
                 const SizedBox(height: 4),
                 Row(
                   children: [
                     Chip(
                       label: Text(task.status.name,
-                          style: const TextStyle(fontSize: 11)),
+                          style: const TextStyle(fontSize: 11),),
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
                     ),
                     const SizedBox(width: 8),
                     Chip(
                       label: Text(task.priority.name,
-                          style: const TextStyle(fontSize: 11)),
+                          style: const TextStyle(fontSize: 11),),
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
                       backgroundColor: switch (task.priority) {
@@ -346,7 +346,7 @@ class ProjectTaskDetailSheetState extends State<ProjectTaskDetailSheet> {
                 if (task.notes != null && task.notes!.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(task.notes!,
-                      style: Theme.of(context).textTheme.bodySmall),
+                      style: Theme.of(context).textTheme.bodySmall,),
                 ],
               ],
             ),
@@ -433,7 +433,7 @@ class ProjectTaskDetailSheetState extends State<ProjectTaskDetailSheet> {
                                 const SizedBox(height: 2),
                                 Text(c.text,
                                     style:
-                                        Theme.of(context).textTheme.bodySmall),
+                                        Theme.of(context).textTheme.bodySmall,),
                               ],
                             ),
                           ),
@@ -490,7 +490,7 @@ class ProjectTaskDetailSheetState extends State<ProjectTaskDetailSheet> {
 }
 
 class ProjectAddTaskSheet extends StatefulWidget {
-  const ProjectAddTaskSheet({required this.projectId, this.phaseId});
+  const ProjectAddTaskSheet({super.key, required this.projectId, this.phaseId});
   final String projectId;
   final String? phaseId;
 

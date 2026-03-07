@@ -1,10 +1,12 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models/app_user.dart';
@@ -35,11 +37,14 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
   final _gioeCtrl = TextEditingController();
   final _gredaCtrl = TextEditingController();
   final _ghanaCardCtrl = TextEditingController();
+  final _businessRegCtrl = TextEditingController();
+  final _ncaLicenseCtrl = TextEditingController();
 
   BuilderRole _role = BuilderRole.contractor;
   String? _region;
   String? _photoUrl;
   String? _contractorGrade;
+  String? _ncaClass;
   bool _isActive = true;
   bool _availableForHire = true;
   bool _saving = false;
@@ -47,9 +52,30 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
   bool _loading = true;
   String? _error;
 
+  // Business reg doc state
+  String? _businessRegUrl;
+  String _businessRegStatus = 'unverified';
+
+  // Insurance state
+  String? _insurancePliUrl;
+  DateTime? _insurancePliExpiry;
+  String? _insurancePiiUrl;
+  DateTime? _insurancePiiExpiry;
+  String _insuranceStatus = 'unverified';
+
   static const _contractorGrades = [
-    'D1', 'D2', 'D3', 'D4',
-    'G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8',
+    'D1',
+    'D2',
+    'D3',
+    'D4',
+    'G1',
+    'G2',
+    'G3',
+    'G4',
+    'G5',
+    'G6',
+    'G7',
+    'G8',
   ];
 
   static const _graTinPattern = r'^GHA-\d{9}-\d$';
@@ -78,8 +104,7 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
         _locationCtrl.text = snap.location ?? '';
         _yearsCtrl.text = snap.yearsExperience?.toString() ?? '';
         _specializationsCtrl.text = snap.specializations.join(', ');
-        _minBudgetCtrl.text =
-            snap.minimumBudgetGhs?.toStringAsFixed(0) ?? '';
+        _minBudgetCtrl.text = snap.minimumBudgetGhs?.toStringAsFixed(0) ?? '';
         _projectsDoneCtrl.text =
             snap.projectsCompleted > 0 ? snap.projectsCompleted.toString() : '';
         _graTinCtrl.text = snap.graTin ?? '';
@@ -87,6 +112,8 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
         _gioeCtrl.text = snap.gioeNumber ?? '';
         _gredaCtrl.text = snap.gredaMembership ?? '';
         _ghanaCardCtrl.text = snap.ghanaCardNumber ?? '';
+        _businessRegCtrl.text = snap.businessRegNumber ?? '';
+        _ncaLicenseCtrl.text = snap.ncaLicenseNumber ?? '';
         setState(() {
           _role = snap.role;
           _region = snap.region.isEmpty ? null : snap.region;
@@ -94,6 +121,14 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
           _availableForHire = snap.availableForHire;
           _photoUrl = snap.photoUrl;
           _contractorGrade = snap.contractorGrade;
+          _ncaClass = snap.ncaClass;
+          _businessRegUrl = snap.businessRegUrl;
+          _businessRegStatus = snap.businessRegStatus;
+          _insurancePliUrl = snap.insurancePliUrl;
+          _insurancePliExpiry = snap.insurancePliExpiry;
+          _insurancePiiUrl = snap.insurancePiiUrl;
+          _insurancePiiExpiry = snap.insurancePiiExpiry;
+          _insuranceStatus = snap.insuranceStatus;
         });
       }
     } finally {
@@ -116,13 +151,14 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
     _gioeCtrl.dispose();
     _gredaCtrl.dispose();
     _ghanaCardCtrl.dispose();
+    _businessRegCtrl.dispose();
+    _ncaLicenseCtrl.dispose();
     super.dispose();
   }
 
   String _initials(String? name) {
     if (name == null || name.trim().isEmpty) return '?';
-    final parts =
-        name.trim().split(' ').where((s) => s.isNotEmpty).toList();
+    final parts = name.trim().split(' ').where((s) => s.isNotEmpty).toList();
     if (parts.length == 1) return parts[0][0].toUpperCase();
     return '${parts[0][0]}${parts[parts.length - 1][0]}'.toUpperCase();
   }
@@ -142,8 +178,8 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
     setState(() => _uploading = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final ref = FirebaseStorage.instance
-          .ref('profile_photos/builders/$uid.jpg');
+      final ref =
+          FirebaseStorage.instance.ref('profile_photos/builders/$uid.jpg');
       final task = await ref.putFile(
         File(xfile.path),
         SettableMetadata(contentType: 'image/jpeg'),
@@ -164,6 +200,26 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
+  }
+
+  /// Upload a document file to Firebase Storage and return its download URL.
+  Future<String?> _uploadDoc(String uid, String storagePath) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+    );
+    if (result == null || result.files.isEmpty) return null;
+    final f = result.files.first;
+    if (f.path == null) return null;
+
+    final ext = f.extension ?? 'pdf';
+    final ref = FirebaseStorage.instance.ref('$storagePath.$ext');
+    await ref.putFile(
+      File(f.path!),
+      SettableMetadata(
+          contentType: ext == 'pdf' ? 'application/pdf' : 'image/jpeg',),
+    );
+    return ref.getDownloadURL();
   }
 
   Future<void> _save() async {
@@ -205,22 +261,31 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
         yearsExperience: int.tryParse(_yearsCtrl.text.trim()),
         minimumBudgetGhs: double.tryParse(_minBudgetCtrl.text.trim()),
         projectsCompleted: int.tryParse(_projectsDoneCtrl.text.trim()) ?? 0,
-        graTin: _graTinCtrl.text.trim().isEmpty
-            ? null
-            : _graTinCtrl.text.trim(),
-        giaNumber: _giaCtrl.text.trim().isEmpty
-            ? null
-            : _giaCtrl.text.trim(),
-        gioeNumber: _gioeCtrl.text.trim().isEmpty
-            ? null
-            : _gioeCtrl.text.trim(),
-        gredaMembership: _gredaCtrl.text.trim().isEmpty
-            ? null
-            : _gredaCtrl.text.trim(),
+        graTin:
+            _graTinCtrl.text.trim().isEmpty ? null : _graTinCtrl.text.trim(),
+        giaNumber: _giaCtrl.text.trim().isEmpty ? null : _giaCtrl.text.trim(),
+        gioeNumber:
+            _gioeCtrl.text.trim().isEmpty ? null : _gioeCtrl.text.trim(),
+        gredaMembership:
+            _gredaCtrl.text.trim().isEmpty ? null : _gredaCtrl.text.trim(),
         ghanaCardNumber: _ghanaCardCtrl.text.trim().isEmpty
             ? null
             : _ghanaCardCtrl.text.trim(),
         contractorGrade: _contractorGrade,
+        businessRegNumber: _businessRegCtrl.text.trim().isEmpty
+            ? null
+            : _businessRegCtrl.text.trim(),
+        businessRegUrl: _businessRegUrl,
+        businessRegStatus: _businessRegStatus,
+        ncaLicenseNumber: _ncaLicenseCtrl.text.trim().isEmpty
+            ? null
+            : _ncaLicenseCtrl.text.trim(),
+        ncaClass: _ncaClass,
+        insurancePliUrl: _insurancePliUrl,
+        insurancePliExpiry: _insurancePliExpiry,
+        insurancePiiUrl: _insurancePiiUrl,
+        insurancePiiExpiry: _insurancePiiExpiry,
+        insuranceStatus: _insuranceStatus,
         createdAt: now,
         updatedAt: now,
       );
@@ -247,8 +312,7 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final displayName =
-        context.read<AuthService>().currentUser?.displayName;
+    final displayName = context.read<AuthService>().currentUser?.displayName;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Builder Profile')),
@@ -266,7 +330,8 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
                     CircleAvatar(
                       radius: 44,
                       backgroundImage: _photoUrl != null
-                          ? CachedNetworkImageProvider(_photoUrl!) as ImageProvider
+                          ? CachedNetworkImageProvider(_photoUrl!)
+                              as ImageProvider
                           : null,
                       child: _photoUrl == null
                           ? Text(
@@ -482,7 +547,7 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _contractorGrade,
+              initialValue: _contractorGrade,
               decoration: const InputDecoration(
                 labelText: 'Contractor Grade (optional)',
                 hintText: 'Select grade',
@@ -539,7 +604,171 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
                 return null;
               },
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 24),
+
+            // ── Business Registration ────────────────────────────────────────
+            Text(
+              'Business Registration',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            Text(
+              'Certificate of Incorporation from the Registrar General\'s '
+              'Department (RGD/DTIID). Verified by admin.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _businessRegCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Certificate of Incorporation No. (optional)',
+                hintText: 'e.g. CS-123456789',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.business_outlined),
+              ),
+              textCapitalization: TextCapitalization.characters,
+            ),
+            const SizedBox(height: 10),
+            _DocUploadRow(
+              label: 'Certificate of Incorporation',
+              url: _businessRegUrl,
+              status: _businessRegStatus,
+              onUpload: () async {
+                final uid = context.read<AuthService>().currentUser?.uid ?? '';
+                final url = await _uploadDoc(
+                  uid,
+                  'profile_docs/$uid/business_reg',
+                );
+                if (url != null && mounted) {
+                  setState(() {
+                    _businessRegUrl = url;
+                    _businessRegStatus = 'pending';
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 24),
+
+            // ── NCA Licence ─────────────────────────────────────────────────
+            Text(
+              'NCA Licence (National Construction Authority)',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            Text(
+              'Required for contractors operating in Ghana. '
+              'Upload your NCA certificate for admin verification.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _ncaLicenseCtrl,
+              decoration: const InputDecoration(
+                labelText: 'NCA Licence Number (optional)',
+                hintText: 'e.g. NCA/G3/2024/0012345',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.badge_outlined),
+              ),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: _ncaClass,
+              decoration: const InputDecoration(
+                labelText: 'NCA Class (optional)',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.grade_outlined),
+              ),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('— Select —')),
+                for (final c in kNcaClasses)
+                  DropdownMenuItem(value: c, child: Text(c)),
+              ],
+              onChanged: (v) => setState(() => _ncaClass = v),
+            ),
+            const SizedBox(height: 24),
+
+            // ── Insurance ────────────────────────────────────────────────────
+            Text(
+              'Insurance',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            Text(
+              'Upload Public Liability Insurance (PLI) and/or '
+              'Professional Indemnity Insurance (PII) certificates. '
+              'Verified insurance boosts your trust score by 15 points.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+            ),
+            const SizedBox(height: 10),
+            _InsuranceUploadTile(
+              label: 'Public Liability Insurance (PLI)',
+              url: _insurancePliUrl,
+              expiry: _insurancePliExpiry,
+              onUpload: () async {
+                final uid = context.read<AuthService>().currentUser?.uid ?? '';
+                final url = await _uploadDoc(
+                  uid,
+                  'profile_docs/$uid/insurance_pli',
+                );
+                if (url != null && mounted) {
+                  setState(() {
+                    _insurancePliUrl = url;
+                    _insuranceStatus = 'pending';
+                  });
+                }
+              },
+              onPickExpiry: (picked) =>
+                  setState(() => _insurancePliExpiry = picked),
+            ),
+            const SizedBox(height: 10),
+            _InsuranceUploadTile(
+              label: 'Professional Indemnity Insurance (PII)',
+              url: _insurancePiiUrl,
+              expiry: _insurancePiiExpiry,
+              onUpload: () async {
+                final uid = context.read<AuthService>().currentUser?.uid ?? '';
+                final url = await _uploadDoc(
+                  uid,
+                  'profile_docs/$uid/insurance_pii',
+                );
+                if (url != null && mounted) {
+                  setState(() {
+                    _insurancePiiUrl = url;
+                    _insuranceStatus = 'pending';
+                  });
+                }
+              },
+              onPickExpiry: (picked) =>
+                  setState(() => _insurancePiiExpiry = picked),
+            ),
+            const SizedBox(height: 24),
+
+            // ── Project Portfolio ────────────────────────────────────────────
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.photo_library_outlined,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+              ),
+              title: const Text('Project Portfolio'),
+              subtitle: const Text(
+                'Add past projects with photos and contract value.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/account/portfolio'),
+            ),
+            const Divider(),
+            const SizedBox(height: 10),
 
             // Available for hire toggle
             SwitchListTile.adaptive(
@@ -556,8 +785,8 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
             Builder(
               builder: (context) {
                 final auth = context.watch<AuthService>();
-                final tier = auth.currentUser?.subscriptionTier ??
-                    SubscriptionTier.free;
+                final tier =
+                    auth.currentUser?.subscriptionTier ?? SubscriptionTier.free;
                 final canList = tier.canListInMarketplace;
                 return SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
@@ -615,6 +844,146 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Document upload row ───────────────────────────────────────────────────────
+
+class _DocUploadRow extends StatelessWidget {
+  const _DocUploadRow({
+    required this.label,
+    required this.url,
+    required this.status,
+    required this.onUpload,
+  });
+
+  final String label;
+  final String? url;
+  final String status;
+  final VoidCallback onUpload;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    Color statusColor;
+    String statusLabel;
+    switch (status) {
+      case 'verified':
+        statusColor = Colors.green;
+        statusLabel = 'Verified';
+      case 'pending':
+        statusColor = Colors.orange;
+        statusLabel = 'Pending review';
+      case 'rejected':
+        statusColor = cs.error;
+        statusLabel = 'Rejected';
+      default:
+        statusColor = cs.outline;
+        statusLabel = 'Not submitted';
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: onUpload,
+            icon: const Icon(Icons.upload_file_outlined, size: 18),
+            label: Text(
+              url != null ? 'Replace $label' : 'Upload $label',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: statusColor.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            statusLabel,
+            style: TextStyle(
+              fontSize: 11,
+              color: statusColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Insurance upload tile with expiry picker ──────────────────────────────────
+
+class _InsuranceUploadTile extends StatelessWidget {
+  const _InsuranceUploadTile({
+    required this.label,
+    required this.url,
+    required this.expiry,
+    required this.onUpload,
+    required this.onPickExpiry,
+  });
+
+  final String label;
+  final String? url;
+  final DateTime? expiry;
+  final VoidCallback onUpload;
+  final void Function(DateTime picked) onPickExpiry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.labelMedium),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: onUpload,
+                icon: const Icon(Icons.upload_file_outlined, size: 16),
+                label: Text(
+                  url != null ? 'Replace document' : 'Upload certificate',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate:
+                      expiry ?? DateTime.now().add(const Duration(days: 365)),
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
+                );
+                if (picked != null) onPickExpiry(picked);
+              },
+              icon: const Icon(Icons.event_outlined, size: 16),
+              label: Text(
+                expiry != null
+                    ? DateFormat('d MMM yy').format(expiry!)
+                    : 'Expiry',
+              ),
+            ),
+          ],
+        ),
+        if (url != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Document uploaded${expiry != null ? " · Expires ${DateFormat("d MMM yyyy").format(expiry!)}" : ""}',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Colors.green,
+                  ),
+            ),
+          ),
+      ],
     );
   }
 }

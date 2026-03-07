@@ -195,9 +195,9 @@ class _SnagListPageState extends State<SnagListPage> {
                               selected: _categoryFilter == c,
                               onSelected: (_) => setState(() =>
                                   _categoryFilter =
-                                      _categoryFilter == c ? null : c),
+                                      _categoryFilter == c ? null : c,),
                             ),
-                          )),
+                          ),),
                     ],
                   ),
                 ),

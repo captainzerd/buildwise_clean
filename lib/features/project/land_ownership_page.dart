@@ -60,7 +60,7 @@ class _LandOwnershipPageState extends State<LandOwnershipPage>
           tabs: const [
             Tab(
                 icon: Icon(Icons.real_estate_agent_outlined),
-                text: 'Ownership'),
+                text: 'Ownership',),
             Tab(icon: Icon(Icons.checklist_outlined), text: 'Due Diligence'),
           ],
         ),
@@ -153,6 +153,7 @@ class _OwnershipTab extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      showDragHandle: true,
       builder: (_) => _EditOwnershipSheet(
         projectId: projectId,
         existing: existing,

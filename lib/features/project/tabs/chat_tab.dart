@@ -16,6 +16,7 @@ import '../../../core/services/project_service.dart';
 
 class ChatTab extends StatefulWidget {
   const ChatTab({
+    super.key,
     required this.projectId,
     required this.currentUserUid,
     required this.currentUserName,
@@ -139,7 +140,7 @@ class ChatTabState extends State<ChatTab> {
     _controller.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(
-          offset: atIdx + member.displayName.length + 2),
+          offset: atIdx + member.displayName.length + 2,),
     );
     setState(() {
       if (!_mentions.contains(member.uid)) _mentions.add(member.uid);
@@ -292,7 +293,7 @@ class ChatTabState extends State<ChatTab> {
                 child: Row(
                   children: [
                     Icon(Icons.attach_file,
-                        size: 16, color: Theme.of(context).colorScheme.primary),
+                        size: 16, color: Theme.of(context).colorScheme.primary,),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
@@ -454,7 +455,7 @@ class _MentionBar extends StatelessWidget {
                   ),
                 ),
                 title: Text('@${m.displayName}',
-                    style: const TextStyle(fontSize: 13)),
+                    style: const TextStyle(fontSize: 13),),
                 onTap: () => onSelect(m),
               ),
             )

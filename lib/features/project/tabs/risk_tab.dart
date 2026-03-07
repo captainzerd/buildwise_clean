@@ -6,7 +6,7 @@ import '../../../core/models/risk_item.dart';
 import '../../../core/services/risk_service.dart';
 
 class RisksTab extends StatelessWidget {
-  const RisksTab({required this.projectId});
+  const RisksTab({super.key, required this.projectId});
   final String projectId;
 
   @override
@@ -299,7 +299,7 @@ class _RiskCard extends StatelessWidget {
 }
 
 class ProjectAddRiskSheet extends StatefulWidget {
-  const ProjectAddRiskSheet({required this.projectId});
+  const ProjectAddRiskSheet({super.key, required this.projectId});
   final String projectId;
 
   @override
