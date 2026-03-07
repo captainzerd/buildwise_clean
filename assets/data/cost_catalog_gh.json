@@ -4,22 +4,22 @@
   "taxesDefaultPct": 15,
 
   "baseRates": {
-    "residential": 3500,
-    "commercial": 4200
+    "residential": 5500,
+    "commercial": 6875
   },
 
   "soilFactor": {
     "firm": 1.00,
-    "soft": 1.08,
-    "waterlogged": 1.15,
-    "laterite": 1.05
+    "soft": 1.10,
+    "waterlogged": 1.20,
+    "laterite": 1.06
   },
 
   "foundationUpliftPct": {
     "strip": 0,
-    "raft": 8,
-    "pile": 20,
-    "pad": 5
+    "raft": 10,
+    "pile": 22,
+    "pad": 6
   },
 
   "phaseSharesDefault": {
@@ -33,30 +33,58 @@
 
   "roof": {
     "pitched_sheet": 1.00,
-    "concrete_flat": 1.12,
-    "tile": 1.08
+    "concrete_flat": 1.14,
+    "tile": 1.09
   },
 
   "services": {
     "standard": 1.00,
-    "enhanced": 1.15
+    "enhanced": 1.18
   },
 
   "finishes": {
-    "economy": 0.92,
+    "economy": 0.69,
     "standard": 1.00,
-    "premium": 1.12
+    "premium": 1.73
   },
 
   "openings": {
     "aluminium": 1.00,
-    "hardwood": 1.05,
-    "upvc": 1.02
+    "hardwood": 1.06,
+    "upvc": 1.03
   },
 
   "external": {
     "external_wall_ghs_per_m": 650,
-    "driveway_ghs_per_m2": 220,
-    "septic_ghs_lump": 16000
+    "driveway_ghs_per_m2": 280,
+    "septic_ghs_lump": 8500
+  },
+
+  "externalWorks": {
+    "driveway": 280,
+    "perimeter_fence_lm": 1200,
+    "gate": 3500,
+    "septic_tank": 8500,
+    "borehole": 22000,
+    "landscaping_sqm": 95
+  },
+
+  "regionalIndex": {
+    "Greater Accra": 1.00,
+    "Ashanti": 0.95,
+    "Western": 0.97,
+    "Central": 0.94,
+    "Eastern": 0.93,
+    "Northern": 0.89,
+    "Upper East": 0.87,
+    "Upper West": 0.86,
+    "Volta": 0.91,
+    "Brong-Ahafo": 0.92,
+    "Oti": 0.90,
+    "Savannah": 0.88,
+    "North East": 0.87,
+    "Bono East": 0.91,
+    "Ahafo": 0.92,
+    "Western North": 0.93
   }
 }
