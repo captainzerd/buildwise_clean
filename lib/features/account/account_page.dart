@@ -11,6 +11,7 @@ import '../../core/services/contract_service.dart';
 import '../../core/services/csv_service.dart';
 import '../../core/services/project_service.dart';
 import '../../core/state/theme_mode_controller.dart';
+import 'trust_score_widget.dart';
 
 class AccountPage extends StatelessWidget {
   /// [embedded] — when true the widget renders as plain content with no
@@ -52,7 +53,7 @@ class AccountPage extends StatelessWidget {
         _InfoSection(user: user),
 
         // ── Profile section (pm role only) ─────────────────────────────────
-        if (user.role == UserRole.pm) ...[
+        if (user.role.isProfessional) ...[
           const SizedBox(height: 24),
           const _SectionHeader('Profile'),
           const SizedBox(height: 8),
@@ -66,7 +67,7 @@ class AccountPage extends StatelessWidget {
         const _SectionHeader('Activity'),
         const SizedBox(height: 8),
         _SavedEstimatesTile(),
-        if (user.role == UserRole.pm) ...[
+        if (user.role.isProfessional) ...[
           const SizedBox(height: 8),
           _PendingContractsTile(uid: user.uid),
           const SizedBox(height: 8),
@@ -79,7 +80,7 @@ class AccountPage extends StatelessWidget {
         const SizedBox(height: 24),
         const _SectionHeader('Settings'),
         const SizedBox(height: 8),
-        if (user.role == UserRole.admin) ...[
+        if (user.role.isAdmin) ...[
           _AdminTile(),
           const SizedBox(height: 8),
         ],
@@ -94,6 +95,27 @@ class AccountPage extends StatelessWidget {
         _SwitchRoleTile(auth: effectiveAuth),
         const SizedBox(height: 8),
         _ExportDataTile(uid: user.uid),
+
+        // ── Identity & Security ────────────────────────────────────────────
+        const SizedBox(height: 24),
+        const _SectionHeader('Identity & Security'),
+        const SizedBox(height: 8),
+        _PhoneVerificationTile(user: user, auth: effectiveAuth),
+        const SizedBox(height: 8),
+        _IdVerificationTile(user: user),
+        const SizedBox(height: 8),
+        _WorkHistoryTile(),
+        const SizedBox(height: 8),
+        _CertificationsTile(),
+        const SizedBox(height: 8),
+        _PortfolioTile(),
+        const SizedBox(height: 8),
+        _LoginActivityTile(),
+        const SizedBox(height: 8),
+        _SessionManagementTile(auth: effectiveAuth),
+
+        const SizedBox(height: 24),
+        const _SectionHeader('Legal'),
         const SizedBox(height: 8),
         _PrivacyPolicyTile(),
         const SizedBox(height: 8),
@@ -235,13 +257,51 @@ class _AvatarHeader extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 4),
-        Chip(
-          label: Text(user.role.label),
-          avatar: Icon(
-            _roleIcon(user.role),
-            size: 16,
+        Tooltip(
+          message: 'Tap "Switch role" below to change',
+          child: Chip(
+            label: Text(user.role.label),
+            avatar: Icon(
+              user.role.icon,
+              size: 16,
+            ),
+            visualDensity: VisualDensity.compact,
           ),
-          visualDensity: VisualDensity.compact,
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TrustScoreWidget(score: user.trustScore, size: 60),
+            IconButton(
+              icon: const Icon(Icons.info_outline),
+              tooltip: 'About Trust Score',
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                showDragHandle: true,
+                builder: (_) => Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Trust Score', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Your trust score is calculated from 5 dimensions:\n\n'
+                        '1. Identity verification (Ghana Card / Passport)\n'
+                        '2. Certifications & licences on file\n'
+                        '3. Work experience history\n'
+                        '4. Portfolio items uploaded\n'
+                        '5. Contract completion rate\n\n'
+                        'A higher score increases your visibility to project owners.',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -254,11 +314,6 @@ class _AvatarHeader extends StatelessWidget {
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 
-  IconData _roleIcon(UserRole role) => switch (role) {
-        UserRole.owner => Icons.home_outlined,
-        UserRole.pm => Icons.engineering_outlined,
-        UserRole.admin => Icons.admin_panel_settings_outlined,
-      };
 }
 
 // ─────────────────────────────────────────────
@@ -952,7 +1007,7 @@ class _DeleteAccountButton extends StatelessWidget {
       navigator.pop(); // pop AccountPage — HomeShell will show sign-in state
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not delete account: $e')),
+        SnackBar(content: Text('Could not delete account: $e'), duration: const Duration(seconds: 10)),
       );
     }
   }
@@ -1019,12 +1074,24 @@ class _UpgradeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthService>();
-    final tier = auth.currentUser?.subscriptionTier ?? SubscriptionTier.free;
+    final user = auth.currentUser;
+    final tier = user?.subscriptionTier ?? SubscriptionTier.free;
+
+    String planLabel = tier.label;
+    if (tier == SubscriptionTier.projectPass &&
+        user?.projectPassExpiresAt != null) {
+      final daysLeft =
+          user!.projectPassExpiresAt!.difference(DateTime.now()).inDays;
+      if (daysLeft >= 0) {
+        planLabel = 'Project Pass · $daysLeft days left';
+      }
+    }
+
     return Card(
       child: ListTile(
         leading: const Icon(Icons.workspace_premium_outlined),
         title: const Text('Plans & Pricing'),
-        subtitle: Text('Current plan: ${tier.label}'),
+        subtitle: Text('Current plan: $planLabel'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => context.push('/account/upgrade'),
       ),
@@ -1089,11 +1156,11 @@ class _ExportDataTileState extends State<_ExportDataTile> {
       final file = await sl<CsvService>().exportUserData(widget.uid, projects);
       await Share.shareXFiles(
         [XFile(file.path)],
-        subject: 'BuildWise data export',
+        subject: 'WyseBrix data export',
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Export failed: $e')),
+        SnackBar(content: Text('Export failed: $e'), duration: const Duration(seconds: 10)),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1130,19 +1197,15 @@ class _SwitchRoleTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currentRole = auth.currentUser?.role ?? UserRole.owner;
+    final currentRole = auth.currentUser?.role ?? ProfessionalType.homeowner;
     // Admins cannot switch role via this tile
-    if (currentRole == UserRole.admin) return const SizedBox.shrink();
+    if (currentRole.isAdmin) return const SizedBox.shrink();
 
     return Card(
       child: ListTile(
         leading: const Icon(Icons.swap_horiz_outlined),
         title: const Text('Switch role'),
-        subtitle: Text(
-          currentRole == UserRole.owner
-              ? 'Current: Property Owner — switch to Builder / PM'
-              : 'Current: Builder / PM — switch to Property Owner',
-        ),
+        subtitle: Text('Current: ${currentRole.label}'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => _showRoleSheet(context),
       ),
@@ -1153,9 +1216,7 @@ class _SwitchRoleTile extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      showDragHandle: true,
       builder: (_) => _RoleSwitchSheet(auth: auth),
     );
   }
@@ -1170,13 +1231,13 @@ class _RoleSwitchSheet extends StatefulWidget {
 }
 
 class _RoleSwitchSheetState extends State<_RoleSwitchSheet> {
-  UserRole? _selected;
+  ProfessionalType? _selected;
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _selected = widget.auth.currentUser?.role ?? UserRole.owner;
+    _selected = widget.auth.currentUser?.role ?? ProfessionalType.homeowner;
   }
 
   Future<void> _confirm() async {
@@ -1215,7 +1276,7 @@ class _RoleSwitchSheetState extends State<_RoleSwitchSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not switch role: $e')),
+          SnackBar(content: Text('Could not switch role: $e'), duration: const Duration(seconds: 10)),
         );
       }
     } finally {
@@ -1226,18 +1287,18 @@ class _RoleSwitchSheetState extends State<_RoleSwitchSheet> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final current = widget.auth.currentUser?.role ?? UserRole.owner;
+    final current = widget.auth.currentUser?.role ?? ProfessionalType.homeowner;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+      padding: EdgeInsets.fromLTRB(
+        24, 20, 24,
+        MediaQuery.of(context).viewInsets.bottom + 40,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Switch role',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          Text('Switch role', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
           Text(
             'Your role determines which features are available to you.',
@@ -1245,32 +1306,40 @@ class _RoleSwitchSheetState extends State<_RoleSwitchSheet> {
                   color: cs.onSurfaceVariant,
                 ),
           ),
-          const SizedBox(height: 20),
-          _RoleCard(
-            title: 'Property Owner',
-            subtitle: 'Create projects, hire builders, track costs',
-            icon: Icons.home_outlined,
-            selected: _selected == UserRole.owner,
-            isCurrent: current == UserRole.owner,
-            onTap: () => setState(() => _selected = UserRole.owner),
+          const SizedBox(height: 16),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.55,
+            ),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final type in ProfessionalType.values)
+                  if (!type.isAdmin) ...[
+                    _RoleCard(
+                      title: type.label,
+                      subtitle: type.subtitle,
+                      icon: type.icon,
+                      selected: _selected == type,
+                      isCurrent: current == type,
+                      onTap: () => setState(() => _selected = type),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          _RoleCard(
-            title: 'Builder / PM / Architect',
-            subtitle: 'Manage builds, respond to contracts and quotes',
-            icon: Icons.engineering_outlined,
-            selected: _selected == UserRole.pm,
-            isCurrent: current == UserRole.pm,
-            onTap: () => setState(() => _selected = UserRole.pm),
-          ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           FilledButton(
             onPressed: _saving ? null : _confirm,
             child: _saving
                 ? const SizedBox(
                     height: 20,
                     width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : const Text('Confirm'),
           ),
@@ -1393,3 +1462,274 @@ class _SectionHeader extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────
+// Phone Verification Tile
+// ─────────────────────────────────────────────
+
+class _PhoneVerificationTile extends StatefulWidget {
+  const _PhoneVerificationTile({
+    required this.user,
+    required this.auth,
+  });
+  final AppUser user;
+  final AuthService auth;
+
+  @override
+  State<_PhoneVerificationTile> createState() => _PhoneVerificationTileState();
+}
+
+class _PhoneVerificationTileState extends State<_PhoneVerificationTile> {
+  bool _busy = false;
+
+  Future<void> _startVerification() async {
+    final phone = widget.user.phone;
+    if (phone == null || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please add a phone number to your profile first.',
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final verificationId = await widget.auth.sendPhoneOtp(phone);
+      if (!mounted) return;
+      final verified = await context.push<bool>(
+        '/verify-otp',
+        extra: {'phone': phone, 'verificationId': verificationId},
+      );
+      if (verified == true && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Phone number verified!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send OTP: $e'), duration: const Duration(seconds: 10)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final verified = widget.user.phoneVerified;
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.phone_outlined),
+        title: const Text('Phone Verification'),
+        subtitle: Text(
+          verified
+              ? widget.user.phone ?? 'Verified'
+              : (widget.user.phone ?? 'No phone number'),
+        ),
+        trailing: verified
+            ? Chip(
+                label: const Text('Verified'),
+                backgroundColor:
+                    Colors.green.withValues(alpha: 0.15),
+                side: BorderSide(color: Colors.green),
+                labelStyle: const TextStyle(
+                  color: Colors.green,
+                  fontSize: 11,
+                ),
+              )
+            : (_busy
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Chip(
+                    label: const Text('Verify'),
+                    backgroundColor: Colors.amber.withValues(alpha: 0.15),
+                    side: BorderSide(color: Colors.amber[700]!),
+                    labelStyle: TextStyle(
+                      color: Colors.amber[700],
+                      fontSize: 11,
+                    ),
+                  )),
+        onTap: verified ? null : _startVerification,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// ID Verification Tile
+// ─────────────────────────────────────────────
+
+class _IdVerificationTile extends StatelessWidget {
+  const _IdVerificationTile({required this.user});
+  final AppUser user;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = user.idVerificationStatus;
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.verified_user_outlined),
+        title: const Text('Identity Verification'),
+        subtitle: Text(status.label),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/account/id-verification'),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Work History Tile
+// ─────────────────────────────────────────────
+
+class _WorkHistoryTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.work_outline),
+        title: const Text('Work History'),
+        subtitle: const Text('Manage your professional experience'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/account/work-history'),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Certifications Tile
+// ─────────────────────────────────────────────
+
+class _CertificationsTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.workspace_premium_outlined),
+        title: const Text('Certifications'),
+        subtitle: const Text('Upload and manage your certificates'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/account/certifications'),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Portfolio Tile
+// ─────────────────────────────────────────────
+
+class _PortfolioTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.photo_library_outlined),
+        title: const Text('Project Portfolio'),
+        subtitle: const Text('Showcase your past projects to clients'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/account/portfolio'),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Login Activity Tile
+// ─────────────────────────────────────────────
+
+class _LoginActivityTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.history),
+        title: const Text('Login Activity'),
+        subtitle: const Text('View recent sign-in history'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/account/login-activity'),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Session Management Tile
+// ─────────────────────────────────────────────
+
+class _SessionManagementTile extends StatelessWidget {
+  const _SessionManagementTile({required this.auth});
+  final AuthService auth;
+
+  Future<void> _revokeAllSessions(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Sign Out All Devices'),
+        content: const Text(
+          'This will immediately sign out all other devices. '
+          'You will remain signed in on this device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Sign Out All'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await auth.revokeAllSessions();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All other sessions have been revoked.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e'), duration: const Duration(seconds: 10)),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.logout),
+        title: const Text('Sign Out All Devices'),
+        subtitle: const Text('Revoke sessions on other devices'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _revokeAllSessions(context),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Trust score widget usage in header
+// ─────────────────────────────────────────────
+
+/// Exported so it can be reused in BuilderProfileDetailPage.
+Widget buildTrustScoreWidget(int score) =>
+    TrustScoreWidget(score: score, size: 60);
