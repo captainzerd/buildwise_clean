@@ -779,6 +779,22 @@ class ProjectService implements IProjectRepository {
     }
   }
 
+  /// Save a pre-built [ProjectDocument] into the project's documents
+  /// sub-collection. Use this when the file has already been uploaded to
+  /// Storage and only the Firestore record needs to be created.
+  Future<void> addDocument(String projectId, ProjectDocument doc) async {
+    try {
+      final ref = _db
+          .collection('projects')
+          .doc(projectId)
+          .collection('documents')
+          .doc();
+      await ref.set(doc.toMap());
+    } catch (e) {
+      throw AppException.from(e);
+    }
+  }
+
   Future<void> deleteDocument(
     String projectId,
     String docId, {

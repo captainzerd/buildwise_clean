@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/config/service_locator.dart';
 import '../../core/models/phase.dart';
 import '../../core/models/project.dart';
+import '../../core/models/project_document.dart';
 import '../../core/models/project_template.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/project_service.dart';
@@ -62,6 +63,8 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
   double? _longitude;
   bool _gettingLocation = false;
   String? _architecturePlanUrl;
+  String? _archPlanFileName;
+  String? _archPlanContentType;
   bool _uploadingPlan = false;
   DateTime? _permitApprovalDate;
   bool _saving = false;
@@ -218,6 +221,16 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
     }
   }
 
+  String? _inferContentType(String name) {
+    final ext = name.split('.').last.toLowerCase();
+    return switch (ext) {
+      'pdf' => 'application/pdf',
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      _ => null,
+    };
+  }
+
   Future<void> _uploadArchitecturePlan() async {
     final uid = context.read<AuthService>().currentUser?.uid ?? 'anon';
     final result = await FilePicker.platform.pickFiles(
@@ -227,6 +240,11 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
     if (file.path == null) return;
+
+    setState(() {
+      _archPlanFileName = file.name;
+      _archPlanContentType = _inferContentType(file.name);
+    });
 
     setState(() => _uploadingPlan = true);
     try {
@@ -315,6 +333,22 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
           widget.initialBoqItems!,
           widget.initialFloorAreaSqm ?? 0,
         );
+      }
+
+      // Save architecture plan as a ProjectDocument.
+      if (_architecturePlanUrl != null && _archPlanFileName != null) {
+        final archDoc = ProjectDocument(
+          id: '',
+          uploaderUid: uid,
+          name: _archPlanFileName!,
+          url: _architecturePlanUrl!,
+          category: DocumentCategory.architecturalDrawing,
+          storagePath: 'project_docs/$uid/arch_plans/$_archPlanFileName',
+          contentType: _archPlanContentType,
+          visibility: DocumentVisibility.all,
+          createdAt: DateTime.now(),
+        );
+        await projectService.addDocument(projectId, archDoc);
       }
 
       // Seed phases from template.

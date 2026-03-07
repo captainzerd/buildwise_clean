@@ -2,6 +2,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
+import 'team_member.dart';
+
 enum ProjectStatus { planning, active, paused, completed }
 
 extension ProjectStatusLabel on ProjectStatus {
@@ -38,6 +40,11 @@ class Project {
     this.ownerName,
     this.description,
     this.location,
+    this.latitude,
+    this.longitude,
+    this.projectType,
+    this.buildingType,
+    this.architecturePlanUrl,
     this.region = '',
     this.currency = 'GHS',
     this.currencySymbol = 'GH₵',
@@ -47,6 +54,10 @@ class Project {
     this.status = ProjectStatus.planning,
     this.assignedPmUid,
     this.assignedPmName,
+    this.teamMembers = const [],
+    this.teamMemberUids = const [],
+    this.collaboratorUids = const [],
+    this.observerUids = const [],
     this.budgetAlertThreshold = 0.8,
     this.schemaVersion = 1,
     this.permitNumber,
@@ -60,6 +71,23 @@ class Project {
   final String title;
   final String? description;
   final String? location;
+
+  /// GPS coordinates — null if location was entered as text only.
+  final double? latitude;
+  final double? longitude;
+
+  /// 'residential' | 'commercial' | 'industrial' | 'infrastructure'
+  final String? projectType;
+
+  /// 'bungalow' | 'duplex' | 'terraced' | 'apartment_block' |
+  /// 'office' | 'warehouse' | 'mixed_use' | 'other'
+  final String? buildingType;
+
+  /// Deprecated. Architecture plans are now stored as ProjectDocument
+  /// with category: DocumentCategory.architecturalDrawing.
+  /// Kept for backward-compatibility with existing Firestore data.
+  final String? architecturePlanUrl;
+
   final String region;
   final String currency;
   final String currencySymbol;
@@ -67,8 +95,23 @@ class Project {
   final double estimateTotalGhs;
   final double amountSpent;
   final ProjectStatus status;
+
+  /// Legacy single-PM assignment kept for backward-compat Firestore queries.
   final String? assignedPmUid;
   final String? assignedPmName;
+
+  /// Full project team (multi-contractor support).
+  final List<TeamMember> teamMembers;
+
+  /// Derived list of UIDs for Firestore array-contains queries.
+  final List<String> teamMemberUids;
+
+  /// Members who can write phases/costs/updates (subset of teamMemberUids).
+  final List<String> collaboratorUids;
+
+  /// Members who can only read + chat (subset of teamMemberUids).
+  final List<String> observerUids;
+
   final double budgetAlertThreshold;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -82,6 +125,7 @@ class Project {
 
   factory Project.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
+    final membersRaw = (d['teamMembers'] as List?)?.cast<Map>() ?? [];
     return Project(
       id: doc.id,
       ownerUid: d['ownerUid'] as String? ?? '',
@@ -89,6 +133,11 @@ class Project {
       title: d['title'] as String? ?? '',
       description: d['description'] as String?,
       location: d['location'] as String?,
+      latitude: (d['latitude'] as num?)?.toDouble(),
+      longitude: (d['longitude'] as num?)?.toDouble(),
+      projectType: d['projectType'] as String?,
+      buildingType: d['buildingType'] as String?,
+      architecturePlanUrl: d['architecturePlanUrl'] as String?,
       region: d['region'] as String? ?? '',
       currency: d['currency'] as String? ?? 'GHS',
       currencySymbol: d['currencySymbol'] as String? ?? 'GH₵',
@@ -98,6 +147,15 @@ class Project {
       status: projectStatusFromString(d['status'] as String?),
       assignedPmUid: d['assignedPmUid'] as String?,
       assignedPmName: d['assignedPmName'] as String?,
+      teamMembers: membersRaw
+          .map((m) => TeamMember.fromMap(Map<String, dynamic>.from(m)))
+          .toList(),
+      teamMemberUids:
+          (d['teamMemberUids'] as List?)?.cast<String>() ?? const [],
+      collaboratorUids:
+          (d['collaboratorUids'] as List?)?.cast<String>() ?? const [],
+      observerUids:
+          (d['observerUids'] as List?)?.cast<String>() ?? const [],
       budgetAlertThreshold:
           (d['budgetAlertThreshold'] as num?)?.toDouble() ?? 0.8,
       createdAt: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -115,6 +173,12 @@ class Project {
         'title': title,
         if (description != null) 'description': description,
         if (location != null) 'location': location,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
+        if (projectType != null) 'projectType': projectType,
+        if (buildingType != null) 'buildingType': buildingType,
+        if (architecturePlanUrl != null)
+          'architecturePlanUrl': architecturePlanUrl,
         'region': region,
         'currency': currency,
         'currencySymbol': currencySymbol,
@@ -124,6 +188,11 @@ class Project {
         'status': status.firestoreValue,
         if (assignedPmUid != null) 'assignedPmUid': assignedPmUid,
         if (assignedPmName != null) 'assignedPmName': assignedPmName,
+        if (teamMembers.isNotEmpty)
+          'teamMembers': teamMembers.map((m) => m.toMap()).toList(),
+        'teamMemberUids': teamMemberUids,
+        'collaboratorUids': collaboratorUids,
+        'observerUids': observerUids,
         'budgetAlertThreshold': budgetAlertThreshold,
         'createdAt': Timestamp.fromDate(createdAt),
         'updatedAt': Timestamp.fromDate(updatedAt),
@@ -138,12 +207,21 @@ class Project {
     String? title,
     String? description,
     String? location,
+    double? latitude,
+    double? longitude,
+    String? projectType,
+    String? buildingType,
+    String? architecturePlanUrl,
     String? region,
     double? budget,
     double? amountSpent,
     ProjectStatus? status,
     String? assignedPmUid,
     String? assignedPmName,
+    List<TeamMember>? teamMembers,
+    List<String>? teamMemberUids,
+    List<String>? collaboratorUids,
+    List<String>? observerUids,
     double? budgetAlertThreshold,
     String? permitNumber,
     DateTime? permitApprovalDate,
@@ -156,6 +234,11 @@ class Project {
         title: title ?? this.title,
         description: description ?? this.description,
         location: location ?? this.location,
+        latitude: latitude ?? this.latitude,
+        longitude: longitude ?? this.longitude,
+        projectType: projectType ?? this.projectType,
+        buildingType: buildingType ?? this.buildingType,
+        architecturePlanUrl: architecturePlanUrl ?? this.architecturePlanUrl,
         region: region ?? this.region,
         currency: currency,
         currencySymbol: currencySymbol,
@@ -165,6 +248,10 @@ class Project {
         status: status ?? this.status,
         assignedPmUid: assignedPmUid ?? this.assignedPmUid,
         assignedPmName: assignedPmName ?? this.assignedPmName,
+        teamMembers: teamMembers ?? this.teamMembers,
+        teamMemberUids: teamMemberUids ?? this.teamMemberUids,
+        collaboratorUids: collaboratorUids ?? this.collaboratorUids,
+        observerUids: observerUids ?? this.observerUids,
         budgetAlertThreshold:
             budgetAlertThreshold ?? this.budgetAlertThreshold,
         createdAt: createdAt,
