@@ -18,14 +18,14 @@ class GhanaCostCatalog {
     required SiteComplexity site,
   }) {
     final base = switch (buildType) {
-      BuildType.residential => 2500.0,
-      BuildType.commercial => 3000.0,
+      BuildType.residential => 5500.0,
+      BuildType.commercial => 6875.0,
     };
 
     final qMul = switch (quality) {
-      Quality.basic => 0.9,
-      Quality.standard => 1.0,
-      Quality.premium => 1.2,
+      Quality.basic => 0.69,
+      Quality.standard => 1.00,
+      Quality.premium => 1.73,
     };
 
     // Treat "difficult" like "hard"
