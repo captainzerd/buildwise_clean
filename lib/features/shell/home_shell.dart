@@ -76,7 +76,9 @@ class _HomeShellState extends State<HomeShell> {
               title: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Image.asset('assets/images/logo.png', height: 26),
+                  ExcludeSemantics(
+                    child: Image.asset('assets/images/logo.png', height: 26),
+                  ),
                   const Text('WyseBrix', style: TextStyle(fontSize: 11)),
                 ],
               ),
@@ -163,45 +165,61 @@ class _NavBar extends StatelessWidget {
           label: 'Estimate',
         ),
         NavigationDestination(
-          icon: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Badge(
-                isLabelVisible: pendingDeletions > 0,
-                label: Text(
-                  pendingDeletions > 99 ? '99+' : '$pendingDeletions',
-                ),
-                child: const Icon(Icons.work_outline),
-              ),
+          icon: Semantics(
+            label: [
+              if (pendingDeletions > 0)
+                '$pendingDeletions pending deletion request${pendingDeletions == 1 ? '' : 's'}',
               if (unreadChats > 0)
-                Positioned(
-                  right: -4,
-                  top: -4,
-                  child: Badge(
-                    label: Text(unreadChats > 99 ? '99+' : '$unreadChats'),
+                '$unreadChats unread chat message${unreadChats == 1 ? '' : 's'}',
+            ].join(', '),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Badge(
+                  isLabelVisible: pendingDeletions > 0,
+                  label: Text(
+                    pendingDeletions > 99 ? '99+' : '$pendingDeletions',
                   ),
+                  child: const Icon(Icons.work_outline),
                 ),
-            ],
+                if (unreadChats > 0)
+                  Positioned(
+                    right: -4,
+                    top: -4,
+                    child: Badge(
+                      label: Text(unreadChats > 99 ? '99+' : '$unreadChats'),
+                    ),
+                  ),
+              ],
+            ),
           ),
-          selectedIcon: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Badge(
-                isLabelVisible: pendingDeletions > 0,
-                label: Text(
-                  pendingDeletions > 99 ? '99+' : '$pendingDeletions',
-                ),
-                child: const Icon(Icons.work),
-              ),
+          selectedIcon: Semantics(
+            label: [
+              if (pendingDeletions > 0)
+                '$pendingDeletions pending deletion request${pendingDeletions == 1 ? '' : 's'}',
               if (unreadChats > 0)
-                Positioned(
-                  right: -4,
-                  top: -4,
-                  child: Badge(
-                    label: Text(unreadChats > 99 ? '99+' : '$unreadChats'),
+                '$unreadChats unread chat message${unreadChats == 1 ? '' : 's'}',
+            ].join(', '),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Badge(
+                  isLabelVisible: pendingDeletions > 0,
+                  label: Text(
+                    pendingDeletions > 99 ? '99+' : '$pendingDeletions',
                   ),
+                  child: const Icon(Icons.work),
                 ),
-            ],
+                if (unreadChats > 0)
+                  Positioned(
+                    right: -4,
+                    top: -4,
+                    child: Badge(
+                      label: Text(unreadChats > 99 ? '99+' : '$unreadChats'),
+                    ),
+                  ),
+              ],
+            ),
           ),
           label: projectsLabel,
         ),
@@ -312,13 +330,19 @@ class _NotificationBell extends StatelessWidget {
       stream: sl<NotificationService>().unreadCountStream(uid),
       builder: (context, snap) {
         final count = snap.data ?? 0;
-        return IconButton(
-          tooltip: 'Notifications',
-          onPressed: () => context.push('/notifications'),
-          icon: Badge(
-            isLabelVisible: count > 0,
-            label: Text(count > 99 ? '99+' : '$count'),
-            child: const Icon(Icons.notifications_outlined),
+        return Semantics(
+          label: count > 0
+              ? '$count unread notification${count == 1 ? '' : 's'}'
+              : 'Notifications',
+          button: true,
+          child: IconButton(
+            tooltip: 'Notifications',
+            onPressed: () => context.push('/notifications'),
+            icon: Badge(
+              isLabelVisible: count > 0,
+              label: Text(count > 99 ? '99+' : '$count'),
+              child: const Icon(Icons.notifications_outlined),
+            ),
           ),
         );
       },
