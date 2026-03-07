@@ -36,7 +36,13 @@ class _SignInPageState extends State<SignInPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Image.asset('assets/images/logo.png', height: 32),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset('assets/images/logo.png', height: 26),
+            const Text('WyseBrix', style: TextStyle(fontSize: 11)),
+          ],
+        ),
         centerTitle: true,
         bottom: TabBar(
           controller: _tabs,
@@ -194,6 +200,11 @@ class _SignInFormState extends State<_SignInForm> {
             ),
             const SizedBox(height: 12),
             _GoogleSignInButton(busy: _busy),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => context.go('/estimate'),
+              child: const Text('Continue without account'),
+            ),
           ],
         ),
       ),
@@ -224,7 +235,7 @@ class _GoogleSignInButtonState extends State<_GoogleSignInButton> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Google sign-in failed: $e')),
+          SnackBar(content: Text('Google sign-in failed: $e'), duration: const Duration(seconds: 10)),
         );
       }
     } finally {
@@ -264,17 +275,22 @@ class _CreateAccountForm extends StatefulWidget {
 
 class _CreateAccountFormState extends State<_CreateAccountForm> {
   final _formKey = GlobalKey<FormState>();
-  final _nameCtrl = TextEditingController();
+  final _firstNameCtrl = TextEditingController();
+  final _lastNameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _obscurePassword = true;
-  UserRole _role = UserRole.owner;
+  ProfessionalType _professionalType = ProfessionalType.homeowner;
+  bool _consentGiven = false;
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
+    _firstNameCtrl.dispose();
+    _lastNameCtrl.dispose();
+    _phoneCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
@@ -282,16 +298,31 @@ class _CreateAccountFormState extends State<_CreateAccountForm> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!_consentGiven) {
+      setState(
+        () => _error =
+            'Please accept the Privacy Policy and Terms of Service to continue.',
+      );
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
+      final firstName = _firstNameCtrl.text.trim();
+      final lastName = _lastNameCtrl.text.trim();
+      final displayName = '$firstName $lastName'.trim();
       await context.read<AuthService>().signUp(
             email: _emailCtrl.text.trim(),
             password: _passwordCtrl.text,
-            displayName: _nameCtrl.text.trim(),
-            role: _role,
+            displayName: displayName,
+            role: _professionalType,
+            firstName: firstName,
+            lastName: lastName,
+            phone: _phoneCtrl.text.trim().isNotEmpty
+                ? _phoneCtrl.text.trim()
+                : null,
           );
       if (mounted && context.canPop()) context.pop();
     } on FirebaseAuthException catch (e) {
@@ -313,17 +344,51 @@ class _CreateAccountFormState extends State<_CreateAccountForm> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _firstNameCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'First name',
+                      border: OutlineInputBorder(),
+                    ),
+                    enabled: !_busy,
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? 'Required' : null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: _lastNameCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Last name',
+                      border: OutlineInputBorder(),
+                    ),
+                    enabled: !_busy,
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? 'Required' : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
             TextFormField(
-              controller: _nameCtrl,
-              textCapitalization: TextCapitalization.words,
+              controller: _phoneCtrl,
+              keyboardType: TextInputType.phone,
               textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
-                labelText: 'Full name',
-                prefixIcon: Icon(Icons.person_outline),
+                labelText: 'Phone number (optional)',
+                hintText: '+233XXXXXXXXX',
+                prefixIcon: Icon(Icons.phone_outlined),
                 border: OutlineInputBorder(),
               ),
               enabled: !_busy,
-              validator: Validators.displayName,
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -367,10 +432,45 @@ class _CreateAccountFormState extends State<_CreateAccountForm> {
               style: Theme.of(context).textTheme.labelLarge,
             ),
             const SizedBox(height: 8),
-            _RolePicker(
-              value: _role,
+            _ProfessionalTypePicker(
+              value: _professionalType,
               enabled: !_busy,
-              onChanged: (r) => setState(() => _role = r),
+              onChanged: (t) => setState(() => _professionalType = t),
+            ),
+            const SizedBox(height: 12),
+            CheckboxListTile(
+              value: _consentGiven,
+              onChanged: _busy
+                  ? null
+                  : (v) => setState(() => _consentGiven = v ?? false),
+              title: GestureDetector(
+                onTap: () => context.push('/legal'),
+                child: Text.rich(
+                  TextSpan(
+                    text: 'I agree to the ',
+                    children: [
+                      TextSpan(
+                        text: 'Privacy Policy',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                      const TextSpan(text: ' and '),
+                      TextSpan(
+                        text: 'Terms of Service',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ],
+                  ),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
             ),
             if (_error != null) ...[
               const SizedBox(height: 16),
@@ -404,30 +504,30 @@ class _CreateAccountFormState extends State<_CreateAccountForm> {
 }
 
 // ─────────────────────────────────────────────
-// Role picker
+// Professional type picker (replaces old role picker)
 // ─────────────────────────────────────────────
 
-class _RolePicker extends StatelessWidget {
-  const _RolePicker({
+class _ProfessionalTypePicker extends StatelessWidget {
+  const _ProfessionalTypePicker({
     required this.value,
     required this.onChanged,
     required this.enabled,
   });
 
-  final UserRole value;
-  final ValueChanged<UserRole> onChanged;
+  final ProfessionalType value;
+  final ValueChanged<ProfessionalType> onChanged;
   final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        for (final role in [UserRole.owner, UserRole.pm]) ...[
-          _RoleCard(
-            role: role,
-            selected: value == role,
+        for (final type in ProfessionalType.values) ...[
+          _ProfessionalTypeCard(
+            type: type,
+            selected: value == type,
             enabled: enabled,
-            onTap: () => onChanged(role),
+            onTap: () => onChanged(type),
           ),
           const SizedBox(height: 8),
         ],
@@ -436,15 +536,15 @@ class _RolePicker extends StatelessWidget {
   }
 }
 
-class _RoleCard extends StatelessWidget {
-  const _RoleCard({
-    required this.role,
+class _ProfessionalTypeCard extends StatelessWidget {
+  const _ProfessionalTypeCard({
+    required this.type,
     required this.selected,
     required this.enabled,
     required this.onTap,
   });
 
-  final UserRole role;
+  final ProfessionalType type;
   final bool selected;
   final bool enabled;
   final VoidCallback onTap;
@@ -469,8 +569,9 @@ class _RoleCard extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              selected ? Icons.radio_button_checked : Icons.radio_button_off,
+              type.icon,
               color: selected ? cs.primary : cs.onSurfaceVariant,
+              size: 22,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -478,7 +579,7 @@ class _RoleCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    role.label,
+                    type.label,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: selected ? cs.primary : null,
@@ -486,7 +587,7 @@ class _RoleCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    _subtitle(role),
+                    type.subtitle,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: cs.onSurfaceVariant,
                         ),
@@ -494,19 +595,16 @@ class _RoleCard extends StatelessWidget {
                 ],
               ),
             ),
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_off,
+              color: selected ? cs.primary : cs.onSurfaceVariant,
+              size: 20,
+            ),
           ],
         ),
       ),
     );
   }
-
-  String _subtitle(UserRole r) => switch (r) {
-        UserRole.owner =>
-          'I own property and want to estimate / track construction',
-        UserRole.pm =>
-          'I am an architect or contractor who manages build projects',
-        _ => '',
-      };
 }
 
 // ─────────────────────────────────────────────
