@@ -8,9 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/models/project_document.dart';
 import '../../../core/services/project_service.dart';
-import '../../../core/widgets/empty_state.dart';
 
-class DocsTab extends StatelessWidget {
+class DocsTab extends StatefulWidget {
   const DocsTab({
     required this.projectId,
     required this.projectService,
@@ -25,40 +24,195 @@ class DocsTab extends StatelessWidget {
   final String ownerUid;
   final List<String> observerUids;
 
+  @override
+  State<DocsTab> createState() => _DocsTabState();
+}
+
+class _DocsTabState extends State<DocsTab> {
+  DocumentCategory? _filterCategory;
+
+  static const _filterGroups = [
+    (label: 'All', category: null),
+    (label: 'Drawings', category: DocumentCategory.architecturalDrawing),
+    (label: 'Land', category: DocumentCategory.landTitle),
+    (label: 'Permits', category: DocumentCategory.permit),
+    (label: 'BOQ', category: DocumentCategory.boq),
+    (label: 'Contracts', category: DocumentCategory.contract),
+    (label: 'Other', category: DocumentCategory.other),
+  ];
+
   bool _canView(ProjectDocument doc) {
     return switch (doc.visibility) {
       DocumentVisibility.all => true,
-      DocumentVisibility.ownerOnly => currentUserUid == ownerUid,
+      DocumentVisibility.ownerOnly =>
+        widget.currentUserUid == widget.ownerUid,
       DocumentVisibility.ownerAndObservers =>
-        currentUserUid == ownerUid || observerUids.contains(currentUserUid),
+        widget.currentUserUid == widget.ownerUid ||
+            widget.observerUids.contains(widget.currentUserUid),
     };
+  }
+
+  List<ProjectDocument> _applyFilter(List<ProjectDocument> docs) {
+    List<ProjectDocument> filtered;
+    if (_filterCategory == null) {
+      filtered = docs;
+    } else if (_filterCategory == DocumentCategory.architecturalDrawing) {
+      filtered = docs
+          .where(
+            (d) =>
+                d.category == DocumentCategory.architecturalDrawing ||
+                d.category == DocumentCategory.structuralDrawing,
+          )
+          .toList();
+    } else {
+      filtered = docs.where((d) => d.category == _filterCategory).toList();
+    }
+    // Pin drawings at top when showing all
+    if (_filterCategory == null) {
+      final drawings = filtered
+          .where(
+            (d) =>
+                d.category == DocumentCategory.architecturalDrawing ||
+                d.category == DocumentCategory.structuralDrawing,
+          )
+          .toList();
+      final others = filtered
+          .where(
+            (d) =>
+                d.category != DocumentCategory.architecturalDrawing &&
+                d.category != DocumentCategory.structuralDrawing,
+          )
+          .toList();
+      return [...drawings, ...others];
+    }
+    return filtered;
+  }
+
+  void _uploadDocument() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => ProjectUploadDocSheet(
+        projectId: widget.projectId,
+        uploaderUid: widget.currentUserUid,
+        projectService: widget.projectService,
+      ),
+    );
+  }
+
+  Widget _buildFilterChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: _filterGroups.map((f) {
+          final isDrawings = f.label == 'Drawings';
+          final isSelected = isDrawings
+              ? (_filterCategory == DocumentCategory.architecturalDrawing ||
+                  _filterCategory == DocumentCategory.structuralDrawing)
+              : _filterCategory == f.category;
+          return Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: FilterChip(
+              label: Text(f.label),
+              selected: isSelected,
+              onSelected: (_) {
+                setState(() {
+                  if (isSelected) {
+                    _filterCategory = null;
+                  } else if (isDrawings) {
+                    _filterCategory = DocumentCategory.architecturalDrawing;
+                  } else {
+                    _filterCategory = f.category;
+                  }
+                });
+              },
+            ),
+          );
+        }).toList(),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<ProjectDocument>>(
-      stream: projectService.documentsStream(projectId),
+      stream: widget.projectService.documentsStream(widget.projectId),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        final docs = (snap.data ?? []).where(_canView).toList();
+        final allVisible = (snap.data ?? []).where(_canView).toList();
+        final docs = _applyFilter(allVisible);
+
+        Widget content;
         if (docs.isEmpty) {
-          return const EmptyState(
-            icon: Icons.folder_outlined,
-            title: 'No documents yet',
-            message: 'Tap the upload button to add files.',
+          content = Column(
+            children: [
+              _buildFilterChips(),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.folder_open_outlined,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'No documents yet.',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Upload land title, permits, drawings or contracts.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        } else {
+          content = Column(
+            children: [
+              _buildFilterChips(),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 4),
+                  itemBuilder: (_, i) => _DocTile(
+                    doc: docs[i],
+                    projectId: widget.projectId,
+                    projectService: widget.projectService,
+                  ),
+                ),
+              ),
+            ],
           );
         }
-        return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-          itemCount: docs.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 4),
-          itemBuilder: (_, i) => _DocTile(
-            doc: docs[i],
-            projectId: projectId,
-            projectService: projectService,
-          ),
+
+        return Stack(
+          children: [
+            content,
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: FloatingActionButton.extended(
+                heroTag: 'docs_upload_fab',
+                onPressed: _uploadDocument,
+                icon: const Icon(Icons.upload_file_outlined),
+                label: const Text('Upload Document'),
+              ),
+            ),
+          ],
         );
       },
     );
