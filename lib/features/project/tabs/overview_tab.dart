@@ -856,7 +856,7 @@ class OverviewTab extends StatelessWidget {
   }
 }
 
-// ── Work tab (Phases + Updates) ──────────────────────────────────────────────
+// ── Progress tab (Phases + Updates) ──────────────────────────────────────────────
 
 
 class _ContractStatusChip extends StatelessWidget {
