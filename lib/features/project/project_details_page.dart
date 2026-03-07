@@ -191,7 +191,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
               tabAlignment: TabAlignment.start,
               tabs: const [
                 Tab(icon: Icon(Icons.info_outline), text: 'Overview'),
-                Tab(icon: Icon(Icons.build_outlined), text: 'Work'),
+                Tab(icon: Icon(Icons.build_outlined), text: 'Progress'),
                 Tab(
                     icon: Icon(Icons.account_balance_wallet_outlined),
                     text: 'Finance'),
@@ -369,8 +369,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
       ],
     ),
     1: (
-      // Work
-      title: 'Work Tab — Phases & Updates',
+      // Progress
+      title: 'Progress Tab — Phases & Updates',
       tips: [
         'Add phases to track each stage of construction (Foundation, Structure, etc.).',
         'Set Estimated Cost and % Complete on each phase to power the EV analysis.',

@@ -191,13 +191,36 @@ class _OwnerProjectsViewState extends State<_OwnerProjectsView> {
       );
     }
     if (_projects.isEmpty) {
-      return EmptyState(
-        icon: Icons.work_outline,
-        title: 'No projects yet',
-        message:
-            'Create your first project to start tracking costs and progress.',
-        actionLabel: 'New project',
-        onAction: () => _openCreate(context),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.construction_outlined,
+              size: 72,
+              color: Colors.grey,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No projects yet',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'Start with an estimate, then create your first project.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => context.go('/estimate'),
+              icon: const Icon(Icons.calculate_outlined),
+              label: const Text('Get Estimate'),
+            ),
+          ],
+        ),
       );
     }
 
@@ -721,6 +744,29 @@ class _ProjectCard extends StatelessWidget {
                   ],
                 ),
               ],
+
+              Builder(
+                builder: (context) {
+                  final parts = [
+                    if (project.region.isNotEmpty) project.region,
+                    if (project.buildingType != null &&
+                        project.buildingType!.isNotEmpty)
+                      project.buildingType!,
+                  ];
+                  if (parts.isEmpty) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      parts.join(' · '),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                    ),
+                  );
+                },
+              ),
 
               const SizedBox(height: 12),
 
