@@ -208,24 +208,29 @@ class _CreateContractPageState extends State<CreateContractPage> {
               style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 8),
-            ...ContractTemplateType.values.map(
-              (t) => RadioListTile<ContractTemplateType>(
-                title: Text(t.displayName),
-                subtitle: t == ContractTemplateType.custom
-                    ? const Text('Write your own clauses')
-                    : Text(
-                        '${t.templateClauses.length} standard clauses pre-populated',
+            RadioGroup<ContractTemplateType>(
+              groupValue: _template,
+              onChanged: (v) => setState(() {
+                _template = v ?? ContractTemplateType.custom;
+                if (_template != ContractTemplateType.custom) {
+                  _scopeCtrl.text = _template.templateClauses.join('\n\n');
+                }
+              }),
+              child: Column(
+                children: ContractTemplateType.values
+                    .map(
+                      (t) => RadioListTile<ContractTemplateType>(
+                        title: Text(t.displayName),
+                        subtitle: t == ContractTemplateType.custom
+                            ? const Text('Write your own clauses')
+                            : Text(
+                                '${t.templateClauses.length} standard clauses pre-populated',
+                              ),
+                        value: t,
+                        contentPadding: EdgeInsets.zero,
                       ),
-                value: t,
-                groupValue: _template,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (v) => setState(() {
-                  _template = v ?? ContractTemplateType.custom;
-                  if (_template != ContractTemplateType.custom) {
-                    _scopeCtrl.text =
-                        _template.templateClauses.join('\n\n');
-                  }
-                }),
+                    )
+                    .toList(),
               ),
             ),
             const SizedBox(height: 16),
