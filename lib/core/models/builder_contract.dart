@@ -1,5 +1,62 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+enum ContractTemplateType {
+  custom,
+  ghbcResidential,
+  fidicShortForm,
+  necEngineering;
+
+  String get displayName => switch (this) {
+        ContractTemplateType.custom => 'Custom Contract',
+        ContractTemplateType.ghbcResidential => 'GhBC Residential (Standard)',
+        ContractTemplateType.fidicShortForm => 'FIDIC Short Form',
+        ContractTemplateType.necEngineering =>
+          'NEC Engineering & Construction',
+      };
+
+  /// Pre-populated clause titles for each template.
+  /// Legal text is TODO — requires licensed clause text.
+  List<String> get templateClauses => switch (this) {
+        ContractTemplateType.custom => [],
+        ContractTemplateType.ghbcResidential => [
+            // TODO: Insert licensed GhBC residential clause text
+            'Parties and Recitals',
+            'Scope of Works',
+            'Contract Sum',
+            'Payment Terms',
+            'Variations',
+            'Practical Completion',
+            'Defects Liability Period',
+            'Dispute Resolution',
+          ],
+        ContractTemplateType.fidicShortForm => [
+            // TODO: Insert licensed FIDIC Short Form clause text
+            'General Provisions',
+            'The Employer',
+            'The Contractor',
+            'The Engineer',
+            'Design',
+            'Commencement, Delays and Suspension',
+            'Contract Price and Payment',
+            'Termination',
+            'Risk and Responsibility',
+            'Disputes and Arbitration',
+          ],
+        ContractTemplateType.necEngineering => [
+            // TODO: Insert licensed NEC ECC clause text
+            'Core Clause 1: General',
+            "Core Clause 2: Contractor's Main Responsibilities",
+            'Core Clause 3: Time',
+            'Core Clause 4: Testing and Defects',
+            'Core Clause 5: Payment',
+            'Core Clause 6: Compensation Events',
+            'Core Clause 7: Title',
+            'Core Clause 8: Risks and Insurance',
+            'Core Clause 9: Disputes and Termination',
+          ],
+      };
+}
+
 enum ContractStatus { pendingBuilder, active, declined, cancelled }
 
 extension ContractStatusLabel on ContractStatus {
@@ -140,6 +197,7 @@ class BuilderContract {
     required this.ownerSignedAt,
     required this.createdAt,
     required this.updatedAt,
+    this.templateType = ContractTemplateType.custom,
     this.startDate,
     this.endDate,
     this.dlpEndDate,
@@ -158,6 +216,7 @@ class BuilderContract {
   final String builderUid;
   final String builderName;
   final String scope;
+  final ContractTemplateType templateType;
   final DateTime? startDate;
   final DateTime? endDate;
   final DateTime? dlpEndDate;
@@ -183,6 +242,7 @@ class BuilderContract {
   Map<String, dynamic> toMap() => {
         'projectId': projectId,
         'projectTitle': projectTitle,
+        'templateType': templateType.name,
         'ownerUid': ownerUid,
         'builderUid': builderUid,
         // memberUids enables arrayContains queries aligned with security rules.
@@ -218,6 +278,10 @@ class BuilderContract {
       id: doc.id,
       projectId: d['projectId'] as String? ?? '',
       projectTitle: d['projectTitle'] as String? ?? '',
+      templateType: ContractTemplateType.values.firstWhere(
+        (t) => t.name == (d['templateType'] as String?),
+        orElse: () => ContractTemplateType.custom,
+      ),
       ownerUid: d['ownerUid'] as String? ?? '',
       builderUid: d['builderUid'] as String? ?? '',
       builderName: d['builderName'] as String? ?? '',

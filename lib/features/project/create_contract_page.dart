@@ -31,6 +31,7 @@ class _CreateContractPageState extends State<CreateContractPage> {
   final _totalCtrl = TextEditingController();
   final _sigCtrl = TextEditingController();
 
+  ContractTemplateType _template = ContractTemplateType.custom;
   DateTime? _startDate;
   DateTime? _endDate;
   DateTime? _dlpEndDate;
@@ -133,6 +134,7 @@ class _CreateContractPageState extends State<CreateContractPage> {
         builderUid: widget.builder.uid,
         builderName: widget.builder.displayName,
         scope: _scopeCtrl.text.trim(),
+        templateType: _template,
         startDate: _startDate,
         endDate: _endDate,
         dlpEndDate: _dlpEndDate,
@@ -198,6 +200,34 @@ class _CreateContractPageState extends State<CreateContractPage> {
 
             // Project
             _SectionLabel('Project: ${widget.projectTitle}'),
+            const SizedBox(height: 16),
+
+            // Template selector
+            Text(
+              'Contract Template',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            ...ContractTemplateType.values.map(
+              (t) => RadioListTile<ContractTemplateType>(
+                title: Text(t.displayName),
+                subtitle: t == ContractTemplateType.custom
+                    ? const Text('Write your own clauses')
+                    : Text(
+                        '${t.templateClauses.length} standard clauses pre-populated',
+                      ),
+                value: t,
+                groupValue: _template,
+                contentPadding: EdgeInsets.zero,
+                onChanged: (v) => setState(() {
+                  _template = v ?? ContractTemplateType.custom;
+                  if (_template != ContractTemplateType.custom) {
+                    _scopeCtrl.text =
+                        _template.templateClauses.join('\n\n');
+                  }
+                }),
+              ),
+            ),
             const SizedBox(height: 16),
 
             // Scope
