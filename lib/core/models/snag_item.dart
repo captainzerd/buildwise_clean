@@ -1,5 +1,6 @@
 // lib/core/models/snag_item.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
 enum SnagStatus { open, resolved, confirmed }
 
@@ -23,6 +24,81 @@ SnagStatus snagStatusFromString(String? s) => switch (s) {
       _ => SnagStatus.open,
     };
 
+// ── Issue type ─────────────────────────────────────────────────────────────────
+
+enum IssueType { defect, safetyIncident, qualityIssue }
+
+extension IssueTypeLabel on IssueType {
+  String get label => switch (this) {
+        IssueType.defect => 'Defect',
+        IssueType.safetyIncident => 'Safety Incident',
+        IssueType.qualityIssue => 'Quality Issue',
+      };
+
+  IconData get icon => switch (this) {
+        IssueType.defect => Icons.build_outlined,
+        IssueType.safetyIncident => Icons.warning_amber_outlined,
+        IssueType.qualityIssue => Icons.verified_outlined,
+      };
+
+  String get firestoreValue => name;
+}
+
+IssueType issueTypeFromString(String? s) => switch (s) {
+      'safetyIncident' => IssueType.safetyIncident,
+      'qualityIssue' => IssueType.qualityIssue,
+      _ => IssueType.defect,
+    };
+
+// ── Issue severity ─────────────────────────────────────────────────────────────
+
+enum IssueSeverity { low, medium, high, critical }
+
+extension IssueSeverityExt on IssueSeverity {
+  String get label => switch (this) {
+        IssueSeverity.low => 'Low',
+        IssueSeverity.medium => 'Medium',
+        IssueSeverity.high => 'High',
+        IssueSeverity.critical => 'Critical',
+      };
+
+  Color get color => switch (this) {
+        IssueSeverity.low => Colors.green,
+        IssueSeverity.medium => Colors.amber.shade700,
+        IssueSeverity.high => Colors.deepOrange,
+        IssueSeverity.critical => Colors.red,
+      };
+
+  String get firestoreValue => name;
+}
+
+IssueSeverity issueSeverityFromString(String? s) => switch (s) {
+      'medium' => IssueSeverity.medium,
+      'high' => IssueSeverity.high,
+      'critical' => IssueSeverity.critical,
+      _ => IssueSeverity.low,
+    };
+
+// ── Snag category ──────────────────────────────────────────────────────────────
+
+enum SnagCategory {
+  structural,
+  weatherproofing,
+  finishes,
+  services,
+  externalWorks,
+  other;
+
+  String get displayName => switch (this) {
+        SnagCategory.structural => 'Structural',
+        SnagCategory.weatherproofing => 'Weatherproofing',
+        SnagCategory.finishes => 'Finishes',
+        SnagCategory.services => 'Services (M&E)',
+        SnagCategory.externalWorks => 'External Works',
+        SnagCategory.other => 'Other',
+      };
+}
+
 class SnagItem {
   const SnagItem({
     required this.id,
@@ -38,6 +114,11 @@ class SnagItem {
     this.resolvedAt,
     this.confirmedAt,
     this.notes,
+    this.issueType = IssueType.defect,
+    this.severity = IssueSeverity.medium,
+    this.contractorUid,
+    this.contractorName,
+    this.category = SnagCategory.other,
   });
 
   final String id;
@@ -53,6 +134,11 @@ class SnagItem {
   final DateTime? resolvedAt;
   final DateTime? confirmedAt;
   final String? notes;
+  final IssueType issueType;
+  final IssueSeverity severity;
+  final String? contractorUid;
+  final String? contractorName;
+  final SnagCategory category;
 
   Map<String, dynamic> toMap() => {
         'description': description,
@@ -68,6 +154,11 @@ class SnagItem {
         if (confirmedAt != null)
           'confirmedAt': Timestamp.fromDate(confirmedAt!),
         if (notes != null) 'notes': notes,
+        'issueType': issueType.firestoreValue,
+        'severity': severity.firestoreValue,
+        if (contractorUid != null) 'contractorUid': contractorUid,
+        if (contractorName != null) 'contractorName': contractorName,
+        'category': category.name,
       };
 
   factory SnagItem.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -91,6 +182,14 @@ class SnagItem {
       resolvedAt: (d['resolvedAt'] as Timestamp?)?.toDate(),
       confirmedAt: (d['confirmedAt'] as Timestamp?)?.toDate(),
       notes: d['notes'] as String?,
+      issueType: issueTypeFromString(d['issueType'] as String?),
+      severity: issueSeverityFromString(d['severity'] as String?),
+      contractorUid: d['contractorUid'] as String?,
+      contractorName: d['contractorName'] as String?,
+      category: SnagCategory.values.firstWhere(
+        (e) => e.name == (d['category'] as String? ?? 'other'),
+        orElse: () => SnagCategory.other,
+      ),
     );
   }
 }
