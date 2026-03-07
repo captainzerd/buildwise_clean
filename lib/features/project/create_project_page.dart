@@ -337,18 +337,22 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
 
       // Save architecture plan as a ProjectDocument.
       if (_architecturePlanUrl != null && _archPlanFileName != null) {
-        final archDoc = ProjectDocument(
-          id: '',
-          uploaderUid: uid,
-          name: _archPlanFileName!,
-          url: _architecturePlanUrl!,
-          category: DocumentCategory.architecturalDrawing,
-          storagePath: 'project_docs/$uid/arch_plans/$_archPlanFileName',
-          contentType: _archPlanContentType,
-          visibility: DocumentVisibility.all,
-          createdAt: DateTime.now(),
-        );
-        await projectService.addDocument(projectId, archDoc);
+        try {
+          final archDoc = ProjectDocument(
+            id: '',
+            uploaderUid: uid,
+            name: _archPlanFileName!,
+            url: _architecturePlanUrl!,
+            category: DocumentCategory.architecturalDrawing,
+            storagePath: 'project_docs/$uid/arch_plans/$_archPlanFileName',
+            contentType: _archPlanContentType,
+            visibility: DocumentVisibility.all,
+            createdAt: DateTime.now(),
+          );
+          await projectService.addDocument(projectId, archDoc);
+        } catch (e) {
+          debugPrint('addDocument (arch plan) failed: $e');
+        }
       }
 
       // Seed phases from template.
