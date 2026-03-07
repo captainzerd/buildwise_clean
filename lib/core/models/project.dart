@@ -63,6 +63,11 @@ class Project {
     this.permitNumber,
     this.permitApprovalDate,
     this.contingencyGhs = 0,
+    this.specQuality,
+    this.specFoundation,
+    this.specSoil,
+    this.specRoof,
+    this.specMETier,
   });
 
   final String id;
@@ -121,6 +126,13 @@ class Project {
   final DateTime? permitApprovalDate;
   final double contingencyGhs;
 
+  /// QS specification fields — optional, populated when creating from estimate.
+  final String? specQuality;    // Economy | Standard | Premium
+  final String? specFoundation; // Strip | Raft | Pad | Pile
+  final String? specSoil;       // Firm | Soft | Waterlogged | Laterite
+  final String? specRoof;       // Pitched sheet | Concrete flat | Tile
+  final String? specMETier;     // Basic | Enhanced
+
   // ── Firestore ──
 
   factory Project.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -164,6 +176,11 @@ class Project {
       permitNumber: d['permitNumber'] as String?,
       permitApprovalDate: (d['permitApprovalDate'] as Timestamp?)?.toDate(),
       contingencyGhs: (d['contingencyGhs'] as num?)?.toDouble() ?? 0,
+      specQuality: d['specQuality'] as String?,
+      specFoundation: d['specFoundation'] as String?,
+      specSoil: d['specSoil'] as String?,
+      specRoof: d['specRoof'] as String?,
+      specMETier: d['specMETier'] as String?,
     );
   }
 
@@ -201,6 +218,11 @@ class Project {
         if (permitApprovalDate != null)
           'permitApprovalDate': Timestamp.fromDate(permitApprovalDate!),
         'contingencyGhs': contingencyGhs,
+        if (specQuality != null) 'specQuality': specQuality!,
+        if (specFoundation != null) 'specFoundation': specFoundation!,
+        if (specSoil != null) 'specSoil': specSoil!,
+        if (specRoof != null) 'specRoof': specRoof!,
+        if (specMETier != null) 'specMETier': specMETier!,
       };
 
   Project copyWith({
@@ -226,6 +248,11 @@ class Project {
     String? permitNumber,
     DateTime? permitApprovalDate,
     double? contingencyGhs,
+    String? specQuality,
+    String? specFoundation,
+    String? specSoil,
+    String? specRoof,
+    String? specMETier,
   }) =>
       Project(
         id: id,
@@ -259,5 +286,10 @@ class Project {
         permitNumber: permitNumber ?? this.permitNumber,
         permitApprovalDate: permitApprovalDate ?? this.permitApprovalDate,
         contingencyGhs: contingencyGhs ?? this.contingencyGhs,
+        specQuality: specQuality ?? this.specQuality,
+        specFoundation: specFoundation ?? this.specFoundation,
+        specSoil: specSoil ?? this.specSoil,
+        specRoof: specRoof ?? this.specRoof,
+        specMETier: specMETier ?? this.specMETier,
       );
 }

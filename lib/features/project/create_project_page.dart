@@ -29,6 +29,13 @@ class CreateProjectPage extends StatefulWidget {
     this.initialBoqItems,
     this.initialFloorAreaSqm,
     this.template,
+    this.initialBuildingType,
+    this.initialSpecQuality,
+    this.initialSpecFoundation,
+    this.initialSpecSoil,
+    this.initialSpecRoof,
+    this.initialSpecMETier,
+    this.initialContingencyGhs,
   });
 
   final String? initialTitle;
@@ -42,6 +49,14 @@ class CreateProjectPage extends StatefulWidget {
   /// Pre-fill form from a saved template (title, budget, region, description)
   /// and seed phases after creation.
   final ProjectTemplate? template;
+
+  final String? initialBuildingType;
+  final String? initialSpecQuality;
+  final String? initialSpecFoundation;
+  final String? initialSpecSoil;
+  final String? initialSpecRoof;
+  final String? initialSpecMETier;
+  final double? initialContingencyGhs;
 
   @override
   State<CreateProjectPage> createState() => _CreateProjectPageState();
@@ -80,16 +95,11 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
     ('infrastructure', 'Infrastructure'),
   ];
 
-  static const _buildingTypes = [
-    ('bungalow', 'Bungalow'),
-    ('duplex', 'Duplex'),
-    ('terraced', 'Terraced House'),
-    ('apartment_block', 'Apartment Block'),
-    ('office', 'Office Building'),
-    ('warehouse', 'Warehouse'),
-    ('mixed_use', 'Mixed Use'),
-    ('other', 'Other'),
-  ];
+  String? _specQuality;
+  String? _specFoundation;
+  String? _specSoil;
+  String? _specRoof;
+  String? _specMETier;
 
   @override
   void initState() {
@@ -107,6 +117,15 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
         _budgetCtrl.text = widget.initialBudget!.toStringAsFixed(0);
       }
       if (widget.initialRegion != null) _region = widget.initialRegion;
+      if (widget.initialBuildingType != null) _buildingType = widget.initialBuildingType;
+      if (widget.initialSpecQuality != null) _specQuality = widget.initialSpecQuality;
+      if (widget.initialSpecFoundation != null) _specFoundation = widget.initialSpecFoundation;
+      if (widget.initialSpecSoil != null) _specSoil = widget.initialSpecSoil;
+      if (widget.initialSpecRoof != null) _specRoof = widget.initialSpecRoof;
+      if (widget.initialSpecMETier != null) _specMETier = widget.initialSpecMETier;
+      if (widget.initialContingencyGhs != null && widget.initialContingencyGhs! > 0) {
+        _contingencyCtrl.text = widget.initialContingencyGhs!.toStringAsFixed(0);
+      }
     }
     // Only enable draft save when no template/prefill is provided.
     if (tmpl == null &&
@@ -320,6 +339,11 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
             : _permitNumberCtrl.text.trim(),
         permitApprovalDate: _permitApprovalDate,
         contingencyGhs: double.tryParse(_contingencyCtrl.text.trim()) ?? 0,
+        specQuality: _specQuality,
+        specFoundation: _specFoundation,
+        specSoil: _specSoil,
+        specRoof: _specRoof,
+        specMETier: _specMETier,
         createdAt: now,
         updatedAt: now,
       );
@@ -506,10 +530,32 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
                 border: OutlineInputBorder(),
               ),
               initialValue: _buildingType,
-              items: [
-                const DropdownMenuItem(value: null, child: Text('— Select —')),
-                for (final t in _buildingTypes)
-                  DropdownMenuItem(value: t.$1, child: Text(t.$2)),
+              items: const [
+                DropdownMenuItem(value: null, child: Text('— Select —')),
+                DropdownMenuItem(
+                  value: 'residentialStandard',
+                  child: Text('Residential Standard (Bungalow / Duplex)'),
+                ),
+                DropdownMenuItem(
+                  value: 'residentialMediumRise',
+                  child: Text('Residential Medium-rise (Apt 3–6 storeys)'),
+                ),
+                DropdownMenuItem(
+                  value: 'residentialHighRise',
+                  child: Text('Residential High-rise (7+ storeys)'),
+                ),
+                DropdownMenuItem(
+                  value: 'commercialOffice',
+                  child: Text('Commercial Office / Bank / Institution'),
+                ),
+                DropdownMenuItem(
+                  value: 'commercialRetail',
+                  child: Text('Commercial Retail / Mixed Use'),
+                ),
+                DropdownMenuItem(
+                  value: 'commercialWarehouse',
+                  child: Text('Commercial Warehouse / Factory'),
+                ),
               ],
               onChanged: (v) => setState(() => _buildingType = v),
             ),
@@ -587,6 +633,72 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
                   DropdownMenuItem(value: r, child: Text(r)),
               ],
               onChanged: (v) => setState(() => _region = v),
+            ),
+            const SizedBox(height: 8),
+
+            // Specification Details (collapsible)
+            ExpansionTile(
+              title: const Text('Specification Details'),
+              subtitle: const Text('Optional — unlocks Quick Re-estimate in Finance tab'),
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.symmetric(vertical: 4),
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: _specQuality,
+                  decoration: const InputDecoration(labelText: 'Quality / Finish Level'),
+                  items: const [
+                    DropdownMenuItem(value: 'Economy', child: Text('Economy')),
+                    DropdownMenuItem(value: 'Standard', child: Text('Standard')),
+                    DropdownMenuItem(value: 'Premium', child: Text('Premium')),
+                  ],
+                  onChanged: (v) => setState(() => _specQuality = v),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _specFoundation,
+                  decoration: const InputDecoration(labelText: 'Foundation Type'),
+                  items: const [
+                    DropdownMenuItem(value: 'Strip', child: Text('Strip')),
+                    DropdownMenuItem(value: 'Raft', child: Text('Raft')),
+                    DropdownMenuItem(value: 'Pad', child: Text('Pad')),
+                    DropdownMenuItem(value: 'Pile', child: Text('Pile')),
+                  ],
+                  onChanged: (v) => setState(() => _specFoundation = v),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _specSoil,
+                  decoration: const InputDecoration(labelText: 'Soil Condition'),
+                  items: const [
+                    DropdownMenuItem(value: 'Firm', child: Text('Firm')),
+                    DropdownMenuItem(value: 'Soft', child: Text('Soft')),
+                    DropdownMenuItem(value: 'Waterlogged', child: Text('Waterlogged')),
+                    DropdownMenuItem(value: 'Laterite', child: Text('Laterite')),
+                  ],
+                  onChanged: (v) => setState(() => _specSoil = v),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _specRoof,
+                  decoration: const InputDecoration(labelText: 'Roof Type'),
+                  items: const [
+                    DropdownMenuItem(value: 'Pitched sheet', child: Text('Pitched sheet')),
+                    DropdownMenuItem(value: 'Concrete flat', child: Text('Concrete flat')),
+                    DropdownMenuItem(value: 'Tile', child: Text('Tile')),
+                  ],
+                  onChanged: (v) => setState(() => _specRoof = v),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _specMETier,
+                  decoration: const InputDecoration(labelText: 'M&E Services Tier'),
+                  items: const [
+                    DropdownMenuItem(value: 'Basic', child: Text('Basic')),
+                    DropdownMenuItem(value: 'Enhanced', child: Text('Enhanced')),
+                  ],
+                  onChanged: (v) => setState(() => _specMETier = v),
+                ),
+              ],
             ),
             const SizedBox(height: 14),
 

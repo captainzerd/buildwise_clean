@@ -225,6 +225,13 @@ class _EstimateResultPageState extends State<EstimateResultPage>
                       initialRegion: controller.region,
                       initialBoqItems: boqItems,
                       initialFloorAreaSqm: r.totalBuiltUpArea,
+                      initialBuildingType: controller.typology.name,
+                      initialSpecQuality: controller.quality,
+                      initialSpecFoundation: controller.foundation,
+                      initialSpecSoil: controller.soil,
+                      initialSpecRoof: controller.roof,
+                      initialSpecMETier: controller.enhancedServices ? 'Enhanced' : 'Basic',
+                      initialContingencyGhs: r.contingencyGhs,
                     ),
                   ),
                 );
