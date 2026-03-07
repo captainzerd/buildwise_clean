@@ -1611,10 +1611,15 @@ export const checkExpiredProjectPasses = onSchedule(
     for (const doc of snap.docs) {
       batch.update(doc.ref, { subscriptionTier: "free" });
       claimsUpdates.push(
-        admin.auth().setCustomUserClaims(doc.id, {
-          subscriptionTier: "free",
-          projectPassExpiresAt: null,
-        }),
+        (async () => {
+          const existingUser = await admin.auth().getUser(doc.id);
+          const existing = existingUser.customClaims ?? {};
+          await admin.auth().setCustomUserClaims(doc.id, {
+            ...existing,
+            subscriptionTier: "free",
+            projectPassExpiresAt: null,
+          });
+        })(),
       );
     }
 
@@ -1636,7 +1641,8 @@ export const enforceProjectQuota = onCall(
     const userData = userDoc.data() ?? {};
     const tier = (userData.subscriptionTier as string | undefined) ?? "free";
 
-    const maxProjects = tier === "pro" || tier === "business" ? 999 : tier === "project_pass" ? 999 : 1;
+    const isPaid = ["pro", "business", "project_pass"].includes(tier);
+    const maxProjects = isPaid ? 999 : 1;
 
     const snap = await db
       .collection("projects")
