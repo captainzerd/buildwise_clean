@@ -102,12 +102,12 @@ class _UserCard extends StatelessWidget {
   }
 
   Future<void> _showRoleDialog(BuildContext context, AppUser user) async {
-    final picked = await showDialog<UserRole>(
+    final picked = await showDialog<ProfessionalType>(
       context: context,
       builder: (_) => SimpleDialog(
         title: Text('Change role for\n${user.email}'),
         children: [
-          for (final r in UserRole.values)
+          for (final r in ProfessionalType.values)
             SimpleDialogOption(
               onPressed: () => Navigator.pop(context, r),
               child: Row(
@@ -148,15 +148,15 @@ class _UserCard extends StatelessWidget {
 
 class _RoleBadge extends StatelessWidget {
   const _RoleBadge({required this.role});
-  final UserRole role;
+  final ProfessionalType role;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final (Color bg, Color fg) = switch (role) {
-      UserRole.admin => (cs.errorContainer, cs.onErrorContainer),
-      UserRole.pm => (cs.secondaryContainer, cs.onSecondaryContainer),
-      UserRole.owner => (cs.primaryContainer, cs.onPrimaryContainer),
+      _ when role.isAdmin => (cs.errorContainer, cs.onErrorContainer),
+      _ when role.isProfessional => (cs.secondaryContainer, cs.onSecondaryContainer),
+      _ => (cs.primaryContainer, cs.onPrimaryContainer),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
