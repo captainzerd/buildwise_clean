@@ -57,12 +57,16 @@ const notifTypeToPrefKey: Record<string, string> = {
   variation_order_rejected:   "change_orders",
   site_visit_new:             "site_inspections",
   snag_new:                   "snag_list",
+  issue_report:               "issue_reports",
+  safety_incident:            "safety_incidents",
   rfq_received:               "quote_responses",
   rfq_responded:              "quote_responses",
   rfq_accepted:               "quote_responses",
   rfq_declined:               "quote_responses",
   chat_message:               "chat_messages",
   budget_alert:               "budget_alerts",
+  task_comment:               "task_comments",
+  chat_mention:               "chat_messages",
 };
 
 async function sendToUser(
@@ -130,11 +134,17 @@ export const onUserRoleChange = onDocumentWritten(
     if (!role) return;
 
     try {
+      const tier = (newData.subscriptionTier as string | undefined) ?? "free";
+      const passExpiry = newData.projectPassExpiresAt
+        ? (newData.projectPassExpiresAt as admin.firestore.Timestamp).toDate().getTime()
+        : null;
       await admin.auth().setCustomUserClaims(uid, {
         role,
         admin: role === "admin",
+        subscriptionTier: tier,
+        projectPassExpiresAt: passExpiry,
       });
-      logger.info("onUserRoleChange: custom claims set", { uid, role });
+      logger.info("onUserRoleChange: custom claims set", { uid, role, tier });
     } catch (e: unknown) {
       const err = e as Error;
       logger.error("onUserRoleChange: setCustomUserClaims failed", {
@@ -679,7 +689,7 @@ export const onSiteVisitCreated = onDocumentCreated(
   },
 );
 
-// 12. Snag item raised → notify project owner
+// 12. Snag item raised → notify project owner (type-aware)
 export const onSnagItemCreated = onDocumentCreated(
   "projects/{projectId}/snag_items/{snagId}",
   async (event) => {
@@ -688,14 +698,33 @@ export const onSnagItemCreated = onDocumentCreated(
       const { projectId } = event.params;
       const snag = event.data?.data() ?? {};
       const { ownerUid, title } = await getProject(projectId);
-      await sendToUser(
-        ownerUid,
-        "Snag Item Raised",
-        `A new snag item '${snag.title ?? ""}' was added to ${title}`,
-        { type: "snag_new", projectId },
-        "snag_new",
-      );
-      logger.info("onSnagItemCreated: notification sent", { projectId });
+      const issueType = snag.issueType as string | undefined;
+      const description = snag.description as string | undefined ?? "";
+
+      if (issueType === "safetyIncident") {
+        // Safety incidents bypass issue_reports pref — always notified
+        await sendToUser(
+          ownerUid,
+          "🚨 Safety Incident Reported",
+          `A safety incident was reported on ${title}: ${description}`,
+          { type: "safety_incident", projectId },
+          // Pass undefined-equivalent: use a type that bypasses pref lookup
+          undefined,
+        );
+      } else {
+        const notifTitle =
+          issueType === "qualityIssue"
+            ? "Quality Issue Reported"
+            : "Issue Reported";
+        await sendToUser(
+          ownerUid,
+          notifTitle,
+          `A new issue was reported on ${title}: ${description}`,
+          { type: "issue_report", projectId },
+          "issue_report",
+        );
+      }
+      logger.info("onSnagItemCreated: notification sent", { projectId, issueType });
     } catch (e: unknown) {
       const err = e as Error;
       logger.error("onSnagItemCreated failed", {
@@ -712,7 +741,7 @@ export const onSnagItemCreated = onDocumentCreated(
 // Prerequisites:
 //  1. Enable the "Firestore → BigQuery" extension in Firebase Console to
 //     stream `projects`, `projects/{id}/costs`, and `rfq_requests` collections
-//     into BigQuery dataset `buildwise_analytics` automatically.
+//     into BigQuery dataset `wysebrix_analytics` automatically.
 //  2. Run `npm install` in functions/ after adding @google-cloud/bigquery
 //     to package.json dependencies.
 //  3. Grant the Cloud Functions service account BigQuery Data Editor role.
@@ -725,7 +754,7 @@ export const onSnagItemCreated = onDocumentCreated(
 export const dailyProjectRollup = onSchedule("0 2 * * *", async () => {
   try {
     const bq = new BigQuery();
-    const dataset = bq.dataset("buildwise_analytics");
+    const dataset = bq.dataset("wysebrix_analytics");
     const table = dataset.table("project_summary");
 
     // Aggregate from Firestore
@@ -947,7 +976,8 @@ export const onProjectDeleted = onDocumentDeleted(
   },
 );
 
-// 15. Chat message sent → notify other project members
+// 15. Chat message sent → notify ALL project members (including teamMemberUids)
+// Also handles @mention notifications (bypass chat pref for mentioned users).
 export const onChatMessageCreated = onDocumentCreated(
   "projects/{projectId}/chat/{messageId}",
   async (event) => {
@@ -959,27 +989,51 @@ export const onChatMessageCreated = onDocumentCreated(
       const senderName = (msg.senderName as string) ?? "Someone";
       const text = (msg.text as string) ?? "";
       const preview = text.length > 60 ? `${text.substring(0, 60)}…` : text;
+      const mentionedUids = (msg.mentions as string[]) ?? [];
 
       const projectDoc = await db.collection("projects").doc(projectId).get();
       const projectData = projectDoc.data() ?? {};
       const ownerUid = projectData.ownerUid as string;
       const assignedPmUid = projectData.assignedPmUid as string | undefined;
+      const teamMemberUids = (projectData.teamMemberUids as string[]) ?? [];
       const projectTitle = (projectData.title as string) ?? "your project";
 
-      const recipients = [ownerUid, assignedPmUid].filter(
-        (uid): uid is string => !!uid && uid !== senderUid,
-      );
+      // All project members (deduplicated, excluding sender)
+      const allRecipients = [
+        ...new Set([ownerUid, assignedPmUid, ...teamMemberUids]),
+      ].filter((uid): uid is string => !!uid && uid !== senderUid);
 
-      for (const uid of recipients) {
+      for (const uid of allRecipients) {
+        // For mentioned users: bypass the chat_messages pref (they always get notified)
+        const isMentioned = mentionedUids.includes(uid);
         await sendToUser(
           uid,
           `${senderName} — ${projectTitle}`,
-          preview,
+          isMentioned ? `@you: ${preview}` : preview,
           { type: "chat_message", projectId },
-          "chat_message",
+          isMentioned ? undefined : "chat_message",
         );
       }
-      logger.info("onChatMessageCreated: notifications sent", { projectId, recipients: recipients.length });
+
+      // Notify mentioned users not already in allRecipients
+      const extraMentions = mentionedUids.filter(
+        (uid) => uid !== senderUid && !allRecipients.includes(uid),
+      );
+      for (const uid of extraMentions) {
+        await sendToUser(
+          uid,
+          `${senderName} mentioned you — ${projectTitle}`,
+          preview,
+          { type: "chat_message", projectId },
+          undefined, // bypass pref check for mentions
+        );
+      }
+
+      logger.info("onChatMessageCreated: notifications sent", {
+        projectId,
+        recipients: allRecipients.length,
+        mentions: mentionedUids.length,
+      });
     } catch (e: unknown) {
       const err = e as Error;
       logger.error("onChatMessageCreated failed", {
@@ -989,6 +1043,119 @@ export const onChatMessageCreated = onDocumentCreated(
         stack: err.stack,
       });
     }
+  },
+);
+
+// 17. Task comment created → notify task assignee + project owner
+export const onTaskCommentCreated = onDocumentCreated(
+  "projects/{projectId}/tasks/{taskId}/comments/{commentId}",
+  async (event) => {
+    if (await dedupeEvent(event.id)) return;
+    try {
+      const { projectId, taskId } = event.params;
+      const comment = event.data?.data() ?? {};
+      const authorUid = comment.authorUid as string;
+      const authorName = (comment.authorName as string) ?? "Someone";
+      const text = (comment.text as string) ?? "";
+      const preview = text.length > 80 ? `${text.substring(0, 80)}…` : text;
+
+      const taskDoc = await db
+        .collection("projects").doc(projectId)
+        .collection("tasks").doc(taskId)
+        .get();
+      const taskData = taskDoc.data() ?? {};
+      const taskTitle = (taskData.title as string) ?? "a task";
+      const assigneeUid = taskData.assigneeUid as string | undefined;
+
+      const projectDoc = await db.collection("projects").doc(projectId).get();
+      const projectData = projectDoc.data() ?? {};
+      const ownerUid = projectData.ownerUid as string;
+      const projectTitle = (projectData.title as string) ?? "your project";
+
+      const recipients = [
+        ...new Set([ownerUid, assigneeUid]),
+      ].filter((uid): uid is string => !!uid && uid !== authorUid);
+
+      for (const uid of recipients) {
+        await sendToUser(
+          uid,
+          `${authorName} commented on "${taskTitle}"`,
+          preview,
+          { type: "task_comment", projectId, taskId },
+          "task_comment",
+        );
+      }
+      logger.info("onTaskCommentCreated: notifications sent", {
+        projectId,
+        taskId,
+        recipients: recipients.length,
+      });
+    } catch (e: unknown) {
+      const err = e as Error;
+      logger.error("onTaskCommentCreated failed", {
+        functionName: "onTaskCommentCreated",
+        eventId: event.id,
+        error: err.message,
+        stack: err.stack,
+      });
+    }
+  },
+);
+
+// 18. createInvitation callable — creates project invitation token
+export const createInvitation = onCall(
+  { enforceAppCheck: false },
+  async (request) => {
+    const caller = request.auth;
+    if (!caller) {
+      throw new HttpsError("unauthenticated", "Must be signed in.");
+    }
+
+    const {
+      projectId,
+      projectTitle,
+      inviterUid,
+      inviterName,
+      inviteeEmail,
+      role,
+      permissionTier,
+    } = request.data ?? {};
+
+    if (!projectId || !inviteeEmail) {
+      throw new HttpsError("invalid-argument", "projectId and inviteeEmail are required.");
+    }
+
+    // Verify caller is the project owner
+    const projectDoc = await db.collection("projects").doc(projectId).get();
+    if (!projectDoc.exists) {
+      throw new HttpsError("not-found", "Project not found.");
+    }
+    const projectData = projectDoc.data() ?? {};
+    if (projectData.ownerUid !== caller.uid) {
+      throw new HttpsError("permission-denied", "Only the project owner can create invitations.");
+    }
+
+    // Generate a UUID v4 using the already-imported crypto module
+    const token = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    await db.collection("invitations").doc(token).set({
+      projectId,
+      projectTitle: projectTitle ?? projectData.title ?? "",
+      inviterUid: caller.uid,
+      inviterName: inviterName ?? "",
+      inviteeEmail,
+      role: role ?? "other",
+      permissionTier: permissionTier ?? "collaborator",
+      status: "pending",
+      expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return {
+      token,
+      link: `wysebrix://join?token=${token}`,
+    };
   },
 );
 
@@ -1395,3 +1562,87 @@ export const onUserDataDeleted = onDocumentDeleted("users/{uid}", async (event) 
     logger.error("onUserDataDeleted failed", { uid, error: (e as Error).message });
   }
 });
+
+
+// ── Revoke User Sessions ─────────────────────────────────────────────────────
+// Callable by the user themselves to revoke all other active sessions.
+export const revokeUserSessions = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be signed in.");
+  }
+  const callerUid = request.auth.uid;
+  // Users can only revoke their own sessions (or admins can revoke any)
+  const targetUid = (request.data as { uid?: string }).uid ?? callerUid;
+  const isAdmin = request.auth.token?.admin === true;
+  if (targetUid !== callerUid && !isAdmin) {
+    throw new HttpsError("permission-denied", "Not authorised.");
+  }
+  try {
+    await admin.auth().revokeRefreshTokens(targetUid);
+    logger.info(`revokeUserSessions: tokens revoked for uid=${targetUid}`);
+    return { success: true };
+  } catch (e: unknown) {
+    logger.error("revokeUserSessions failed", { error: (e as Error).message });
+    throw new HttpsError("internal", "Failed to revoke sessions.");
+  }
+});
+
+// ── Daily: demote expired Project Pass users back to free ───────────────────
+export const checkExpiredProjectPasses = onSchedule(
+  { schedule: "every 24 hours", timeZone: "Africa/Accra" },
+  async () => {
+    const now = admin.firestore.Timestamp.now();
+    const snap = await db
+      .collection("users")
+      .where("subscriptionTier", "==", "project_pass")
+      .where("projectPassExpiresAt", "<=", now)
+      .get();
+
+    const batch = db.batch();
+    const claimsUpdates: Promise<void>[] = [];
+
+    for (const doc of snap.docs) {
+      batch.update(doc.ref, { subscriptionTier: "free" });
+      claimsUpdates.push(
+        admin.auth().setCustomUserClaims(doc.id, {
+          subscriptionTier: "free",
+          projectPassExpiresAt: null,
+        }),
+      );
+    }
+
+    await Promise.all([batch.commit(), ...claimsUpdates]);
+    logger.info(`checkExpiredProjectPasses: demoted ${snap.size} users`);
+  },
+);
+
+// ── Project quota enforcement (callable) ─────────────────────────────────────
+// Called by CreateProjectPage before creating a project.
+// Returns { allowed: true } or throws 'resource-exhausted'.
+export const enforceProjectQuota = onCall(
+  { enforceAppCheck: false },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "Sign in required");
+
+    const userDoc = await db.collection("users").doc(uid).get();
+    const userData = userDoc.data() ?? {};
+    const tier = (userData.subscriptionTier as string | undefined) ?? "free";
+
+    const maxProjects = tier === "pro" || tier === "business" ? 999 : tier === "project_pass" ? 999 : 1;
+
+    const snap = await db
+      .collection("projects")
+      .where("ownerUid", "==", uid)
+      .count()
+      .get();
+
+    if (snap.data().count >= maxProjects) {
+      throw new HttpsError(
+        "resource-exhausted",
+        `Your ${tier} plan supports ${maxProjects} project(s). Upgrade to create more.`,
+      );
+    }
+    return { allowed: true };
+  },
+);

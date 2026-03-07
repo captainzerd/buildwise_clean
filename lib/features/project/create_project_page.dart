@@ -1,12 +1,17 @@
-import '../../core/config/service_locator.dart';
 // lib/features/project/create_project_page.dart
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/config/service_locator.dart';
 import '../../core/models/phase.dart';
 import '../../core/models/project.dart';
 import '../../core/models/project_template.dart';
@@ -51,12 +56,37 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
   final _contingencyCtrl = TextEditingController();
 
   String? _region;
+  String? _projectType;
+  String? _buildingType;
+  double? _latitude;
+  double? _longitude;
+  bool _gettingLocation = false;
+  String? _architecturePlanUrl;
+  bool _uploadingPlan = false;
   DateTime? _permitApprovalDate;
   bool _saving = false;
   String? _error;
   bool _draftSaved = false;
 
   String? _draftKey;
+
+  static const _projectTypes = [
+    ('residential', 'Residential'),
+    ('commercial', 'Commercial'),
+    ('industrial', 'Industrial'),
+    ('infrastructure', 'Infrastructure'),
+  ];
+
+  static const _buildingTypes = [
+    ('bungalow', 'Bungalow'),
+    ('duplex', 'Duplex'),
+    ('terraced', 'Terraced House'),
+    ('apartment_block', 'Apartment Block'),
+    ('office', 'Office Building'),
+    ('warehouse', 'Warehouse'),
+    ('mixed_use', 'Mixed Use'),
+    ('other', 'Other'),
+  ];
 
   @override
   void initState() {
@@ -162,6 +192,56 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
     super.dispose();
   }
 
+  Future<void> _getCurrentLocation() async {
+    setState(() => _gettingLocation = true);
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      setState(() {
+        _latitude = pos.latitude;
+        _longitude = pos.longitude;
+      });
+    } catch (_) {
+      // Silently ignore location errors.
+    } finally {
+      if (mounted) setState(() => _gettingLocation = false);
+    }
+  }
+
+  Future<void> _uploadArchitecturePlan() async {
+    final uid = context.read<AuthService>().currentUser?.uid ?? 'anon';
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'dwg'],
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    if (file.path == null) return;
+
+    setState(() => _uploadingPlan = true);
+    try {
+      final ref = FirebaseStorage.instance
+          .ref('project_docs/$uid/arch_plans/${file.name}');
+      await ref.putFile(File(file.path!));
+      final url = await ref.getDownloadURL();
+      setState(() => _architecturePlanUrl = url);
+    } catch (_) {
+      // Ignore upload error — user can retry.
+    } finally {
+      if (mounted) setState(() => _uploadingPlan = false);
+    }
+  }
+
   Future<void> _pickPermitDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -186,6 +266,19 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
       final uid = auth.currentUser!.uid;
       final now = DateTime.now();
 
+      // Enforce server-side quota before creating.
+      try {
+        await FirebaseFunctions.instance
+            .httpsCallable('enforceProjectQuota')
+            .call();
+      } on FirebaseFunctionsException catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message ?? 'Project limit reached')),
+        );
+        return;
+      }
+
       final project = Project(
         id: '',
         ownerUid: uid,
@@ -197,6 +290,11 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
         location: _locationCtrl.text.trim().isEmpty
             ? null
             : _locationCtrl.text.trim(),
+        latitude: _latitude,
+        longitude: _longitude,
+        projectType: _projectType,
+        buildingType: _buildingType,
+        architecturePlanUrl: _architecturePlanUrl,
         region: _region ?? '',
         budget: double.tryParse(_budgetCtrl.text) ?? 0,
         permitNumber: _permitNumberCtrl.text.trim().isEmpty
@@ -240,12 +338,73 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
 
       await _clearDraft();
       if (!mounted) return;
+
+      // If no template was provided, prompt to apply the default Ghana build template.
+      if (widget.template == null) {
+        await _promptDefaultTemplate(context, projectId, projectService);
+      }
+
+      if (!mounted) return;
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  static const _defaultStages = [
+    'Land Acquisition',
+    'Design & Planning',
+    'Permit Approval',
+    'Substructure / Foundation',
+    'Superstructure',
+    'Roofing',
+    'Mechanical, Electrical & Plumbing',
+    'Finishing',
+    'External Works & Landscaping',
+    'Final Inspection & Handover',
+  ];
+
+  Future<void> _promptDefaultTemplate(
+    BuildContext ctx,
+    String projectId,
+    ProjectService ps,
+  ) async {
+    final apply = await showDialog<bool>(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        title: const Text('Apply Standard Stages?'),
+        content: const Text(
+          'Would you like to start with the standard Ghana construction stages?\n\n'
+          'Land Acquisition → Design → Permit → Foundation → Superstructure → '
+          'Roofing → MEP → Finishing → External Works → Handover',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Start blank'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Apply template'),
+          ),
+        ],
+      ),
+    );
+    if (apply != true || !ctx.mounted) return;
+    for (int i = 0; i < _defaultStages.length; i++) {
+      await ps.addPhase(
+        projectId,
+        Phase(
+          id: '',
+          name: _defaultStages[i],
+          order: i,
+          status: PhaseStatus.pending,
+          createdAt: DateTime.now(),
+        ),
+      );
     }
   }
 
@@ -286,6 +445,38 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
             ),
             const SizedBox(height: 14),
 
+            // Project type
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(
+                labelText: 'Project type (optional)',
+                border: OutlineInputBorder(),
+              ),
+              initialValue: _projectType,
+              items: [
+                const DropdownMenuItem(value: null, child: Text('— Select —')),
+                for (final t in _projectTypes)
+                  DropdownMenuItem(value: t.$1, child: Text(t.$2)),
+              ],
+              onChanged: (v) => setState(() => _projectType = v),
+            ),
+            const SizedBox(height: 14),
+
+            // Building type
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(
+                labelText: 'Building type (optional)',
+                border: OutlineInputBorder(),
+              ),
+              initialValue: _buildingType,
+              items: [
+                const DropdownMenuItem(value: null, child: Text('— Select —')),
+                for (final t in _buildingTypes)
+                  DropdownMenuItem(value: t.$1, child: Text(t.$2)),
+              ],
+              onChanged: (v) => setState(() => _buildingType = v),
+            ),
+            const SizedBox(height: 14),
+
             // Location
             TextFormField(
               controller: _locationCtrl,
@@ -295,6 +486,53 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
                 border: OutlineInputBorder(),
               ),
               textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 8),
+
+            // GPS location capture
+            Row(
+              children: [
+                if (_latitude != null)
+                  Expanded(
+                    child: Text(
+                      'GPS: ${_latitude!.toStringAsFixed(5)}, '
+                      '${_longitude!.toStringAsFixed(5)}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                    ),
+                  )
+                else
+                  const Expanded(
+                    child: Text('No GPS captured', style: TextStyle(fontSize: 12)),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: _gettingLocation ? null : _getCurrentLocation,
+                  icon: _gettingLocation
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.my_location, size: 18),
+                  label: Text(_latitude != null ? 'Retake GPS' : 'Use GPS'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+
+            // Architecture plan upload
+            _PlanUploadTile(
+              url: _architecturePlanUrl,
+              uploading: _uploadingPlan,
+              onUpload: _uploadArchitecturePlan,
+              onClear: () => setState(() => _architecturePlanUrl = null),
             ),
             const SizedBox(height: 14),
 
@@ -435,6 +673,58 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PlanUploadTile extends StatelessWidget {
+  const _PlanUploadTile({
+    required this.url,
+    required this.uploading,
+    required this.onUpload,
+    required this.onClear,
+  });
+
+  final String? url;
+  final bool uploading;
+  final VoidCallback onUpload;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(
+        url != null ? Icons.picture_as_pdf : Icons.upload_file_outlined,
+        color: url != null
+            ? Theme.of(context).colorScheme.primary
+            : Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+      title: Text(
+        url != null ? 'Architecture plan uploaded' : 'Architecture plan (optional)',
+        style: Theme.of(context).textTheme.bodyMedium,
+      ),
+      subtitle: url != null
+          ? Text(
+              'Tap × to remove',
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          : null,
+      trailing: uploading
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : url != null
+              ? IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: onClear,
+                )
+              : OutlinedButton(
+                  onPressed: onUpload,
+                  child: const Text('Upload'),
+                ),
     );
   }
 }

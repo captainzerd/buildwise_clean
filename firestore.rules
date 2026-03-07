@@ -26,6 +26,20 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.email_verified == true;
     }
 
+    // Returns the user's active subscription tier from custom claims.
+    function subTier() {
+      return isSignedIn()
+        ? request.auth.token.get('subscriptionTier', 'free')
+        : 'free';
+    }
+
+    // True when user has at least Project Pass / Pro / Business.
+    function isPaidUser() {
+      return subTier() == 'project_pass'
+          || subTier() == 'pro'
+          || subTier() == 'business';
+    }
+
     // ─────────────────────────────────────────
     // Users
     // ─────────────────────────────────────────
@@ -62,8 +76,20 @@ service cloud.firestore {
         return resource.data.assignedPmUid == request.auth.uid;
       }
 
+      function isTeamMember() {
+        return request.auth.uid in resource.data.teamMemberUids;
+      }
+
+      function isCollaborator() {
+        return request.auth.uid in resource.data.collaboratorUids;
+      }
+
+      function isObserver() {
+        return request.auth.uid in resource.data.observerUids;
+      }
+
       function isProjectMember() {
-        return isProjectOwner() || isAssignedPm() || isAdmin();
+        return isProjectOwner() || isAssignedPm() || isTeamMember() || isAdmin();
       }
 
       allow read: if isSignedIn() && isProjectMember();
@@ -79,12 +105,14 @@ service cloud.firestore {
 
       match /phases/{phaseId} {
         allow read: if isSignedIn() && isProjectMember();
-        allow write: if isEmailVerified() && isProjectMember();
+        allow write: if isEmailVerified() &&
+          (isProjectOwner() || isAssignedPm() || isCollaborator() || isAdmin());
       }
 
       match /costs/{costId} {
         allow read: if isSignedIn() && isProjectMember();
-        allow create: if isEmailVerified() && isProjectMember();
+        allow create: if isEmailVerified() &&
+          (isProjectOwner() || isAssignedPm() || isCollaborator() || isAdmin());
         allow update, delete: if isSignedIn() && isProjectOwner();
       }
 
@@ -171,6 +199,52 @@ service cloud.firestore {
         allow update: if isEmailVerified() && isProjectMember();
         allow delete: if isSignedIn() && (isProjectOwner() || isAdmin());
       }
+
+      match /tasks/{taskId} {
+        allow read: if isSignedIn() && isProjectMember();
+        allow create: if isEmailVerified() &&
+          (isProjectOwner() || isAssignedPm() || isCollaborator() || isAdmin());
+        allow update: if isEmailVerified() &&
+          (isProjectOwner() || isAssignedPm() || isCollaborator() || isAdmin());
+        allow delete: if isSignedIn() && (isProjectOwner() || isAdmin());
+
+        match /comments/{commentId} {
+          allow read: if isSignedIn() && isProjectMember();
+          allow create: if isEmailVerified() && isProjectMember();
+          allow update: if isEmailVerified() &&
+            resource.data.authorUid == request.auth.uid;
+          allow delete: if isSignedIn() && (
+            resource.data.authorUid == request.auth.uid ||
+            isProjectOwner() ||
+            isAdmin()
+          );
+        }
+      }
+
+      match /risks/{riskId} {
+        allow read: if isSignedIn() && isProjectMember();
+        allow create: if isEmailVerified() && isProjectMember();
+        allow update: if isEmailVerified() && isProjectMember();
+        allow delete: if isSignedIn() && (isProjectOwner() || isAdmin());
+      }
+
+      match /land_ownership/{recordId} {
+        // Only the project owner and admin can manage land ownership records.
+        allow read: if isSignedIn() && isProjectMember();
+        allow create: if isEmailVerified() && isProjectOwner();
+        allow update: if isEmailVerified() && (isProjectOwner() || isAdmin());
+        allow delete: if isSignedIn() && (isProjectOwner() || isAdmin());
+      }
+
+      match /audit_log/{logId} {
+        allow read: if isSignedIn() && (
+          isAdmin() ||
+          resource.data.ownerUid == request.auth.uid ||
+          resource.data.actorUid == request.auth.uid
+        );
+        allow create: if isEmailVerified() && isProjectMember();
+        allow update, delete: if false;
+      }
     }
 
     // ─────────────────────────────────────────
@@ -187,6 +261,11 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow create: if isEmailVerified();
         allow update, delete: if isAdmin();
+      }
+
+      match /portfolio/{docId} {
+        allow read: if isSignedIn();
+        allow write: if isOwner(uid) && isEmailVerified();
       }
     }
 
@@ -317,6 +396,61 @@ service cloud.firestore {
       allow update: if isAdmin();
       allow delete: if isSignedIn()
         && (resource.data.userUid == request.auth.uid || isAdmin());
+    }
+
+    // ─────────────────────────────────────────
+    // ID Verification (per-user sub-collection)
+    // ─────────────────────────────────────────
+
+    match /users/{uid}/id_verification/{docId} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if isOwner(uid) && isEmailVerified();
+    }
+
+    // ─────────────────────────────────────────
+    // Login Activity (per-user sub-collection)
+    // ─────────────────────────────────────────
+
+    match /users/{uid}/login_activity/{docId} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid);
+    }
+
+    // ─────────────────────────────────────────
+    // Work History (builder sub-collection)
+    // ─────────────────────────────────────────
+
+    match /builder_profiles/{uid}/work_history/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(uid) && isEmailVerified();
+    }
+
+    // ─────────────────────────────────────────
+    // Certifications (builder sub-collection)
+    // ─────────────────────────────────────────
+
+    match /builder_profiles/{uid}/certifications/{docId} {
+      allow read: if isSignedIn();
+      allow write: if (isOwner(uid) && isEmailVerified()) || isAdmin();
+    }
+
+    // ─────────────────────────────────────────
+    // Project Invitations
+    // ─────────────────────────────────────────
+
+    match /invitations/{token} {
+      allow read: if isSignedIn() && (
+        resource.data.inviteeEmail == request.auth.token.email ||
+        resource.data.inviterUid == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isEmailVerified();
+      allow update: if isSignedIn() && (
+        resource.data.inviteeEmail == request.auth.token.email ||
+        resource.data.inviterUid == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
     }
 
   }
