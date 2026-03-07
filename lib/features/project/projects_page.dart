@@ -1,4 +1,3 @@
-import '../../core/config/service_locator.dart';
 // lib/features/project/projects_page.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/config/service_locator.dart';
 import '../../core/models/app_user.dart';
 import '../../core/models/project.dart';
 import '../../core/services/auth_service.dart';
@@ -343,16 +343,17 @@ class _BuilderProjectsViewState extends State<_BuilderProjectsView> {
   Future<void> _loadMore() async {
     if (_loading || !_hasMore) return;
     setState(() => _loading = true);
-    final projectService = sl<ProjectService>();
     final uid = context.read<AuthService>().currentUser!.uid;
     try {
-      final (page, lastDoc) = await projectService.fetchBuilderProjectsPage(
+      final (page, lastDoc) = await sl<ProjectService>().fetchBuilderProjectsPage(
         uid,
         limit: _pageSize,
         startAfter: _cursor,
       );
       setState(() {
-        _projects.addAll(page);
+        for (final p in page) {
+          if (_projects.every((e) => e.id != p.id)) _projects.add(p);
+        }
         _cursor = lastDoc;
         _hasMore = page.length >= _pageSize;
         _loading = false;

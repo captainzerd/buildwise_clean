@@ -1,5 +1,5 @@
-name: buildwise
-description: "BuildWise — Construction cost estimation and project management for Ghana"
+name: wysebrix
+description: "WyseBrix — Construction cost estimation and project management for Ghana"
 publish_to: "none"
 version: 1.0.0+1
 
@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  async: ^2.11.0
   path: ^1.9.0
 
   # 3rd‑party
@@ -49,6 +50,7 @@ dependencies:
   shimmer: ^3.0.0
   google_sign_in: ^6.2.1
   flutter_stripe: ^11.0.0      # Stripe card / Apple Pay / Google Pay
+  pin_code_fields: ^8.0.1     # 6-box OTP input
 
  
 

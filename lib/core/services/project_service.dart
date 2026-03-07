@@ -1,7 +1,7 @@
 // lib/core/services/project_service.dart
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:async/async.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
@@ -17,6 +17,7 @@ import '../models/phase.dart';
 import '../models/project.dart';
 import '../models/project_document.dart';
 import '../models/project_update.dart';
+import '../models/team_member.dart';
 import '../repositories/i_project_repository.dart';
 import 'audit_service.dart';
 
@@ -37,7 +38,6 @@ class ProjectService implements IProjectRepository {
   final _phasesCache = <String, Stream<List<Phase>>>{};
   final _costsCache = <String, Stream<List<CostEntry>>>{};
   final _updatesCache = <String, Stream<List<ProjectUpdate>>>{};
-
 
   // ── Projects ──
 
@@ -64,35 +64,52 @@ class ProjectService implements IProjectRepository {
     final snap = await query.get();
     final docs = snap.docs;
     final projects = docs
-        .map((d) => Project.fromDoc(d as DocumentSnapshot<Map<String, dynamic>>))
+        .map(
+            (d) => Project.fromDoc(d as DocumentSnapshot<Map<String, dynamic>>))
         .toList();
     final cursor = docs.isNotEmpty && docs.length >= limit ? docs.last : null;
     return (projects, cursor);
   }
 
-  /// Fetch a single page of projects assigned to [builderUid], newest first.
+  /// Fetch one page of projects for [builderUid].
+  /// Merges `assignedPmUid` and `teamMemberUids` queries, deduplicates by ID.
   Future<(List<Project>, DocumentSnapshot?)> fetchBuilderProjectsPage(
     String builderUid, {
     int limit = 20,
     DocumentSnapshot? startAfter,
   }) async {
-    var query = _db
+    var q1 = _db
         .collection('projects')
         .where('assignedPmUid', isEqualTo: builderUid)
         .orderBy('createdAt', descending: true)
         .limit(limit);
+    if (startAfter != null) q1 = q1.startAfterDocument(startAfter);
 
-    if (startAfter != null) {
-      query = query.startAfterDocument(startAfter);
+    final q2 = _db
+        .collection('projects')
+        .where('teamMemberUids', arrayContains: builderUid)
+        .orderBy('createdAt', descending: true)
+        .limit(limit);
+
+    final results = await Future.wait([q1.get(), q2.get()]);
+    final seen = <String>{};
+    final merged = <Project>[];
+    for (final snap in results) {
+      for (final doc in snap.docs) {
+        if (seen.add(doc.id)) {
+          merged.add(
+            Project.fromDoc(doc as DocumentSnapshot<Map<String, dynamic>>),
+          );
+        }
+      }
     }
-
-    final snap = await query.get();
-    final docs = snap.docs;
-    final projects = docs
-        .map((d) => Project.fromDoc(d as DocumentSnapshot<Map<String, dynamic>>))
-        .toList();
-    final cursor = docs.isNotEmpty && docs.length >= limit ? docs.last : null;
-    return (projects, cursor);
+    merged.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    if (merged.length > limit) merged.removeRange(limit, merged.length);
+    final cursor = results[0].docs.isNotEmpty &&
+            results[0].docs.length >= limit
+        ? results[0].docs.last
+        : null;
+    return (merged, cursor);
   }
 
   /// Stream of projects owned by [ownerUid], newest first.
@@ -116,29 +133,42 @@ class ProjectService implements IProjectRepository {
         );
   }
 
-  /// Stream of projects assigned to [builderUid], newest first.
-  /// Uses the `assignedPmUid + createdAt` composite index.
+  /// Stream of projects assigned to or team-member'd by [builderUid], newest first.
+  /// Merges `assignedPmUid` and `teamMemberUids` queries, deduplicates by ID.
   /// [limit] controls page size — increase to load more.
   @override
   Stream<List<Project>> projectsForBuilder(
     String builderUid, {
     int limit = 20,
   }) {
-    return _db
+    final s1 = _db
         .collection('projects')
         .where('assignedPmUid', isEqualTo: builderUid)
         .orderBy('createdAt', descending: true)
         .limit(limit)
-        .snapshots()
-        .map(
-          (s) => s.docs
-              .map(
-                (d) => Project.fromDoc(
-                  d as DocumentSnapshot<Map<String, dynamic>>,
-                ),
-              )
-              .toList(),
-        );
+        .snapshots();
+    final s2 = _db
+        .collection('projects')
+        .where('teamMemberUids', arrayContains: builderUid)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots();
+
+    return StreamZip([s1, s2]).map((snaps) {
+      final seen = <String>{};
+      final merged = <Project>[];
+      for (final snap in snaps) {
+        for (final doc in snap.docs) {
+          if (seen.add(doc.id)) {
+            merged.add(
+              Project.fromDoc(doc as DocumentSnapshot<Map<String, dynamic>>),
+            );
+          }
+        }
+      }
+      merged.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return merged;
+    });
   }
 
   /// Stream of a single project doc.
@@ -222,6 +252,64 @@ class ProjectService implements IProjectRepository {
   ) =>
       updateProject(projectId, {'budgetAlertThreshold': threshold});
 
+  // ── Team members ──────────────────────────────────────────────────────────
+
+  /// Stream projects where [uid] is in the teamMemberUids array.
+  Stream<List<Project>> projectsForTeamMember(
+    String uid, {
+    int limit = 20,
+  }) {
+    return _db
+        .collection('projects')
+        .where('teamMemberUids', arrayContains: uid)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map(
+          (s) => s.docs
+              .map(
+                (d) => Project.fromDoc(
+                  d as DocumentSnapshot<Map<String, dynamic>>,
+                ),
+              )
+              .toList(),
+        );
+  }
+
+  /// Add a team member to a project. Updates both teamMembers list and
+  /// the teamMemberUids array used for Firestore array-contains queries.
+  /// Also updates collaboratorUids or observerUids based on permissionTier.
+  Future<void> addTeamMember(String projectId, TeamMember member) async {
+    final isObserver = member.permissionTier == 'observer';
+    await _db.collection('projects').doc(projectId).update({
+      'teamMembers': FieldValue.arrayUnion([member.toMap()]),
+      'teamMemberUids': FieldValue.arrayUnion([member.uid]),
+      if (isObserver)
+        'observerUids': FieldValue.arrayUnion([member.uid])
+      else
+        'collaboratorUids': FieldValue.arrayUnion([member.uid]),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Remove a team member by uid from a project. Reads the current teamMembers
+  /// list, filters out the member, then writes back atomically.
+  Future<void> removeTeamMember(String projectId, String memberUid) async {
+    final snap = await _db.collection('projects').doc(projectId).get();
+    final raw = (snap.data()?['teamMembers'] as List?)?.cast<Map>() ?? const [];
+    final updated = raw
+        .map((m) => Map<String, dynamic>.from(m))
+        .where((m) => m['uid'] != memberUid)
+        .toList();
+    await _db.collection('projects').doc(projectId).update({
+      'teamMembers': updated,
+      'teamMemberUids': FieldValue.arrayRemove([memberUid]),
+      'collaboratorUids': FieldValue.arrayRemove([memberUid]),
+      'observerUids': FieldValue.arrayRemove([memberUid]),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   /// Updates a project's budget and writes an audit log entry.
   Future<void> updateProjectBudget(
     String projectId,
@@ -237,8 +325,7 @@ class ProjectService implements IProjectRepository {
         type: AuditEventType.projectStatusChanged,
         actorUid: actorUid,
         actorName: actorName,
-        description:
-            'Budget amended to GHS ${newBudget.toStringAsFixed(2)}',
+        description: 'Budget amended to GHS ${newBudget.toStringAsFixed(2)}',
         ownerUid: ownerUid,
       );
     }
@@ -256,8 +343,7 @@ class ProjectService implements IProjectRepository {
       });
 
   @override
-  Future<void> removePm(String projectId) =>
-      updateProject(projectId, {
+  Future<void> removePm(String projectId) => updateProject(projectId, {
         'assignedPmUid': FieldValue.delete(),
         'assignedPmName': FieldValue.delete(),
       });
@@ -290,11 +376,8 @@ class ProjectService implements IProjectRepository {
   @override
   Future<String> addPhase(String projectId, Phase phase) async {
     try {
-      final ref = _db
-          .collection('projects')
-          .doc(projectId)
-          .collection('phases')
-          .doc();
+      final ref =
+          _db.collection('projects').doc(projectId).collection('phases').doc();
       await ref.set(phase.toMap());
       return ref.id;
     } catch (e) {
@@ -309,6 +392,13 @@ class ProjectService implements IProjectRepository {
     Map<String, dynamic> fields,
   ) async {
     try {
+      // Auto-inject actualStartDate when transitioning to inProgress
+      if (fields['status'] == PhaseStatus.inProgress.firestoreValue) {
+        fields.putIfAbsent(
+          'actualStartDate',
+          () => FieldValue.serverTimestamp(),
+        );
+      }
       await _db
           .collection('projects')
           .doc(projectId)
@@ -360,12 +450,30 @@ class ProjectService implements IProjectRepository {
           .collection('phases')
           .doc(phaseId)
           .update({
-            'status': PhaseStatus.completed.firestoreValue,
-            'rejectionComment': FieldValue.delete(),
-          });
+        'status': PhaseStatus.completed.firestoreValue,
+        'rejectionComment': FieldValue.delete(),
+        'actualEndDate': FieldValue.serverTimestamp(),
+      });
     } catch (e) {
       throw AppException.from(e);
     }
+  }
+
+  /// Computes overall project progress as a weighted percentage (by estimated cost).
+  /// Falls back to simple average when no phases have estimated costs.
+  static double overallProgressPercent(List<Phase> phases) {
+    if (phases.isEmpty) return 0;
+    final totalCost =
+        phases.fold<double>(0, (s, p) => s + (p.estimatedCostGhs ?? 0));
+    if (totalCost == 0) {
+      return phases.fold<double>(0, (s, p) => s + p.percentComplete) /
+          phases.length;
+    }
+    return phases.fold<double>(
+          0,
+          (s, p) => s + (p.estimatedCostGhs ?? 0) * p.percentComplete,
+        ) /
+        totalCost;
   }
 
   @override
@@ -381,10 +489,9 @@ class ProjectService implements IProjectRepository {
           .collection('phases')
           .doc(phaseId)
           .update({
-            'status': PhaseStatus.inProgress.firestoreValue,
-            if (comment != null && comment.isNotEmpty)
-              'rejectionComment': comment,
-          });
+        'status': PhaseStatus.inProgress.firestoreValue,
+        if (comment != null && comment.isNotEmpty) 'rejectionComment': comment,
+      });
     } catch (e) {
       throw AppException.from(e);
     }
@@ -417,6 +524,7 @@ class ProjectService implements IProjectRepository {
 
   /// Add a cost entry and atomically update the project's `amountSpent`.
   @override
+
   /// Returns the number of cost entries for [projectId] (used for free-tier gate).
   Future<int> costEntryCount(String projectId) async {
     final snap = await _db
@@ -436,8 +544,7 @@ class ProjectService implements IProjectRepository {
 
       await _db.runTransaction((tx) async {
         final snap = await tx.get(projectRef);
-        final current =
-            (snap.data()?['amountSpent'] as num?)?.toDouble() ?? 0;
+        final current = (snap.data()?['amountSpent'] as num?)?.toDouble() ?? 0;
         tx.set(entryRef, entry.toMap());
         tx.update(projectRef, {
           'amountSpent': current + entry.amountGhs,
@@ -469,8 +576,7 @@ class ProjectService implements IProjectRepository {
 
       await _db.runTransaction((tx) async {
         final snap = await tx.get(projectRef);
-        final current =
-            (snap.data()?['amountSpent'] as num?)?.toDouble() ?? 0;
+        final current = (snap.data()?['amountSpent'] as num?)?.toDouble() ?? 0;
         tx.delete(entryRef);
         tx.update(projectRef, {
           'amountSpent': (current - amountGhs).clamp(0, double.infinity),
@@ -639,10 +745,10 @@ class ProjectService implements IProjectRepository {
     String? displayName,
     String? contentType,
     DateTime? expiresAt,
+    DocumentVisibility visibility = DocumentVisibility.all,
   }) async {
     try {
-      final storagePath =
-          'project_uploads/$projectId/documents/$fileName';
+      final storagePath = 'project_uploads/$projectId/documents/$fileName';
       final ref = _storage.ref(storagePath);
       final metadata = contentType != null
           ? SettableMetadata(contentType: contentType)
@@ -659,10 +765,9 @@ class ProjectService implements IProjectRepository {
           .doc();
 
       final sizeBytes = await file.length();
-      final name =
-          (displayName != null && displayName.isNotEmpty)
-              ? displayName
-              : fileName;
+      final name = (displayName != null && displayName.isNotEmpty)
+          ? displayName
+          : fileName;
       await docRef.set(
         ProjectDocument(
           id: docRef.id,
@@ -675,6 +780,7 @@ class ProjectService implements IProjectRepository {
           sizeBytes: sizeBytes,
           createdAt: DateTime.now(),
           expiresAt: expiresAt,
+          visibility: visibility,
         ).toMap(),
       );
 
