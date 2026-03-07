@@ -123,7 +123,7 @@ class Step2Building extends StatelessWidget {
           const SizedBox(height: 16),
           // ── Quality ────────────────────────────────────────────────────────
           DropdownButtonFormField<String>(
-            value: controller.quality,
+            initialValue: controller.quality,
             items: const [
               DropdownMenuItem(value: 'Economy', child: Text('Economy')),
               DropdownMenuItem(value: 'Standard', child: Text('Standard')),
@@ -140,7 +140,7 @@ class Step2Building extends StatelessWidget {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: controller.foundation,
+                  initialValue: controller.foundation,
                   items: const [
                     DropdownMenuItem(value: 'Strip', child: Text('Strip')),
                     DropdownMenuItem(value: 'Raft', child: Text('Raft')),
@@ -172,7 +172,7 @@ class Step2Building extends StatelessWidget {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: controller.soil,
+                  initialValue: controller.soil,
                   items: const [
                     DropdownMenuItem(value: 'Firm', child: Text('Firm')),
                     DropdownMenuItem(value: 'Soft', child: Text('Soft')),
@@ -205,7 +205,7 @@ class Step2Building extends StatelessWidget {
           const SizedBox(height: 12),
           // ── Roof ───────────────────────────────────────────────────────────
           DropdownButtonFormField<String>(
-            value: controller.roof,
+            initialValue: controller.roof,
             items: const [
               DropdownMenuItem(
                 value: 'Pitched sheet',
