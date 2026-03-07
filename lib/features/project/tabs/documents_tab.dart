@@ -11,6 +11,7 @@ import '../../../core/services/project_service.dart';
 
 class DocsTab extends StatefulWidget {
   const DocsTab({
+    super.key,
     required this.projectId,
     required this.projectService,
     required this.currentUserUid,
@@ -379,6 +380,7 @@ class _DocTile extends StatelessWidget {
 
 class ProjectUploadDocSheet extends StatefulWidget {
   const ProjectUploadDocSheet({
+    super.key,
     required this.projectId,
     required this.uploaderUid,
     required this.projectService,
