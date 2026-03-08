@@ -14,6 +14,7 @@ import '../../core/widgets/app_page_route.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/tip_banner.dart';
 import '../../core/state/builder_project_state.dart';
+import 'builder_dashboard_page.dart';
 import 'builder_marketplace_page.dart';
 import 'export_sheet.dart';
 
@@ -25,7 +26,7 @@ class ProjectsPage extends StatelessWidget {
     final auth = context.watch<AuthService>();
 
     if (auth.role.isProfessional) {
-      return const _BuilderProjectsView();
+      return const BuilderDashboardPage();
     }
     return const _OwnerProjectsView();
   }
