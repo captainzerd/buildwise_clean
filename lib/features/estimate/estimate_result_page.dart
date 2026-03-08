@@ -14,6 +14,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/services/auth_service.dart';
 import '../../core/services/boq_service.dart';
+import '../../core/services/catalog_service.dart';
 import '../project/create_project_page.dart';
 import 'boq_page.dart';
 import 'state/estimate_controller.dart';
@@ -97,6 +98,39 @@ class _EstimateResultPageState extends State<EstimateResultPage>
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: cs.onPrimaryContainer.withValues(alpha: 0.7),
                         ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── Rates version disclaimer ─────────────────────────────────────
+          Consumer<CatalogService>(
+            builder: (context, catalog, _) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Rates current as of ${catalog.ratesVersionLabel}. '
+                      'Actual costs may vary — obtain a professional QS '
+                      'estimate before tendering.',
+                      style:
+                          Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                    ),
                   ),
                 ],
               ),
@@ -633,32 +667,38 @@ class _PhaseChartState extends State<_PhaseChart> {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (int i = 0; i < entries.length; i++)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 12,
-                                height: 12,
-                                decoration: BoxDecoration(
-                                  color: _palette[i % _palette.length],
-                                  shape: BoxShape.circle,
+                  Flexible(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (int i = 0; i < entries.length; i++)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                    color: _palette[i % _palette.length],
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                entries[i].key,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ],
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    entries[i].key,
+                                    style: const TextStyle(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
