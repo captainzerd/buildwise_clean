@@ -843,7 +843,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
     if (!tier.canExportPdf) {
       context.push(
         '/account/upgrade',
-        extra: {'tier': SubscriptionTier.pro.name, 'feature': 'PDF Reports'},
+        extra: {'tier': SubscriptionTier.projectPass.name, 'feature': 'PDF Reports'},
       );
       return;
     }

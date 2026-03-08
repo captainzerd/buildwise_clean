@@ -348,6 +348,22 @@ class PdfService {
             .take(10)
             .toList();
 
+    // Next milestone: first phase where isMilestone && not completed
+    final nextMilestone = phases.where(
+      (p) => p.isMilestone && p.status != PhaseStatus.completed,
+    ).firstOrNull;
+    // Fallback: first non-completed phase (milestone or not)
+    final nextPhase = nextMilestone ?? phases.where(
+      (p) => p.status != PhaseStatus.completed,
+    ).firstOrNull;
+
+    // Traffic-light colour helper
+    PdfColor trafficColor(double p) {
+      if (p >= 1.0) return PdfColors.red700;
+      if (p >= 0.8) return PdfColors.orange800;
+      return PdfColors.green700;
+    }
+
     // Progress bar
     pw.Widget progressBar(double p) {
       final filled = (p * 100).round().clamp(0, 100);
@@ -543,6 +559,26 @@ class PdfService {
           _section(
             'Budget Summary',
             [
+              pw.Row(
+                children: [
+                  pw.Container(
+                    width: 10,
+                    height: 10,
+                    decoration: pw.BoxDecoration(
+                      color: budget > 0 ? trafficColor(progress) : PdfColors.grey400,
+                      shape: pw.BoxShape.circle,
+                    ),
+                  ),
+                  pw.SizedBox(width: 6),
+                  pw.Text(
+                    budget > 0
+                        ? (progress >= 1.0 ? 'Over budget' : progress >= 0.8 ? 'Caution' : 'On track')
+                        : 'Budget not set',
+                    style: body.copyWith(color: budget > 0 ? trafficColor(progress) : PdfColors.grey400),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 6),
               _row('Budget (GHS)', _fmtMoney(budget, code: 'GHS'), body),
               _row('Amount Spent (GHS)', _fmtMoney(spent, code: 'GHS'), body),
               pw.Divider(color: PdfColors.grey400, thickness: 0.4),
@@ -581,6 +617,18 @@ class PdfService {
               [paymentsTable()],
               h2,
             ),
+            pw.SizedBox(height: 16),
+          ],
+
+          // ── Next Milestone ──────────────────────────────────────────────────
+          if (nextPhase != null) ...[
+            _section('Next Milestone', [
+              _row('Phase', nextPhase.name, body),
+              if (nextPhase.endDate != null)
+                _row('Target date', _fmtDate(nextPhase.endDate!), body),
+              if (nextPhase.estimatedCostGhs != null)
+                _row('Estimated cost', _fmtMoney(nextPhase.estimatedCostGhs!, code: 'GHS'), body),
+            ], h2,),
             pw.SizedBox(height: 16),
           ],
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 
 import '../../../core/config/service_locator.dart';
+import '../../../core/models/phase.dart';
 import '../../../core/models/project.dart';
 import '../../../core/services/payment_service.dart';
 import '../../../core/services/pdf_service.dart';
@@ -36,10 +37,10 @@ class _ReportBottomSheetState extends State<ReportBottomSheet> {
       final costs = await projectService.costEntriesStream(widget.project.id).first;
       final payments = await paymentService.paymentsStream(widget.project.id).first;
 
-      // Collect up to 6 photo URLs from phases that have completion photos
+      // One photo per completed phase, preferring the last URL in each phase's list
       final photoUrls = phases
-          .where((p) => p.completionPhotoUrls.isNotEmpty)
-          .expand((p) => p.completionPhotoUrls)
+          .where((p) => p.status == PhaseStatus.completed && p.completionPhotoUrls.isNotEmpty)
+          .map((p) => p.completionPhotoUrls.last)
           .take(6)
           .toList();
 
@@ -87,6 +88,7 @@ class _ReportBottomSheetState extends State<ReportBottomSheet> {
           const _InfoRow(icon: Icons.checklist_rounded, label: 'Phase completion table'),
           const _InfoRow(icon: Icons.attach_money_rounded, label: 'Cost breakdown & payment history'),
           const _InfoRow(icon: Icons.photo_library_outlined, label: 'Up to 6 progress photos'),
+          const _InfoRow(icon: Icons.flag_outlined, label: 'Next milestone'),
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
