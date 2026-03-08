@@ -8,6 +8,7 @@ import '../../core/config/service_locator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
@@ -83,13 +84,29 @@ class _EstimateResultPageState extends State<EstimateResultPage>
                     tween: Tween(begin: 0, end: r.totalPlannedGhs),
                     duration: const Duration(milliseconds: 1200),
                     curve: Curves.easeOut,
-                    builder: (_, v, __) => Text(
-                      controller.money(v),
-                      style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                            color: cs.onPrimaryContainer,
-                            fontWeight: FontWeight.bold,
+                    builder: (_, v, __) {
+                      return Column(
+                        children: [
+                          Text(
+                            controller.money(v),
+                            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                                  color: cs.onPrimaryContainer,
+                                  fontWeight: FontWeight.bold,
+                                ),
                           ),
-                    ),
+                          if (controller.currency != CurrencyInfo.ghs) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              '≈ GH₵${_formatAmount(v)}',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: cs.onPrimaryContainer.withValues(alpha: 0.8),
+                                  ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -304,6 +321,10 @@ class _EstimateResultPageState extends State<EstimateResultPage>
 
     Share.share(buf.toString(), subject: title);
   }
+
+  static final _amountFmt = NumberFormat('#,##0.##', 'en_US');
+
+  String _formatAmount(double v) => _amountFmt.format(v);
 
   Future<void> _save(
     BuildContext context,

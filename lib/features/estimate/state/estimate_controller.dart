@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -154,6 +155,45 @@ class EstimateController extends ChangeNotifier {
     }
 
     await restoreFormState();
+
+    // Auto-select currency based on device locale (only when user hasn't
+    // already persisted a non-GHS preference).
+    if (currency == CurrencyInfo.ghs) {
+      final locale = PlatformDispatcher.instance.locale;
+      final country = locale.countryCode?.toUpperCase() ?? '';
+      final detected = switch (country) {
+        'GB' => CurrencyInfo.gbp,
+        'US' => CurrencyInfo.usd,
+        'CA' => CurrencyInfo.cad,
+        'AU' => CurrencyInfo.aud,
+        'NG' => CurrencyInfo.ngn,
+        'DE' ||
+        'FR' ||
+        'NL' ||
+        'BE' ||
+        'AT' ||
+        'IE' ||
+        'PT' ||
+        'ES' ||
+        'IT' ||
+        'FI' ||
+        'LU' ||
+        'GR' ||
+        'SK' ||
+        'SI' ||
+        'EE' ||
+        'LV' ||
+        'LT' ||
+        'CY' ||
+        'MT' =>
+          CurrencyInfo.eur,
+        _ => CurrencyInfo.ghs, // GH and all others default to GHS
+      };
+      if (detected != CurrencyInfo.ghs) {
+        setCurrency(detected);
+      }
+    }
+
     notifyListeners();
   }
 
