@@ -33,7 +33,10 @@ import '../../../core/services/snag_service.dart';
 import '../../../core/services/task_service.dart';
 import '../builder_marketplace_page.dart';
 import '../widgets/budget_health_card.dart';
+import '../widgets/market_prices_card.dart';
 import '../widgets/whatsapp_contact_button.dart';
+import '../../../core/models/materials_price.dart';
+import '../../../core/services/materials_price_service.dart';
 
 class OverviewTab extends StatelessWidget {
   const OverviewTab({
@@ -688,6 +691,18 @@ class OverviewTab extends StatelessWidget {
                 ),
               ),
             );
+          },
+        ),
+
+        const SizedBox(height: 16),
+
+        // ── Ghana market prices card ──────────────────────────────────────────
+        StreamBuilder<MarketPricesSnapshot?>(
+          stream: MaterialsPriceService().snapshotStream(),
+          builder: (ctx, mpSnap) {
+            final mp = mpSnap.data;
+            if (mp == null || mp.items.isEmpty) return const SizedBox.shrink();
+            return MarketPricesCard(snapshot: mp);
           },
         ),
       ],

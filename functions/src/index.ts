@@ -1670,3 +1670,8 @@ export { updateReminderScheduler } from "./updateReminderScheduler";
 // Fires when amountSpent changes on a project; sends traffic-light budget
 // threshold notifications to the project owner.
 export { budgetAlertTrigger } from "./budgetAlerts";
+
+// ── Ghana market prices index ─────────────────────────────────────────────────
+// Runs daily at 06:00 UTC; writes seeded Accra supplier prices to
+// market_prices/ghana_current for display in the project overview card.
+export { refreshMarketPrices } from "./marketPricesUpdater";
