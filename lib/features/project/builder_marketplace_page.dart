@@ -203,7 +203,7 @@ class _BuilderMarketplacePageState extends State<BuilderMarketplacePage> {
 
           Expanded(
             child: StreamBuilder<List<BuilderProfile>>(
-              stream: service.listActive(),
+              stream: service.verifiedBuildersStream(),
               builder: (ctx, snap) {
                 if (snap.hasError) {
                   return Center(child: Text('Error: ${snap.error}'));
