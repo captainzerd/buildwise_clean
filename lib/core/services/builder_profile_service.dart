@@ -30,15 +30,13 @@ class BuilderProfileService extends ChangeNotifier {
         .collection('pm_profiles')
         .where('isVerified', isEqualTo: true)
         .limit(200)
+        .withConverter<BuilderProfile>(
+          fromFirestore: (snap, _) => BuilderProfile.fromDoc(snap),
+          toFirestore: (_, __) => {},
+        )
         .snapshots()
         .map(
-          (s) => s.docs
-              .map(
-                (d) => BuilderProfile.fromDoc(
-                  d as DocumentSnapshot<Map<String, dynamic>>,
-                ),
-              )
-              .toList()
+          (s) => s.docs.map((d) => d.data()).toList()
             ..sort((a, b) => b.trustScore.compareTo(a.trustScore)),
         );
   }
@@ -49,15 +47,13 @@ class BuilderProfileService extends ChangeNotifier {
         .collection('pm_profiles')
         .where('isActive', isEqualTo: true)
         .limit(200)
+        .withConverter<BuilderProfile>(
+          fromFirestore: (snap, _) => BuilderProfile.fromDoc(snap),
+          toFirestore: (_, __) => {},
+        )
         .snapshots()
         .map(
-          (s) => s.docs
-              .map(
-                (d) => BuilderProfile.fromDoc(
-                  d as DocumentSnapshot<Map<String, dynamic>>,
-                ),
-              )
-              .toList()
+          (s) => s.docs.map((d) => d.data()).toList()
             ..sort((a, b) => b.trustScore.compareTo(a.trustScore)),
         );
   }

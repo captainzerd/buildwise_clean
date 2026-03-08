@@ -9,6 +9,19 @@ import 'builder_profile_detail_page.dart';
 
 enum _SortOption { trustScore, rating, reviews, newest }
 
+const _kGhanaRegions = [
+  'Greater Accra',
+  'Ashanti',
+  'Western',
+  'Eastern',
+  'Central',
+  'Northern',
+  'Volta',
+  'Brong Ahafo',
+  'Upper East',
+  'Upper West',
+];
+
 /// Browse active builder profiles with search, filters, and sorting.
 /// Pass [onSelect] to use as a picker; omit for standalone browsing.
 /// Pass [initialRegion] to pre-filter by the project's region.
@@ -30,6 +43,7 @@ class _BuilderMarketplacePageState extends State<BuilderMarketplacePage> {
   BuilderRole? _filterRole;
   String _search = '';
   late bool _sameRegionOnly;
+  String? _selectedRegion;
   bool _ncaVerifiedOnly = false;
   bool _insuredOnly = false;
   bool _availableOnly = false;
@@ -47,6 +61,9 @@ class _BuilderMarketplacePageState extends State<BuilderMarketplacePage> {
 
     if (_sameRegionOnly && widget.initialRegion != null) {
       list = list.where((b) => b.region == widget.initialRegion).toList();
+    }
+    if (_selectedRegion != null) {
+      list = list.where((b) => b.region == _selectedRegion).toList();
     }
     if (_filterRole != null) {
       list = list.where((b) => b.role == _filterRole).toList();
@@ -99,7 +116,8 @@ class _BuilderMarketplacePageState extends State<BuilderMarketplacePage> {
       _insuredOnly ||
       _availableOnly ||
       _minRating > 0 ||
-      _sameRegionOnly;
+      _sameRegionOnly ||
+      _selectedRegion != null;
 
   @override
   Widget build(BuildContext context) {
@@ -188,12 +206,15 @@ class _BuilderMarketplacePageState extends State<BuilderMarketplacePage> {
             _FilterChipBar(
               initialRegion: widget.initialRegion,
               sameRegionOnly: _sameRegionOnly,
+              selectedRegion: _selectedRegion,
               ncaVerifiedOnly: _ncaVerifiedOnly,
               insuredOnly: _insuredOnly,
               availableOnly: _availableOnly,
               minRating: _minRating,
               filterRole: _filterRole,
               onToggleRegion: (v) => setState(() => _sameRegionOnly = v),
+              onClearSelectedRegion: () =>
+                  setState(() => _selectedRegion = null),
               onClearRole: () => setState(() => _filterRole = null),
               onClearRating: () => setState(() => _minRating = 0),
               onClearNca: () => setState(() => _ncaVerifiedOnly = false),
@@ -223,6 +244,7 @@ class _BuilderMarketplacePageState extends State<BuilderMarketplacePage> {
                       _availableOnly = false;
                       _minRating = 0;
                       _sameRegionOnly = false;
+                      _selectedRegion = null;
                     }),
                   );
                 }
@@ -246,6 +268,8 @@ class _BuilderMarketplacePageState extends State<BuilderMarketplacePage> {
   }
 
   void _showFilterSheet(BuildContext context) {
+    // Only show region picker in standalone mode (no initialRegion provided).
+    final showRegionPicker = widget.initialRegion == null;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -256,13 +280,16 @@ class _BuilderMarketplacePageState extends State<BuilderMarketplacePage> {
         insuredOnly: _insuredOnly,
         availableOnly: _availableOnly,
         minRating: _minRating,
-        onApply: (role, nca, insured, available, rating) {
+        selectedRegion: showRegionPicker ? _selectedRegion : null,
+        showRegionPicker: showRegionPicker,
+        onApply: (role, nca, insured, available, rating, region) {
           setState(() {
             _filterRole = role;
             _ncaVerifiedOnly = nca;
             _insuredOnly = insured;
             _availableOnly = available;
             _minRating = rating;
+            if (showRegionPicker) _selectedRegion = region;
           });
         },
       ),
@@ -276,12 +303,14 @@ class _FilterChipBar extends StatelessWidget {
   const _FilterChipBar({
     required this.initialRegion,
     required this.sameRegionOnly,
+    required this.selectedRegion,
     required this.ncaVerifiedOnly,
     required this.insuredOnly,
     required this.availableOnly,
     required this.minRating,
     required this.filterRole,
     required this.onToggleRegion,
+    required this.onClearSelectedRegion,
     required this.onClearRole,
     required this.onClearRating,
     required this.onClearNca,
@@ -291,12 +320,14 @@ class _FilterChipBar extends StatelessWidget {
 
   final String? initialRegion;
   final bool sameRegionOnly;
+  final String? selectedRegion;
   final bool ncaVerifiedOnly;
   final bool insuredOnly;
   final bool availableOnly;
   final double minRating;
   final BuilderRole? filterRole;
   final void Function(bool) onToggleRegion;
+  final VoidCallback onClearSelectedRegion;
   final VoidCallback onClearRole;
   final VoidCallback onClearRating;
   final VoidCallback onClearNca;
@@ -317,6 +348,16 @@ class _FilterChipBar extends StatelessWidget {
                 label: Text('${initialRegion!} only'),
                 selected: sameRegionOnly,
                 onSelected: onToggleRegion,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          if (selectedRegion != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Chip(
+                label: Text(selectedRegion!),
+                avatar: const Icon(Icons.map_outlined, size: 14),
+                onDeleted: onClearSelectedRegion,
                 visualDensity: VisualDensity.compact,
               ),
             ),
@@ -383,6 +424,8 @@ class _FilterSheet extends StatefulWidget {
     required this.availableOnly,
     required this.minRating,
     required this.onApply,
+    this.selectedRegion,
+    this.showRegionPicker = false,
   });
 
   final BuilderRole? filterRole;
@@ -390,12 +433,15 @@ class _FilterSheet extends StatefulWidget {
   final bool insuredOnly;
   final bool availableOnly;
   final double minRating;
+  final String? selectedRegion;
+  final bool showRegionPicker;
   final void Function(
     BuilderRole? role,
     bool nca,
     bool insured,
     bool available,
     double rating,
+    String? region,
   ) onApply;
 
   @override
@@ -408,6 +454,7 @@ class _FilterSheetState extends State<_FilterSheet> {
   late bool _insured;
   late bool _available;
   late double _rating;
+  late String? _region;
 
   @override
   void initState() {
@@ -417,11 +464,12 @@ class _FilterSheetState extends State<_FilterSheet> {
     _insured = widget.insuredOnly;
     _available = widget.availableOnly;
     _rating = widget.minRating;
+    _region = widget.selectedRegion;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -442,12 +490,41 @@ class _FilterSheetState extends State<_FilterSheet> {
                   _insured = false;
                   _available = false;
                   _rating = 0;
+                  _region = null;
                 }),
                 child: const Text('Clear all'),
               ),
             ],
           ),
           const SizedBox(height: 16),
+
+          // Region (standalone mode only)
+          if (widget.showRegionPicker) ...[
+            Text(
+              'Region',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                ChoiceChip(
+                  label: const Text('All regions'),
+                  selected: _region == null,
+                  onSelected: (_) => setState(() => _region = null),
+                ),
+                for (final r in _kGhanaRegions)
+                  ChoiceChip(
+                    label: Text(r),
+                    selected: _region == r,
+                    onSelected: (_) =>
+                        setState(() => _region = _region == r ? null : r),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
 
           // Role
           Text(
@@ -530,7 +607,14 @@ class _FilterSheetState extends State<_FilterSheet> {
 
           FilledButton(
             onPressed: () {
-              widget.onApply(_role, _nca, _insured, _available, _rating);
+              widget.onApply(
+                _role,
+                _nca,
+                _insured,
+                _available,
+                _rating,
+                _region,
+              );
               Navigator.of(context).pop();
             },
             child: const Text('Apply filters'),
