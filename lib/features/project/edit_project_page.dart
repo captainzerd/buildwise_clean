@@ -1,5 +1,6 @@
 // lib/features/project/edit_project_page.dart
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/config/service_locator.dart';
@@ -27,9 +28,19 @@ class _EditProjectPageState extends State<EditProjectPage> {
   late final TextEditingController _permitNumberCtrl;
   late final TextEditingController _contingencyCtrl;
   late double _alertThreshold;
+  String? _buildingType;
+  double? _latitude;
+  double? _longitude;
+  bool _gettingLocation = false;
   DateTime? _permitApprovalDate;
   bool _saving = false;
   String? _error;
+
+  static const _buildingTypes = [
+    ('residentialStandard', 'Residential — Bungalow / Duplex'),
+    ('residentialMediumRise', 'Residential — Medium-rise (3–6 floors)'),
+    ('residentialHighRise', 'Residential — High-rise (7+ floors)'),
+  ];
 
   @override
   void initState() {
@@ -47,6 +58,9 @@ class _EditProjectPageState extends State<EditProjectPage> {
     );
     _alertThreshold = p.budgetAlertThreshold.clamp(0.5, 0.95);
     _permitApprovalDate = p.permitApprovalDate;
+    _buildingType = p.buildingType;
+    _latitude = p.latitude;
+    _longitude = p.longitude;
   }
 
   @override
@@ -58,6 +72,32 @@ class _EditProjectPageState extends State<EditProjectPage> {
     _permitNumberCtrl.dispose();
     _contingencyCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    setState(() => _gettingLocation = true);
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      setState(() {
+        _latitude = pos.latitude;
+        _longitude = pos.longitude;
+      });
+    } catch (_) {
+      // Silently ignore location errors.
+    } finally {
+      if (mounted) setState(() => _gettingLocation = false);
+    }
   }
 
   Future<void> _pickPermitDate() async {
@@ -80,17 +120,21 @@ class _EditProjectPageState extends State<EditProjectPage> {
       final budget = double.tryParse(_budgetCtrl.text) ?? widget.project.budget;
       await sl<ProjectService>().updateProject(widget.project.id, {
         'title': _titleCtrl.text.trim(),
-        if (_descCtrl.text.trim().isNotEmpty) 'description': _descCtrl.text.trim(),
+        if (_descCtrl.text.trim().isNotEmpty)
+          'description': _descCtrl.text.trim(),
         if (_locationCtrl.text.trim().isNotEmpty)
           'location': _locationCtrl.text.trim(),
+        if (_latitude != null) 'latitude': _latitude,
+        if (_longitude != null) 'longitude': _longitude,
+        'projectType': 'residential',
+        if (_buildingType != null) 'buildingType': _buildingType,
         'budget': budget,
         'budgetAlertThreshold': _alertThreshold,
         if (_permitNumberCtrl.text.trim().isNotEmpty)
           'permitNumber': _permitNumberCtrl.text.trim(),
         if (_permitApprovalDate != null)
           'permitApprovalDate': _permitApprovalDate!.toIso8601String(),
-        'contingencyGhs':
-            double.tryParse(_contingencyCtrl.text.trim()) ?? 0,
+        'contingencyGhs': double.tryParse(_contingencyCtrl.text.trim()) ?? 0,
       });
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -141,12 +185,63 @@ class _EditProjectPageState extends State<EditProjectPage> {
               maxLines: 3,
             ),
             const SizedBox(height: 16),
+            // Building type
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(
+                labelText: 'Building type (optional)',
+                border: OutlineInputBorder(),
+              ),
+              initialValue: _buildingType,
+              items: [
+                const DropdownMenuItem(value: null, child: Text('— Select —')),
+                for (final t in _buildingTypes)
+                  DropdownMenuItem(value: t.$1, child: Text(t.$2)),
+              ],
+              onChanged: (v) => setState(() => _buildingType = v),
+            ),
+            const SizedBox(height: 16),
             TextFormField(
               controller: _locationCtrl,
               decoration: const InputDecoration(
                 labelText: 'Location (optional)',
                 border: OutlineInputBorder(),
               ),
+            ),
+            const SizedBox(height: 8),
+            // GPS
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _latitude != null
+                        ? 'GPS: ${_latitude!.toStringAsFixed(5)}, '
+                            '${_longitude!.toStringAsFixed(5)}'
+                        : 'No GPS recorded',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: _latitude != null
+                              ? Theme.of(context).colorScheme.primary
+                              : null,
+                        ),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _gettingLocation ? null : _getCurrentLocation,
+                  icon: _gettingLocation
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.my_location, size: 18),
+                  label: Text(_latitude != null ? 'Retake' : 'GPS'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -156,7 +251,8 @@ class _EditProjectPageState extends State<EditProjectPage> {
                 prefixText: 'GH₵ ',
                 border: OutlineInputBorder(),
               ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -198,7 +294,8 @@ class _EditProjectPageState extends State<EditProjectPage> {
                 prefixText: 'GH₵ ',
                 border: OutlineInputBorder(),
               ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return null;
                 final n = double.tryParse(v.trim());

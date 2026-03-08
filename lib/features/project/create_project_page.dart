@@ -72,7 +72,6 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
   final _contingencyCtrl = TextEditingController();
 
   String? _region;
-  String? _projectType;
   String? _buildingType;
   double? _latitude;
   double? _longitude;
@@ -87,13 +86,6 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
   bool _draftSaved = false;
 
   String? _draftKey;
-
-  static const _projectTypes = [
-    ('residential', 'Residential'),
-    ('commercial', 'Commercial'),
-    ('industrial', 'Industrial'),
-    ('infrastructure', 'Infrastructure'),
-  ];
 
   String? _specQuality;
   String? _specFoundation;
@@ -356,7 +348,7 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
             : _locationCtrl.text.trim(),
         latitude: _latitude,
         longitude: _longitude,
-        projectType: _projectType,
+        projectType: 'residential',
         buildingType: _buildingType,
         architecturePlanUrl: _architecturePlanUrl,
         region: _region ?? '',
@@ -534,22 +526,6 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
             ),
             const SizedBox(height: 14),
 
-            // Project type
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(
-                labelText: 'Project type (optional)',
-                border: OutlineInputBorder(),
-              ),
-              initialValue: _projectType,
-              items: [
-                const DropdownMenuItem(value: null, child: Text('— Select —')),
-                for (final t in _projectTypes)
-                  DropdownMenuItem(value: t.$1, child: Text(t.$2)),
-              ],
-              onChanged: (v) => setState(() => _projectType = v),
-            ),
-            const SizedBox(height: 14),
-
             // Building type
             DropdownButtonFormField<String>(
               isExpanded: true,
@@ -571,18 +547,6 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
                 DropdownMenuItem(
                   value: 'residentialHighRise',
                   child: Text('Residential — High-rise (7+ floors)'),
-                ),
-                DropdownMenuItem(
-                  value: 'commercialOffice',
-                  child: Text('Commercial — Office / Bank'),
-                ),
-                DropdownMenuItem(
-                  value: 'commercialRetail',
-                  child: Text('Commercial — Retail / Mixed Use'),
-                ),
-                DropdownMenuItem(
-                  value: 'commercialWarehouse',
-                  child: Text('Commercial — Warehouse / Factory'),
                 ),
               ],
               onChanged: (v) => setState(() => _buildingType = v),

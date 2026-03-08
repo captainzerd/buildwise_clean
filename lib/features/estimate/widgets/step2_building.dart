@@ -62,7 +62,11 @@ class Step2Building extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final t in BuildingTypology.values)
+              for (final t in const [
+                BuildingTypology.residentialStandard,
+                BuildingTypology.residentialMediumRise,
+                BuildingTypology.residentialHighRise,
+              ])
                 GestureDetector(
                   onTap: () => controller.setProgramme(typology_: t),
                   child: AnimatedContainer(
