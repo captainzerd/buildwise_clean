@@ -8,6 +8,7 @@
 
 import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:http/http.dart' as http;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 
@@ -24,12 +25,14 @@ class ProjectReportData {
     required this.phases,
     required this.costs,
     required this.payments,
+    this.photoUrls = const [],
   });
 
   final Project project;
   final List<Phase> phases;
   final List<CostEntry> costs;
   final List<PaymentRecord> payments;
+  final List<String> photoUrls; // HTTPS URLs to embed, max 6
 }
 
 class PdfService {
@@ -266,6 +269,23 @@ class PdfService {
 
   // ── Project Report ────────────────────────────────────────────────────────
 
+  pw.Widget _photoGrid(List<pw.MemoryImage> photos, pw.TextStyle body) {
+    final rows = <pw.Widget>[];
+    for (int i = 0; i < photos.length; i += 2) {
+      rows.add(pw.Row(
+        children: [
+          pw.Image(photos[i], width: 180, height: 130, fit: pw.BoxFit.cover),
+          if (i + 1 < photos.length) ...[
+            pw.SizedBox(width: 8),
+            pw.Image(photos[i + 1], width: 180, height: 130, fit: pw.BoxFit.cover),
+          ],
+        ],
+      ),);
+      rows.add(pw.SizedBox(height: 8));
+    }
+    return pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: rows);
+  }
+
   pw.Widget _cellPad(pw.Widget child) => pw.Padding(
         padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: child,
@@ -281,6 +301,16 @@ class PdfService {
 
   Future<Uint8List> generateProjectReport(ProjectReportData data) async {
     final (regular, bold) = await _loadFonts();
+
+    // Fetch up to 6 progress photos (skip failures silently)
+    final List<pw.MemoryImage> photos = [];
+    for (final url in data.photoUrls.take(6)) {
+      try {
+        final resp = await http.get(Uri.parse(url));
+        if (resp.statusCode == 200) photos.add(pw.MemoryImage(resp.bodyBytes));
+      } catch (_) {}
+    }
+
     final doc = pw.Document();
 
     final baseText = pw.TextStyle(font: regular, fontFallback: [regular]);
@@ -543,7 +573,7 @@ class PdfService {
           ],
 
           // ── Recent Payments ─────────────────────────────────────────────────
-          if (recentPayments.isNotEmpty)
+          if (recentPayments.isNotEmpty) ...[
             _section(
               payments.length > 10
                   ? 'Recent Payments (last 10 of ${payments.length})'
@@ -551,6 +581,14 @@ class PdfService {
               [paymentsTable()],
               h2,
             ),
+            pw.SizedBox(height: 16),
+          ],
+
+          // ── Progress Photos ──────────────────────────────────────────────────
+          if (photos.isNotEmpty) ...[
+            _section('Progress Photos (${photos.length})', [_photoGrid(photos, body)], h2),
+            pw.SizedBox(height: 16),
+          ],
         ],
       ),
     );

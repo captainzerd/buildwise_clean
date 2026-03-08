@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 // ignore: unnecessary_import
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/config/service_locator.dart';
@@ -22,7 +21,6 @@ import '../../core/services/contract_service.dart';
 import '../../core/services/deletion_request_service.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/services/paystack_service.dart';
-import '../../core/services/pdf_service.dart';
 import '../../core/services/project_service.dart';
 import '../../core/services/project_template_service.dart';
 import '../../core/services/snag_service.dart';
@@ -37,6 +35,7 @@ import 'tabs/overview_tab.dart';
 import 'tabs/risk_tab.dart';
 import 'tabs/work_tab.dart';
 import 'widgets/project_shared_widgets.dart';
+import 'widgets/report_bottom_sheet.dart';
 
 class ProjectDetailsPage extends StatefulWidget {
   const ProjectDetailsPage({
@@ -56,7 +55,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
   int _tabIndex = 0;
-  bool _generatingReport = false;
 
   // Sub-section indices for merged tabs (communicated back from child widgets).
   int _workSection = 0; // 0 = Phases, 1 = Monitor, 2 = Issues, 3 = Site Log
@@ -104,16 +102,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                 icon: const Icon(Icons.help_outline),
                 onPressed: () => _showHelp(context),
               ),
-              if (_generatingReport)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              else if (project != null)
+              if (project != null)
                 PopupMenuButton<_MenuAction>(
                   onSelected: (action) => _handleMenu(context, action, project),
                   itemBuilder: (_) => const [
@@ -656,7 +645,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
           );
         }
       case _MenuAction.generateReport:
-        await _generateReport(context, project);
+        _showReportSheet(context, project);
       case _MenuAction.export:
         if (context.mounted) {
           showModalBottomSheet<void>(
@@ -847,7 +836,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
     }
   }
 
-  Future<void> _generateReport(BuildContext context, Project project) async {
+  void _showReportSheet(BuildContext context, Project project) {
     // Gate behind Pro subscription
     final auth = context.read<AuthService>();
     final tier = auth.currentUser?.subscriptionTier ?? SubscriptionTier.free;
@@ -858,37 +847,12 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
       );
       return;
     }
-    setState(() => _generatingReport = true);
-    final projectService = sl<ProjectService>();
-    final paymentService = sl<PaymentService>();
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final phases = await projectService.phasesStream(widget.projectId).first;
-      final costs =
-          await projectService.costEntriesStream(widget.projectId).first;
-      final payments =
-          await paymentService.paymentsStream(widget.projectId).first;
-
-      final data = ProjectReportData(
-        project: project,
-        phases: phases,
-        costs: costs,
-        payments: payments,
-      );
-      final bytes = await PdfService().generateProjectReport(data);
-      final safeName =
-          project.title.replaceAll(RegExp(r'[^\w\s\-]'), '_').trim();
-      await Printing.sharePdf(
-        bytes: bytes,
-        filename: '${safeName}_report.pdf',
-      );
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Report failed: $e'), duration: const Duration(seconds: 10)),
-      );
-    } finally {
-      if (mounted) setState(() => _generatingReport = false);
-    }
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => ReportBottomSheet(project: project),
+    );
   }
 
   Future<void> _showStatusPicker(
