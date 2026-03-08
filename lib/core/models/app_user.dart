@@ -156,6 +156,16 @@ extension SubscriptionTierInfo on SubscriptionTier {
   bool get canAccessAnalytics =>
       this == SubscriptionTier.pro || this == SubscriptionTier.business;
 
+  /// Single-project budget utilisation and phase progress — available from Project Pass up.
+  bool get canAccessBasicAnalytics =>
+      this == SubscriptionTier.projectPass ||
+      this == SubscriptionTier.pro ||
+      this == SubscriptionTier.business;
+
+  /// Multi-project portfolio analytics — Pro and Business only.
+  bool get canAccessPortfolioAnalytics =>
+      this == SubscriptionTier.pro || this == SubscriptionTier.business;
+
   /// PDF / CSV export requires Project Pass, Pro, or Business.
   bool get canExportPdf => this != SubscriptionTier.free;
 
@@ -235,6 +245,13 @@ class AppUser {
   bool get isProjectPassActive =>
       subscriptionTier == SubscriptionTier.projectPass &&
       (projectPassExpiresAt?.isAfter(DateTime.now()) ?? false);
+
+  /// Single-project budget utilisation and phase progress — Project Pass and above.
+  bool get canAccessBasicAnalytics => subscriptionTier.canAccessBasicAnalytics;
+
+  /// Multi-project portfolio analytics — Pro and Business only.
+  bool get canAccessPortfolioAnalytics =>
+      subscriptionTier.canAccessPortfolioAnalytics;
 
   factory AppUser.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
