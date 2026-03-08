@@ -28,6 +28,7 @@ import '../../core/services/project_template_service.dart';
 import '../../core/services/snag_service.dart';
 import 'cost_analytics_page.dart';
 import 'export_sheet.dart';
+import 'progress_timeline_page.dart';
 // Chat: deferred to Phase 2 — using WhatsApp deeplink for MVP
 // import 'tabs/chat_tab.dart';
 import 'tabs/documents_tab.dart';
@@ -123,6 +124,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                     PopupMenuItem(
                       value: _MenuAction.viewAnalytics,
                       child: Text('View Analytics'),
+                    ),
+                    PopupMenuItem(
+                      value: _MenuAction.buildTimeline,
+                      child: Text('Build Timeline'),
                     ),
                     PopupMenuItem(
                       value: _MenuAction.generateReport,
@@ -639,6 +644,17 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
             ),
           );
         }
+      case _MenuAction.buildTimeline:
+        if (context.mounted) {
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => ProgressTimelinePage(
+                projectId: widget.projectId,
+                projectTitle: project.title,
+              ),
+            ),
+          );
+        }
       case _MenuAction.generateReport:
         await _generateReport(context, project);
       case _MenuAction.export:
@@ -957,6 +973,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
 enum _MenuAction {
   editProject,
   viewAnalytics,
+  buildTimeline,
   generateReport,
   export,
   viewAuditLog,
