@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -32,17 +33,28 @@ class ReceiptService {
     required String phaseId,
     required File file,
     required String receiptId,
+    void Function(double progress)? onProgress,
   }) async {
-    final ext = file.path.endsWith('.pdf') ? 'pdf' : 'jpg';
     final ref = _storage.ref(
-      'projects/$projectId/phases/$phaseId/receipts/$receiptId.$ext',
+      'projects/$projectId/phases/$phaseId/receipts/$receiptId.jpg',
     );
-    await ref.putFile(
+    final task = ref.putFile(
       file,
-      SettableMetadata(
-        contentType: ext == 'pdf' ? 'application/pdf' : 'image/jpeg',
-      ),
+      SettableMetadata(contentType: 'image/jpeg'),
     );
+    StreamSubscription<TaskSnapshot>? sub;
+    if (onProgress != null) {
+      sub = task.snapshotEvents.listen((snap) {
+        onProgress(
+          snap.bytesTransferred / (snap.totalBytes == 0 ? 1 : snap.totalBytes),
+        );
+      });
+    }
+    try {
+      await task;
+    } finally {
+      await sub?.cancel();
+    }
     return ref.getDownloadURL();
   }
 
@@ -70,6 +82,13 @@ class ReceiptService {
         .collection('receipts')
         .doc(receiptId)
         .delete();
+
+    // Best-effort: delete the Storage blob (ignore errors if already gone).
+    try {
+      await _storage
+          .ref('projects/$projectId/phases/$phaseId/receipts/$receiptId.jpg')
+          .delete();
+    } catch (_) {}
   }
 
   String newReceiptId() => const Uuid().v4();

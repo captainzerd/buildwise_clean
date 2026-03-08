@@ -1,12 +1,9 @@
-import 'dart:async';
 import 'dart:io';
 
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../core/config/service_locator.dart';
 import '../../../core/models/material_receipt.dart';
@@ -72,25 +69,24 @@ class _ReceiptUploadSectionState extends State<ReceiptUploadSection> {
                   style: Theme.of(context).textTheme.labelLarge,
                 ),
                 const Spacer(),
-                if (receipts.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: cs.primaryContainer,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      'GH₵${nf.format(total)}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: cs.onPrimaryContainer,
-                        fontWeight: FontWeight.w600,
-                      ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    'GH₵${nf.format(total)} submitted',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: cs.onPrimaryContainer,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -196,11 +192,9 @@ class _AddReceiptSheetState extends State<_AddReceiptSheet> {
   File? _receiptFile;
   bool _uploading = false;
   double _uploadProgress = 0;
-  StreamSubscription<TaskSnapshot>? _uploadSub;
 
   @override
   void dispose() {
-    _uploadSub?.cancel();
     _descriptionCtrl.dispose();
     _supplierCtrl.dispose();
     _amountCtrl.dispose();
@@ -258,6 +252,7 @@ class _AddReceiptSheetState extends State<_AddReceiptSheet> {
   }
 
   Future<void> _submit() async {
+    if (_uploading) return; // guard against double-tap before setState rebuilds
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_receiptFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -272,56 +267,46 @@ class _AddReceiptSheetState extends State<_AddReceiptSheet> {
     });
 
     try {
-      final receiptId = const Uuid().v4();
-      final storagePath =
-          'projects/${widget.projectId}/phases/${widget.phaseId}'
-          '/receipts/$receiptId.jpg';
-      final ref = FirebaseStorage.instance.ref(storagePath);
-      final task = ref.putFile(
-        _receiptFile!,
-        SettableMetadata(contentType: 'image/jpeg'),
+      final receiptId = widget.receiptService.newReceiptId();
+
+      final url = await widget.receiptService.uploadReceiptFile(
+        projectId: widget.projectId,
+        phaseId: widget.phaseId,
+        file: _receiptFile!,
+        receiptId: receiptId,
+        onProgress: (p) {
+          if (mounted) setState(() => _uploadProgress = p);
+        },
       );
 
-      _uploadSub = task.snapshotEvents.listen((snap) {
-        if (!mounted) return;
-        setState(() {
-          _uploadProgress = snap.bytesTransferred /
-              (snap.totalBytes == 0 ? 1 : snap.totalBytes);
-        });
-      });
-
-      await task;
-      await _uploadSub?.cancel();
-      _uploadSub = null;
-
-      final url = await ref.getDownloadURL();
       final amountGhs =
           double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0;
 
-      final receipt = MaterialReceipt(
-        id: receiptId,
-        projectId: widget.projectId,
-        phaseId: widget.phaseId,
-        description: _descriptionCtrl.text.trim(),
-        supplierName: _supplierCtrl.text.trim(),
-        amountGhs: amountGhs,
-        receiptUrl: url,
-        purchaseDate: _purchaseDate,
-        uploadedByUid: widget.uploadedByUid,
-        uploadedAt: DateTime.now(),
+      await widget.receiptService.addReceipt(
+        MaterialReceipt(
+          id: receiptId,
+          projectId: widget.projectId,
+          phaseId: widget.phaseId,
+          description: _descriptionCtrl.text.trim(),
+          supplierName: _supplierCtrl.text.trim(),
+          amountGhs: amountGhs,
+          receiptUrl: url,
+          purchaseDate: _purchaseDate,
+          uploadedByUid: widget.uploadedByUid,
+          uploadedAt: DateTime.now(),
+        ),
       );
 
-      await widget.receiptService.addReceipt(receipt);
-
       if (mounted) {
+        // Capture messenger before pop — context is invalid after the sheet is
+        // removed from the tree.
+        final sm = ScaffoldMessenger.of(context);
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
+        sm.showSnackBar(
           const SnackBar(content: Text('Receipt uploaded successfully.')),
         );
       }
     } catch (e) {
-      await _uploadSub?.cancel();
-      _uploadSub = null;
       if (mounted) {
         setState(() => _uploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
