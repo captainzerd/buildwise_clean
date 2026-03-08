@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/errors/app_exception.dart';
@@ -478,6 +479,8 @@ class EstimateController extends ChangeNotifier {
 
   // ── Display helpers ──
 
+  static final _nfGhs = NumberFormat('#,##0.##', 'en_US');
+
   /// Format [ghs] in the currently selected currency.
   String money(double ghs) {
     final sym = currency.symbol;
@@ -491,8 +494,7 @@ class EstimateController extends ChangeNotifier {
     return '$sym${_fmt(converted)}';
   }
 
-  String _fmt(double v) =>
-      v >= 1000 ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+  String _fmt(double v) => _nfGhs.format(v);
 
   /// Serialises current inputs + result to a plain map for cloud/local storage.
   /// [userId] must be provided by the caller before persisting.
