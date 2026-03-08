@@ -327,11 +327,23 @@ class _PhasesTabState extends State<_PhasesTab> {
                                   widget.projectId,
                                   phase.id,
                                 ),
-                                onApprove: () =>
-                                    widget.projectService.approvePhase(
-                                  widget.projectId,
-                                  phase.id,
-                                ),
+                                onApprove: () async {
+                                  await widget.projectService.approvePhase(
+                                    widget.projectId,
+                                    phase.id,
+                                  );
+                                  if (!context.mounted) return;
+                                  await showModalBottomSheet<void>(
+                                    context: context,
+                                    showDragHandle: true,
+                                    builder: (_) => _PhasePaymentPrompt(
+                                      phase: phase,
+                                      projectId: widget.projectId,
+                                      authorUid: widget.currentUserUid,
+                                      projectService: widget.projectService,
+                                    ),
+                                  );
+                                },
                                 onReject: (comment) =>
                                     widget.projectService.rejectPhase(
                                   widget.projectId,
@@ -2942,23 +2954,40 @@ class ProjectAddCostSheet extends StatefulWidget {
     required this.projectId,
     required this.authorUid,
     required this.projectService,
+    this.initialDescription,
+    this.initialAmountGhs,
   });
 
   final String projectId;
   final String authorUid;
   final ProjectService projectService;
 
+  /// Optional pre-fill values (e.g. from phase-approval payment prompt).
+  final String? initialDescription;
+  final double? initialAmountGhs;
+
   @override
   State<ProjectAddCostSheet> createState() => ProjectAddCostSheetState();
 }
 
 class ProjectAddCostSheetState extends State<ProjectAddCostSheet> {
-  final _descCtrl = TextEditingController();
-  final _amountCtrl = TextEditingController();
+  late final TextEditingController _descCtrl;
+  late final TextEditingController _amountCtrl;
   String _category = CostEntry.categories.first;
   File? _receipt;
   bool _saving = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _descCtrl = TextEditingController(text: widget.initialDescription ?? '');
+    _amountCtrl = TextEditingController(
+      text: widget.initialAmountGhs != null
+          ? NumberFormat('#,##0.##').format(widget.initialAmountGhs)
+          : '',
+    );
+  }
 
   @override
   void dispose() {
@@ -3508,6 +3537,122 @@ class ProjectAddUpdateSheetState extends State<ProjectAddUpdateSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Phase payment prompt ─────────────────────────────────────────────────────────
+//
+// Shown immediately after an owner approves a phase — prompts them to record
+// the builder payment while the approval is fresh.
+
+class _PhasePaymentPrompt extends StatelessWidget {
+  const _PhasePaymentPrompt({
+    required this.phase,
+    required this.projectId,
+    required this.authorUid,
+    required this.projectService,
+  });
+
+  final Phase phase;
+  final String projectId;
+  final String authorUid;
+  final ProjectService projectService;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final nf = NumberFormat('#,##0');
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.check_circle, color: cs.primary, size: 28),
+                const SizedBox(width: 10),
+                Text(
+                  'Phase Approved!',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: cs.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Ready to release payment for this phase?',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    phase.name,
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  if (phase.estimatedCostGhs != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Estimated: GH₵${nf.format(phase.estimatedCostGhs)}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Skip for now'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    icon: const Icon(Icons.payments_outlined, size: 16),
+                    label: const Text('Record Payment'),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        showDragHandle: true,
+                        builder: (_) => ProjectAddCostSheet(
+                          projectId: projectId,
+                          authorUid: authorUid,
+                          projectService: projectService,
+                          initialDescription:
+                              'Payment – ${phase.name}',
+                          initialAmountGhs: phase.estimatedCostGhs,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
