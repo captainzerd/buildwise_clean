@@ -10,6 +10,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/services/auth_service.dart';
 import '../../core/services/boq_service.dart';
@@ -294,15 +295,17 @@ class _EstimateResultPageState extends State<EstimateResultPage>
         'boqItems': boqItems,
         'createdAt': FieldValue.serverTimestamp(),
       };
+      final docId = const Uuid().v4();
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .collection('estimates')
-          .add(data);
+          .doc(docId)
+          .set(data);
       if (mounted) setState(() => _saved = true);
       messenger.showSnackBar(const SnackBar(content: Text('Estimate saved')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('Save failed: $e'), duration: const Duration(seconds: 10)));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
