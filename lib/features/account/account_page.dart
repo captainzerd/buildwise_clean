@@ -6,7 +6,9 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/models/app_user.dart';
+import '../../core/models/builder_profile.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/builder_profile_service.dart';
 import '../../core/services/contract_service.dart';
 import '../../core/services/csv_service.dart';
 import '../../core/services/project_service.dart';
@@ -60,6 +62,8 @@ class AccountPage extends StatelessWidget {
           _BuilderProfileTile(),
           const SizedBox(height: 8),
           _PmProfileTile(),
+          const SizedBox(height: 8),
+          _BuilderVerificationPrompt(uid: user.uid),
         ],
 
         // ── Activity section ───────────────────────────────────────────────
@@ -494,6 +498,107 @@ class _PmProfileTile extends StatelessWidget {
         trailing: const Icon(Icons.chevron_right),
         onTap: () => context.push('/account/profile/pm'),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Builder verification prompt card
+// ─────────────────────────────────────────────
+
+/// Shows a prompt card when the builder's profile has incomplete verifications.
+/// Streams the builder profile and lists any missing credential tiers,
+/// nudging the professional to complete verification for marketplace visibility.
+class _BuilderVerificationPrompt extends StatelessWidget {
+  const _BuilderVerificationPrompt({required this.uid});
+  final String uid;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<BuilderProfile?>(
+      stream: sl<BuilderProfileService>().profileStream(uid),
+      builder: (context, snap) {
+        final profile = snap.data;
+        if (profile == null) return const SizedBox.shrink();
+
+        final missing = <String>[];
+        if (profile.ghanaCardNumber == null) missing.add('Ghana Card ID');
+        if (profile.licenceVerificationStatus != 'verified') {
+          missing.add('NCA Licence');
+        }
+        if (!profile.isInsuranceValid) missing.add('Insurance (PLI)');
+        if (profile.businessRegStatus != 'verified') {
+          missing.add('Business Registration');
+        }
+
+        if (missing.isEmpty) return const SizedBox.shrink();
+
+        final cs = Theme.of(context).colorScheme;
+        return Card(
+          color: cs.primaryContainer.withValues(alpha: 0.4),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.verified_user_outlined,
+                      size: 18,
+                      color: cs.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Complete your verification',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              color: cs.primary,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Add the missing credentials below to appear higher in '
+                  'the builder marketplace:',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: cs.onPrimaryContainer,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                for (final item in missing)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.radio_button_unchecked,
+                          size: 14,
+                          color: cs.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          item,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: cs.onPrimaryContainer,
+                                  ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                FilledButton.tonal(
+                  onPressed: () => context.push('/account/profile/builder'),
+                  child: const Text('Update builder profile'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

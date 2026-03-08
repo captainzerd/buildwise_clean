@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/models/builder_profile.dart';
 import '../../core/services/builder_profile_service.dart';
+import '../../core/widgets/verification_badge.dart';
 import 'builder_profile_detail_page.dart';
 
 enum _SortOption { trustScore, rating, reviews, newest }
@@ -707,7 +708,7 @@ class _BuilderCard extends StatelessWidget {
               const SizedBox(height: 8),
 
               // Verification badges
-              _MiniVerificationBadges(builder: builder),
+              VerificationBadgeRow(profile: builder, compact: true),
 
               const SizedBox(height: 8),
 
@@ -799,82 +800,6 @@ class _BuilderCard extends StatelessWidget {
     if (parts.length == 1) return parts[0][0].toUpperCase();
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
-}
-
-// ── Mini verification badges (compact) ───────────────────────────────────────
-
-class _MiniVerificationBadges extends StatelessWidget {
-  const _MiniVerificationBadges({required this.builder});
-  final BuilderProfile builder;
-
-  @override
-  Widget build(BuildContext context) {
-    final badges = <Widget>[];
-
-    if (builder.isNcaVerified) {
-      badges.add(
-        _MiniTag(
-          icon: Icons.badge_outlined,
-          label: 'NCA',
-          color: Colors.blue,
-        ),
-      );
-    }
-    if (builder.businessRegStatus == 'verified') {
-      badges.add(
-        _MiniTag(
-          icon: Icons.business_outlined,
-          label: 'Reg.',
-          color: Colors.indigo,
-        ),
-      );
-    }
-    if (builder.isInsuranceValid) {
-      badges.add(
-        _MiniTag(
-          icon: Icons.shield_outlined,
-          label: 'Insured',
-          color: Colors.teal,
-        ),
-      );
-    }
-
-    if (badges.isEmpty) return const SizedBox.shrink();
-    return Wrap(spacing: 6, children: badges);
-  }
-}
-
-class _MiniTag extends StatelessWidget {
-  const _MiniTag({
-    required this.icon,
-    required this.label,
-    required this.color,
-  });
-  final IconData icon;
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 11, color: color),
-            const SizedBox(width: 3),
-            Text(
-              label,
-              style: TextStyle(
-                  fontSize: 10, color: color, fontWeight: FontWeight.w600,),
-            ),
-          ],
-        ),
-      );
 }
 
 // ── Meta chip ─────────────────────────────────────────────────────────────────

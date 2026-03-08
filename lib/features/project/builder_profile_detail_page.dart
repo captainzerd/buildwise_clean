@@ -11,6 +11,7 @@ import '../../core/models/portfolio_item.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/builder_profile_service.dart';
 import '../../core/services/portfolio_service.dart';
+import '../../core/widgets/verification_badge.dart';
 
 class BuilderProfileDetailPage extends StatefulWidget {
   const BuilderProfileDetailPage({
@@ -330,7 +331,7 @@ class _BuilderProfileDetailPageState extends State<BuilderProfileDetailPage> {
           const SizedBox(height: 16),
 
           // ── Verification badges ──────────────────────────────────────────
-          _VerificationBadgeRow(builder: b),
+          VerificationBadgeRow(profile: b),
 
           const SizedBox(height: 16),
 
@@ -618,115 +619,6 @@ class _TrustScorePill extends StatelessWidget {
       ),
     );
   }
-}
-
-// ── Verification badge row ────────────────────────────────────────────────────
-
-class _VerificationBadgeRow extends StatelessWidget {
-  const _VerificationBadgeRow({required this.builder});
-  final BuilderProfile builder;
-
-  @override
-  Widget build(BuildContext context) {
-    final badges = <_Badge>[];
-
-    if (builder.licenceVerificationStatus == 'verified' &&
-        builder.licenceDocUrls.containsKey('nca')) {
-      badges.add(
-        const _Badge(
-          icon: Icons.badge_outlined,
-          label: 'NCA Licensed',
-          color: Colors.blue,
-        ),
-      );
-    }
-
-    if (builder.businessRegStatus == 'verified') {
-      badges.add(
-        const _Badge(
-          icon: Icons.business_outlined,
-          label: 'Business Reg.',
-          color: Colors.indigo,
-        ),
-      );
-    }
-
-    if (builder.isInsuranceValid) {
-      badges.add(
-        const _Badge(
-          icon: Icons.shield_outlined,
-          label: 'Insured',
-          color: Colors.teal,
-        ),
-      );
-    }
-
-    if (builder.licenceVerificationStatus == 'verified' &&
-        builder.giaNumber != null) {
-      badges.add(
-        const _Badge(
-          icon: Icons.architecture_outlined,
-          label: 'GIA Member',
-          color: Colors.purple,
-        ),
-      );
-    }
-
-    if (builder.licenceVerificationStatus == 'verified' &&
-        builder.gioeNumber != null) {
-      badges.add(
-        const _Badge(
-          icon: Icons.engineering_outlined,
-          label: 'GIOE Member',
-          color: Colors.deepOrange,
-        ),
-      );
-    }
-
-    if (badges.isEmpty) return const SizedBox.shrink();
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 6,
-      children: badges,
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({
-    required this.icon,
-    required this.label,
-    required this.color,
-  });
-  final IconData icon;
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.4)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 13, color: color),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: color,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      );
 }
 
 // ── Reputation score cards ────────────────────────────────────────────────────
