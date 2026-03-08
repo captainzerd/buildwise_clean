@@ -82,6 +82,7 @@ class CatalogVersion {
 
   Map<String, dynamic> toMap() => {
         'effectiveDate': Timestamp.fromDate(effectiveDate),
+        if (publishedAt != null) 'publishedAt': Timestamp.fromDate(publishedAt!),
         if (publishedBy != null) 'publishedBy': publishedBy,
         if (publishedByName != null) 'publishedByName': publishedByName,
         'baseRatesPerM2': baseRatesPerM2,
