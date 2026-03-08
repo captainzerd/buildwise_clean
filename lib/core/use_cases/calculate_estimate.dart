@@ -215,8 +215,41 @@ class EstimationEngine {
   // Fixed lump-sum rates for add-ons (GhBC 2024)
   static const double _waterTankGhs = 5000.0;
   static const double _generatorHouseGhs = 12000.0;
-  static const double _storeyPremiumPerFloor = 0.10;
   static const double _curtainWallExtraOpeningsPct = 0.04;
+
+  // Typology-specific phase weights (fraction of base cost).
+  // Each map must sum to 1.0. The engine selects the appropriate set based on
+  // the input typology, overriding the generic catalog weights.
+  static const Map<String, Map<String, double>> _phaseWeightsByTypology = {
+    'residentialStandard': {
+      'Substructure': 0.15,
+      'Superstructure': 0.30,
+      'Roofing': 0.12,
+      'Finishes': 0.28,
+      'Services (MEP)': 0.15,
+    },
+    'residentialMediumRise': {
+      'Substructure': 0.16,
+      'Superstructure': 0.32,
+      'Roofing': 0.08,
+      'Finishes': 0.22,
+      'Services (MEP)': 0.22,
+    },
+    'residentialHighRise': {
+      'Substructure': 0.17,
+      'Superstructure': 0.33,
+      'Roofing': 0.06,
+      'Finishes': 0.20,
+      'Services (MEP)': 0.24,
+    },
+  };
+
+  /// Storey premium multiplier: first upper floor adds 16%, each subsequent
+  /// floor adds a further 10% (compound cost increase for taller buildings).
+  static double _storeyPremium(int floors) {
+    if (floors <= 1) return 1.0;
+    return 1.0 + 0.16 + (floors - 2).clamp(0, 99) * 0.10;
+  }
 
   EstimateResult calculate(EstimateInput i) {
     final totalArea = i.floors.fold<double>(0, (p, f) => p + f.areaM2);
@@ -225,8 +258,11 @@ class EstimationEngine {
     final baseGhs = totalArea * i.unitRateGhsPerM2 * i.regionalIndex;
 
     // ── Phase costs (before specification adjustments) ────────────────────────
+    // Use typology-specific weights when available; fall back to catalog weights.
+    final phasePercents =
+        _phaseWeightsByTypology[i.typology.name] ?? i.phasePercents;
     final Map<String, double> phaseGhs = {};
-    i.phasePercents.forEach((name, pct) {
+    phasePercents.forEach((name, pct) {
       phaseGhs[name] = baseGhs * pct;
     });
 
@@ -249,8 +285,7 @@ class EstimationEngine {
     };
     final typologyMul = i.typology.costMultiplier;
     final servicesMul = i.enhancedServices ? 1.18 : 1.00;
-    final storeyPremium =
-        i.floors.length > 1 ? 1.0 + (i.floors.length - 1) * _storeyPremiumPerFloor : 1.00;
+    final storeyPremium = _storeyPremium(i.floors.length);
 
     for (final key in phaseGhs.keys.toList()) {
       final lc = key.toLowerCase();
@@ -350,9 +385,9 @@ class EstimationEngine {
 
     final totalPlanned = netBeforeTax + taxesTotal + permit;
 
-    // Baseline phases (no spec multipliers)
+    // Baseline phases (no spec multipliers) — uses same typology-adjusted weights.
     final Map<String, double> baselinePhases = {};
-    i.phasePercents.forEach((name, pct) => baselinePhases[name] = baseGhs * pct);
+    phasePercents.forEach((name, pct) => baselinePhases[name] = baseGhs * pct);
     final baselineDirect =
         baselinePhases.values.fold<double>(0, (a, b) => a + b);
 

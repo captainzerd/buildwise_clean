@@ -20,6 +20,9 @@ class CatalogVersion {
     this.publishedBy,
     this.publishedByName,
     this.publishedAt,
+    this.electricityConnectionGhs = 15000.0,
+    this.boreholeCostGhs = 20000.0,
+    this.soilTestGhs = 5000.0,
   });
 
   final String id;
@@ -50,6 +53,11 @@ class CatalogVersion {
   final double contingencyDefaultPct;
   final List<TaxLineDefault> taxLines;
 
+  /// Optional add-ons shown as advisory line items in the estimate.
+  final double electricityConnectionGhs;
+  final double boreholeCostGhs;
+  final double soilTestGhs;
+
   // ── Firestore ──
 
   factory CatalogVersion.fromDoc(
@@ -77,6 +85,10 @@ class CatalogVersion {
       contingencyDefaultPct:
           (defaults['contingencyPct'] as num?)?.toDouble() ?? 10.0,
       taxLines: _parseTaxLines(d['taxLines']),
+      electricityConnectionGhs:
+          (d['electricityConnectionGhs'] as num?)?.toDouble() ?? 15000.0,
+      boreholeCostGhs: (d['boreholeCostGhs'] as num?)?.toDouble() ?? 20000.0,
+      soilTestGhs: (d['soilTestGhs'] as num?)?.toDouble() ?? 5000.0,
     );
   }
 
@@ -98,6 +110,9 @@ class CatalogVersion {
         'taxLines': [
           for (final t in taxLines) {'name': t.name, 'pct': t.pct},
         ],
+        'electricityConnectionGhs': electricityConnectionGhs,
+        'boreholeCostGhs': boreholeCostGhs,
+        'soilTestGhs': soilTestGhs,
       };
 
   // ── Fallback (used when Firestore is unavailable) ──
