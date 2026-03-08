@@ -43,7 +43,7 @@ enum DocumentCategory {
         DocumentCategory.landTitle => 'Land Title',
         DocumentCategory.indenture => 'Indenture / Deed',
         DocumentCategory.permit => 'Building Permit',
-        DocumentCategory.boq => 'Bill of Quantities',
+        DocumentCategory.boq => 'Indicative Quantity Schedule',
         DocumentCategory.receipt => 'Receipt / Invoice',
         DocumentCategory.contract => 'Contract',
         DocumentCategory.other => 'Other',

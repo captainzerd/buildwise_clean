@@ -11,6 +11,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 
+import '../models/boq_item.dart';
 import '../models/cost_entry.dart';
 import '../models/payment_record.dart';
 import '../models/phase.dart';
@@ -479,7 +480,7 @@ class PdfService {
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(
-              'Generated ${_fmtDate(DateTime.now())}  \u2022  BuildWise',
+              'Generated ${_fmtDate(DateTime.now())}  \u2022  WyseBrix \u2014 wysebrix.com',
               style: footerStyle,
             ),
             pw.Text(
@@ -550,6 +551,296 @@ class PdfService {
               [paymentsTable()],
               h2,
             ),
+        ],
+      ),
+    );
+
+    return doc.save();
+  }
+
+  // ── Portfolio Report ───────────────────────────────────────────────────────
+
+  /// Generates a multi-project PDF: cover page + one section per project.
+  Future<Uint8List> generatePortfolioReport(
+    List<ProjectReportData> projects, {
+    String ownerName = '',
+  }) async {
+    final (regular, bold) = await _loadFonts();
+    final doc = pw.Document();
+
+    final baseText = pw.TextStyle(font: regular, fontFallback: [regular]);
+    final h1 = baseText.copyWith(font: bold, fontSize: 20);
+    final h2 = baseText.copyWith(font: bold, fontSize: 14);
+    final h3 = baseText.copyWith(font: bold, fontSize: 11);
+    final body = baseText.copyWith(fontSize: 10);
+
+    final now = DateTime.now();
+    final exportDate = _fmtDate(now);
+
+    // ── Cover page ──
+    final totalBudget =
+        projects.fold<double>(0, (a, d) => a + d.project.budget);
+    final totalSpent =
+        projects.fold<double>(0, (a, d) => a + d.project.amountSpent);
+
+    doc.addPage(
+      pw.Page(
+        margin: const pw.EdgeInsets.all(40),
+        build: (ctx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Spacer(),
+            pw.Text('WyseBrix', style: h1),
+            pw.SizedBox(height: 8),
+            pw.Text('Portfolio Summary Report', style: h2),
+            pw.SizedBox(height: 24),
+            if (ownerName.isNotEmpty)
+              pw.Text('Prepared for: $ownerName', style: body),
+            pw.Text('Export date: $exportDate', style: body),
+            pw.Text('Projects included: ${projects.length}', style: body),
+            pw.SizedBox(height: 16),
+            pw.Divider(color: PdfColors.grey300),
+            pw.SizedBox(height: 16),
+            _row('Total Budget (GHS)', _fmtMoney(totalBudget, code: 'GHS'), body),
+            _row('Total Spent (GHS)', _fmtMoney(totalSpent, code: 'GHS'), body),
+            _row(
+              'Remaining (GHS)',
+              _fmtMoney((totalBudget - totalSpent).abs(), code: 'GHS'),
+              body,
+            ),
+            pw.Spacer(flex: 3),
+          ],
+        ),
+      ),
+    );
+
+    // ── One section per project ──
+    for (final data in projects) {
+      final project = data.project;
+      final budget = project.budget;
+      final spent = project.amountSpent;
+      final remaining = budget - spent;
+
+      doc.addPage(
+        pw.MultiPage(
+          margin: const pw.EdgeInsets.all(28),
+          header: (ctx) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(project.title, style: h2),
+              pw.Text(
+                'Status: ${project.status.label}   '
+                'Budget: ${_fmtMoney(budget, code: "GHS")}   '
+                'Spent: ${_fmtMoney(spent, code: "GHS")}',
+                style: body.copyWith(color: PdfColors.grey700),
+              ),
+              pw.Divider(color: PdfColors.grey300),
+            ],
+          ),
+          build: (ctx) => [
+            _section(
+              'Budget',
+              [
+                _row('Budget (GHS)', _fmtMoney(budget, code: 'GHS'), body),
+                _row('Spent (GHS)', _fmtMoney(spent, code: 'GHS'), body),
+                _row(
+                  remaining >= 0 ? 'Remaining (GHS)' : 'Over Budget (GHS)',
+                  _fmtMoney(remaining.abs(), code: 'GHS'),
+                  remaining >= 0
+                      ? body
+                      : body.copyWith(color: PdfColors.red700),
+                ),
+              ],
+              h3,
+            ),
+            pw.SizedBox(height: 12),
+            if (data.phases.isNotEmpty)
+              _section(
+                'Phases (${data.phases.length})',
+                [
+                  for (final ph in data.phases)
+                    _row(ph.name, ph.status.label, body),
+                ],
+                h3,
+              ),
+            pw.SizedBox(height: 12),
+            if (data.costs.isNotEmpty)
+              _section(
+                'Cost Entries (${data.costs.length})',
+                [
+                  for (final c in data.costs.take(10))
+                    _row(
+                      '${c.category}: ${c.description}',
+                      _fmtMoney(c.amountGhs, code: 'GHS'),
+                      body,
+                    ),
+                  if (data.costs.length > 10)
+                    pw.Text(
+                      '...and ${data.costs.length - 10} more',
+                      style: body.copyWith(color: PdfColors.grey600),
+                    ),
+                ],
+                h3,
+              ),
+          ],
+        ),
+      );
+    }
+
+    return doc.save();
+  }
+
+  // ── BOQ PDF ────────────────────────────────────────────────────────────────
+
+  /// Generates an Indicative Quantity Schedule PDF.
+  Future<Uint8List> generateBoqPdf({
+    String? projectName,
+    required double floorAreaSqm,
+    required List<BoqItem> items,
+  }) async {
+    final (regular, bold) = await _loadFonts();
+    final doc = pw.Document();
+
+    final baseText = pw.TextStyle(font: regular, fontFallback: [regular]);
+    final h1 = baseText.copyWith(font: bold, fontSize: 17);
+    final h2 = baseText.copyWith(font: bold, fontSize: 12);
+    final body = baseText.copyWith(fontSize: 9);
+    final bodyBold = body.copyWith(font: bold);
+    final small = baseText.copyWith(fontSize: 8, color: PdfColors.grey700);
+
+    final phases = items.map((e) => e.phase).toSet().toList();
+    final grandTotal = items.fold<double>(0, (s, e) => s + e.totalGhs);
+
+    pw.Widget cell(
+      String text,
+      pw.TextStyle style, {
+      bool right = false,
+    }) =>
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+          child: pw.Align(
+            alignment: right ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
+            child: pw.Text(text, style: style),
+          ),
+        );
+
+    pw.Widget phaseTable(String phase, List<BoqItem> rows) {
+      final sub = rows.fold<double>(0, (s, e) => s + e.totalGhs);
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(phase, style: h2),
+          pw.SizedBox(height: 3),
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.4),
+            columnWidths: const {
+              0: pw.FlexColumnWidth(3),
+              1: pw.FlexColumnWidth(1),
+              2: pw.FlexColumnWidth(1),
+              3: pw.FlexColumnWidth(1.5),
+              4: pw.FlexColumnWidth(1.5),
+            },
+            children: [
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(
+                  color: PdfColor.fromInt(0xFFF2F2F2),
+                ),
+                children: [
+                  cell('Description', bodyBold),
+                  cell('Unit', bodyBold),
+                  cell('Qty', bodyBold, right: true),
+                  cell('Rate (GHS)', bodyBold, right: true),
+                  cell('Total (GHS)', bodyBold, right: true),
+                ],
+              ),
+              for (final item in rows)
+                pw.TableRow(
+                  children: [
+                    cell(item.description, body),
+                    cell(item.unit, body),
+                    cell(item.quantity.toStringAsFixed(2), body, right: true),
+                    cell(_fmtMoney(item.unitRateGhs), body, right: true),
+                    cell(_fmtMoney(item.totalGhs), body, right: true),
+                  ],
+                ),
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(
+                  color: PdfColor.fromInt(0xFFFAFAFA),
+                ),
+                children: [
+                  cell('Sub-total', bodyBold),
+                  cell('', body),
+                  cell('', body),
+                  cell('', body),
+                  cell(_fmtMoney(sub, code: 'GHS'), bodyBold, right: true),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 10),
+        ],
+      );
+    }
+
+    final boqFooterStyle = body.copyWith(color: PdfColors.grey500, fontSize: 9);
+    final boqWatermarkStyle = baseText.copyWith(
+      color: PdfColors.grey500,
+      fontSize: 8,
+    );
+    doc.addPage(
+      pw.MultiPage(
+        margin: const pw.EdgeInsets.all(28),
+        footer: (ctx) => pw.Column(
+          children: [
+            pw.Center(
+              child: pw.Text(
+                'INDICATIVE QUANTITY SCHEDULE \u2014 NOT A CONTRACT DOCUMENT',
+                style: boqWatermarkStyle,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'WyseBrix \u2014 wysebrix.com',
+                  style: boqFooterStyle,
+                ),
+                pw.Text(
+                  '${ctx.pageNumber} / ${ctx.pagesCount}',
+                  style: boqFooterStyle,
+                ),
+              ],
+            ),
+          ],
+        ),
+        header: (ctx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text('Indicative Quantity Schedule', style: h1),
+            if (projectName != null && projectName.isNotEmpty)
+              pw.Text(projectName, style: body),
+            pw.Text(
+              'Floor area: ${floorAreaSqm.toStringAsFixed(0)} m²   |   '
+              'Generated: ${DateTime.now().toLocal().toString().split('.').first}',
+              style: small,
+            ),
+            pw.Divider(color: PdfColors.grey400, thickness: 0.5),
+            pw.SizedBox(height: 4),
+          ],
+        ),
+        build: (ctx) => [
+          for (final phase in phases)
+            phaseTable(phase, items.where((e) => e.phase == phase).toList()),
+          pw.Divider(color: PdfColors.grey500, thickness: 0.5),
+          pw.SizedBox(height: 4),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.end,
+            children: [
+              pw.Text('GRAND TOTAL (GHS)   ', style: bodyBold),
+              pw.Text(_fmtMoney(grandTotal, code: 'GHS'), style: h2),
+            ],
+          ),
         ],
       ),
     );

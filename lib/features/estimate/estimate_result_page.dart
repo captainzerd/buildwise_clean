@@ -236,7 +236,7 @@ class _EstimateResultPageState extends State<EstimateResultPage>
                 ),
               ),
               icon: const Icon(Icons.table_chart_outlined, size: 18),
-              label: const Text('View Bill of Quantities'),
+              label: const Text('View Indicative Quantity Schedule'),
             ),
           ),
 

@@ -841,9 +841,9 @@ class BoqTab extends StatelessWidget {
         if (doc == null || !doc.exists) {
           return const EmptyState(
             icon: Icons.table_chart_outlined,
-            title: 'No BOQ saved',
+            title: 'No IQS saved',
             message:
-                'Create a project from an estimate to attach a Bill of Quantities.',
+                'Create a project from an estimate to attach an Indicative Quantity Schedule.',
           );
         }
         final data = doc.data()!;
@@ -866,7 +866,7 @@ class BoqTab extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Bill of Quantities',
+                      'Indicative Quantity Schedule',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 12),
@@ -929,7 +929,7 @@ class BoqTab extends StatelessWidget {
                           ),
                         ),
                         icon: const Icon(Icons.table_chart_outlined),
-                        label: const Text('View full BOQ'),
+                        label: const Text('View full IQS'),
                       ),
                     ),
                   ],
@@ -1184,7 +1184,7 @@ class CostsTabState extends State<CostsTab> {
         const SnackBar(content: Text('Deletion request sent to owner.')),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
     }
   }
 }
@@ -2076,7 +2076,7 @@ class ProjectAddIssueSheetState extends State<ProjectAddIssueSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
         );
       }
     } finally {
@@ -2502,6 +2502,7 @@ class ProjectAddPhaseSheetState extends State<ProjectAddPhaseSheet> {
   Future<void> _showPhotoSourcePicker() async {
     await showModalBottomSheet<void>(
       context: context,
+      showDragHandle: true,
       builder: (_) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2903,6 +2904,7 @@ class ProjectAddCostSheetState extends State<ProjectAddCostSheet> {
   void _showReceiptPicker() {
     showModalBottomSheet<void>(
       context: context,
+      showDragHandle: true,
       builder: (_) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -3206,6 +3208,7 @@ class ProjectAddUpdateSheetState extends State<ProjectAddUpdateSheet> {
   void _showPhotoPicker() {
     showModalBottomSheet<void>(
       context: context,
+      showDragHandle: true,
       builder: (_) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,

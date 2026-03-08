@@ -360,7 +360,7 @@ class EstimateViewPage extends StatelessWidget {
             ),
           ),
           icon: const Icon(Icons.table_chart_outlined, size: 18),
-          label: const Text('View Bill of Quantities (BoQ)'),
+          label: const Text('View Indicative Quantity Schedule (IQS)'),
         ),
       ),
     );

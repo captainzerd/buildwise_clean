@@ -123,7 +123,7 @@ class _AdminPageState extends State<AdminPage> {
           _AdminTile(
             icon: Icons.construction,
             title: 'BOQ Unit Rates',
-            subtitle: 'Edit Bill of Quantities unit rates for all phases',
+            subtitle: 'Edit IQS unit rates for all phases',
             onTap: () => context.push('/admin/boq-rates'),
           ),
 
@@ -145,6 +145,26 @@ class _AdminPageState extends State<AdminPage> {
             title: 'Site Inspections',
             subtitle: 'View scheduled and completed site visits',
             onTap: () => context.push('/admin/site-visits'),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ── Identity Verification ──
+          _AdminTile(
+            icon: Icons.verified_user_outlined,
+            title: 'Identity Verification',
+            subtitle: 'Review and approve pending ID submissions',
+            onTap: () => context.push('/admin/id-verification'),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ── Licence Verification ──
+          _AdminTile(
+            icon: Icons.workspace_premium_outlined,
+            title: 'Licence Verification',
+            subtitle: 'Verify professional licence documents',
+            onTap: () => context.push('/admin/licence-verification'),
           ),
 
           const SizedBox(height: 12),
