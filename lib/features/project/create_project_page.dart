@@ -292,15 +292,41 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Pre-flight: ensure the user is signed in and has a verified email.
+    final auth = context.read<AuthService>();
+    final user = auth.currentUser;
+    if (user == null) {
+      setState(() => _error = 'You must be signed in to create a project.');
+      return;
+    }
+    if (!user.emailVerified) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Verify your email first'),
+          content: const Text(
+            'Please check your inbox and tap the verification link we sent you. '
+            'Once verified, reload the app and try again.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _saving = true;
       _error = null;
     });
 
     try {
-      final auth = context.read<AuthService>();
       final projectService = sl<ProjectService>();
-      final uid = auth.currentUser!.uid;
+      final uid = user.uid;
       final now = DateTime.now();
 
       // Enforce server-side quota before creating.
@@ -319,7 +345,7 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
       final project = Project(
         id: '',
         ownerUid: uid,
-        ownerName: auth.currentUser?.displayName,
+        ownerName: user.displayName,
         title: _titleCtrl.text.trim(),
         description: _descCtrl.text.trim().isEmpty
             ? null
@@ -525,6 +551,7 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
 
             // Building type
             DropdownButtonFormField<String>(
+              isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Building type (optional)',
                 border: OutlineInputBorder(),
@@ -534,27 +561,27 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
                 DropdownMenuItem(value: null, child: Text('— Select —')),
                 DropdownMenuItem(
                   value: 'residentialStandard',
-                  child: Text('Residential Standard (Bungalow / Duplex)'),
+                  child: Text('Residential — Bungalow / Duplex'),
                 ),
                 DropdownMenuItem(
                   value: 'residentialMediumRise',
-                  child: Text('Residential Medium-rise (Apt 3–6 storeys)'),
+                  child: Text('Residential — Medium-rise (3–6 floors)'),
                 ),
                 DropdownMenuItem(
                   value: 'residentialHighRise',
-                  child: Text('Residential High-rise (7+ storeys)'),
+                  child: Text('Residential — High-rise (7+ floors)'),
                 ),
                 DropdownMenuItem(
                   value: 'commercialOffice',
-                  child: Text('Commercial Office / Bank / Institution'),
+                  child: Text('Commercial — Office / Bank'),
                 ),
                 DropdownMenuItem(
                   value: 'commercialRetail',
-                  child: Text('Commercial Retail / Mixed Use'),
+                  child: Text('Commercial — Retail / Mixed Use'),
                 ),
                 DropdownMenuItem(
                   value: 'commercialWarehouse',
-                  child: Text('Commercial Warehouse / Factory'),
+                  child: Text('Commercial — Warehouse / Factory'),
                 ),
               ],
               onChanged: (v) => setState(() => _buildingType = v),
