@@ -68,6 +68,7 @@ class Project {
     this.specSoil,
     this.specRoof,
     this.specMETier,
+    this.updateFrequencyDays = 7,
   });
 
   final String id;
@@ -133,6 +134,9 @@ class Project {
   final String? specRoof;       // Pitched sheet | Concrete flat | Tile
   final String? specMETier;     // Basic | Enhanced
 
+  /// 0 = no requirement; 7 = weekly; 14 = fortnightly.
+  final int updateFrequencyDays;
+
   // ── Firestore ──
 
   factory Project.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -181,6 +185,7 @@ class Project {
       specSoil: d['specSoil'] as String?,
       specRoof: d['specRoof'] as String?,
       specMETier: d['specMETier'] as String?,
+      updateFrequencyDays: (d['updateFrequencyDays'] as num?)?.toInt() ?? 7,
     );
   }
 
@@ -223,6 +228,7 @@ class Project {
         if (specSoil != null) 'specSoil': specSoil!,
         if (specRoof != null) 'specRoof': specRoof!,
         if (specMETier != null) 'specMETier': specMETier!,
+        'updateFrequencyDays': updateFrequencyDays,
       };
 
   Project copyWith({
@@ -253,6 +259,7 @@ class Project {
     String? specSoil,
     String? specRoof,
     String? specMETier,
+    int? updateFrequencyDays,
   }) =>
       Project(
         id: id,
@@ -291,5 +298,6 @@ class Project {
         specSoil: specSoil ?? this.specSoil,
         specRoof: specRoof ?? this.specRoof,
         specMETier: specMETier ?? this.specMETier,
+        updateFrequencyDays: updateFrequencyDays ?? this.updateFrequencyDays,
       );
 }

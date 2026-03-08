@@ -29,6 +29,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
   late final TextEditingController _contingencyCtrl;
   late double _alertThreshold;
   String? _buildingType;
+  int _updateFrequencyDays = 7;
   double? _latitude;
   double? _longitude;
   bool _gettingLocation = false;
@@ -59,6 +60,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
     _alertThreshold = p.budgetAlertThreshold.clamp(0.5, 0.95);
     _permitApprovalDate = p.permitApprovalDate;
     _buildingType = p.buildingType;
+    _updateFrequencyDays = p.updateFrequencyDays;
     _latitude = p.latitude;
     _longitude = p.longitude;
   }
@@ -135,6 +137,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
         if (_permitApprovalDate != null)
           'permitApprovalDate': _permitApprovalDate!.toIso8601String(),
         'contingencyGhs': double.tryParse(_contingencyCtrl.text.trim()) ?? 0,
+        'updateFrequencyDays': _updateFrequencyDays,
       });
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -302,6 +305,22 @@ class _EditProjectPageState extends State<EditProjectPage> {
                 if (n == null || n < 0) return 'Enter a valid amount';
                 return null;
               },
+            ),
+            const SizedBox(height: 16),
+            // Required update frequency
+            DropdownButtonFormField<int>(
+              initialValue: _updateFrequencyDays,
+              decoration: const InputDecoration(
+                labelText: 'Required update frequency',
+                helperText: 'How often should the builder post a progress update?',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 0, child: Text('Not required')),
+                DropdownMenuItem(value: 7, child: Text('Weekly')),
+                DropdownMenuItem(value: 14, child: Text('Fortnightly')),
+              ],
+              onChanged: (v) => setState(() => _updateFrequencyDays = v ?? 7),
             ),
             const SizedBox(height: 24),
             Text(

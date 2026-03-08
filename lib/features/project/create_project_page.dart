@@ -92,6 +92,7 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
   String? _specSoil;
   String? _specRoof;
   String? _specMETier;
+  int _updateFrequencyDays = 7; // default: weekly
 
   @override
   void initState() {
@@ -364,6 +365,7 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
         specSoil: _specSoil,
         specRoof: _specRoof,
         specMETier: _specMETier,
+        updateFrequencyDays: _updateFrequencyDays,
         createdAt: now,
         updatedAt: now,
       );
@@ -766,6 +768,23 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
                 if (n == null || n < 0) return 'Enter a valid amount';
                 return null;
               },
+            ),
+            const SizedBox(height: 14),
+
+            // Required update frequency
+            DropdownButtonFormField<int>(
+              initialValue: _updateFrequencyDays,
+              decoration: const InputDecoration(
+                labelText: 'Required update frequency',
+                helperText: 'How often should the builder post a progress update?',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 0, child: Text('Not required')),
+                DropdownMenuItem(value: 7, child: Text('Weekly')),
+                DropdownMenuItem(value: 14, child: Text('Fortnightly')),
+              ],
+              onChanged: (v) => setState(() => _updateFrequencyDays = v ?? 7),
             ),
             const SizedBox(height: 8),
 

@@ -67,6 +67,7 @@ const notifTypeToPrefKey: Record<string, string> = {
   budget_alert:               "budget_alerts",
   task_comment:               "task_comments",
   chat_mention:               "chat_messages",
+  updateReminder:             "project_updates",
 };
 
 async function sendToUser(
@@ -1659,3 +1660,8 @@ export const enforceProjectQuota = onCall(
     return { allowed: true };
   },
 );
+
+// ── Update cadence reminders ─────────────────────────────────────────────────
+// Runs daily at 08:00 UTC; notifies builders (and owners when severely overdue)
+// when no project_update has been posted within the required updateFrequencyDays.
+export { updateReminderScheduler } from "./updateReminderScheduler";
