@@ -4,6 +4,7 @@
 // Requires at least [minPhotos] photos before the phase can be submitted for
 // owner approval (anti-fraud feature for diaspora clients).
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -45,18 +46,44 @@ class PhotoEvidenceSection extends StatefulWidget {
 class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
   bool _uploading = false;
   double _uploadProgress = 0;
+  StreamSubscription<TaskSnapshot>? _uploadSub;
+
+  @override
+  void dispose() {
+    _uploadSub?.cancel();
+    super.dispose();
+  }
 
   // ── Photo picker ──────────────────────────────────────────────────────────
 
   Future<void> _pickPhoto(ImageSource source) async {
-    final picker = ImagePicker();
-    final XFile? file = await picker.pickImage(
-      source: source,
-      imageQuality: 80,
-      maxWidth: 1920,
-    );
-    if (file == null) return;
-    await _uploadPhoto(file);
+    // Guard against double-tap: set uploading flag before any async gap.
+    if (_uploading) return;
+    setState(() {
+      _uploading = true;
+      _uploadProgress = 0;
+    });
+
+    try {
+      final picker = ImagePicker();
+      final XFile? file = await picker.pickImage(
+        source: source,
+        imageQuality: 80,
+        maxWidth: 1920,
+      );
+      if (file == null) {
+        if (mounted) setState(() => _uploading = false);
+        return;
+      }
+      await _uploadPhoto(file);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _uploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not pick photo: $e')),
+        );
+      }
+    }
   }
 
   // ── Geolocation (best-effort) ─────────────────────────────────────────────
@@ -83,11 +110,7 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
   // ── Firebase Storage upload ───────────────────────────────────────────────
 
   Future<void> _uploadPhoto(XFile file) async {
-    setState(() {
-      _uploading = true;
-      _uploadProgress = 0;
-    });
-
+    // Note: _uploading = true is already set by _pickPhoto before calling here.
     try {
       // Capture geotag in parallel with upload prep (best-effort)
       final geoFuture = _fetchGeoTag();
@@ -102,7 +125,7 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
         SettableMetadata(contentType: 'image/jpeg'),
       );
 
-      uploadTask.snapshotEvents.listen((snapshot) {
+      _uploadSub = uploadTask.snapshotEvents.listen((snapshot) {
         if (!mounted) return;
         setState(() {
           _uploadProgress =
@@ -113,6 +136,8 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
       });
 
       await uploadTask;
+      await _uploadSub?.cancel();
+      _uploadSub = null;
       final downloadUrl = await ref.getDownloadURL();
       final geoTag = await geoFuture;
 
@@ -148,6 +173,8 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
         }
       }
     } catch (e) {
+      await _uploadSub?.cancel();
+      _uploadSub = null;
       if (mounted) {
         setState(() => _uploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
