@@ -16,7 +16,8 @@ import '../../core/models/project_template.dart';
 import '../../core/services/audit_service.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/builder_profile_service.dart';
-import '../../core/services/chat_service.dart';
+// Chat: deferred to Phase 2 — using WhatsApp deeplink for MVP
+// import '../../core/services/chat_service.dart';
 import '../../core/services/contract_service.dart';
 import '../../core/services/deletion_request_service.dart';
 import '../../core/services/payment_service.dart';
@@ -27,7 +28,8 @@ import '../../core/services/project_template_service.dart';
 import '../../core/services/snag_service.dart';
 import 'cost_analytics_page.dart';
 import 'export_sheet.dart';
-import 'tabs/chat_tab.dart';
+// Chat: deferred to Phase 2 — using WhatsApp deeplink for MVP
+// import 'tabs/chat_tab.dart';
 import 'tabs/documents_tab.dart';
 import 'tabs/finance_tab.dart';
 import 'tabs/overview_tab.dart';
@@ -68,7 +70,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 6, vsync: this)
+    _tabs = TabController(length: 5, vsync: this)
       ..addListener(() {
         if (!_tabs.indexIsChanging) {
           setState(() => _tabIndex = _tabs.index);
@@ -197,7 +199,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                     text: 'Finance',),
                 Tab(icon: Icon(Icons.folder_outlined), text: 'Documents'),
                 Tab(icon: Icon(Icons.warning_amber_outlined), text: 'Risks'),
-                Tab(icon: Icon(Icons.forum_outlined), text: 'Chat'),
+                // Chat: deferred to Phase 2 — using WhatsApp deeplink for MVP
+                // Tab(icon: Icon(Icons.forum_outlined), text: 'Chat'),
               ],
             ),
           ),
@@ -262,13 +265,14 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                               observerUids: project.observerUids,
                             ),
                             RisksTab(projectId: widget.projectId),
-                            ChatTab(
-                              projectId: widget.projectId,
-                              currentUserUid: currentUserUid,
-                              currentUserName:
-                                  auth.currentUser?.displayName ?? 'You',
-                              chatService: sl<ChatService>(),
-                            ),
+                            // Chat: deferred to Phase 2 — using WhatsApp deeplink for MVP
+                            // ChatTab(
+                            //   projectId: widget.projectId,
+                            //   currentUserUid: currentUserUid,
+                            //   currentUserName:
+                            //       auth.currentUser?.displayName ?? 'You',
+                            //   chatService: sl<ChatService>(),
+                            // ),
                           ],
                         );
                       },

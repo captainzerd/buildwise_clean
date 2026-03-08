@@ -20,6 +20,7 @@ import '../../../core/models/site_visit.dart';
 import '../../../core/models/snag_item.dart';
 import '../../../core/models/team_member.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../core/models/builder_profile.dart';
 import '../../../core/services/builder_profile_service.dart';
 import '../../../core/services/contract_service.dart';
 import '../../../core/services/deletion_request_service.dart';
@@ -31,6 +32,7 @@ import '../../../core/services/site_visit_service.dart';
 import '../../../core/services/snag_service.dart';
 import '../../../core/services/task_service.dart';
 import '../builder_marketplace_page.dart';
+import '../widgets/whatsapp_contact_button.dart';
 
 class OverviewTab extends StatelessWidget {
   const OverviewTab({
@@ -452,6 +454,27 @@ class OverviewTab extends StatelessWidget {
                       label: const Text('Rate Builder'),
                       onPressed: () => _ratePm(context),
                     ),
+                  ),
+                  // WhatsApp deeplink — Phase 2 in-app chat deferred
+                  StreamBuilder<BuilderProfile?>(
+                    stream: builderProfileService
+                        .profileStream(project.assignedPmUid!),
+                    builder: (ctx, snap) {
+                      final phone = snap.data?.phone ?? '';
+                      if (phone.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: WhatsAppContactButton(
+                            phone: phone,
+                            label: 'Message Builder on WhatsApp',
+                            message:
+                                'Hi, I am contacting you about project: ${project.title}',
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ],
