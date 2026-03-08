@@ -332,6 +332,7 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.message ?? 'Project limit reached')),
         );
+        setState(() => _saving = false);
         return;
       }
 
