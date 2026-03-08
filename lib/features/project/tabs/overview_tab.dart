@@ -32,6 +32,7 @@ import '../../../core/services/site_visit_service.dart';
 import '../../../core/services/snag_service.dart';
 import '../../../core/services/task_service.dart';
 import '../builder_marketplace_page.dart';
+import '../widgets/budget_health_card.dart';
 import '../widgets/whatsapp_contact_button.dart';
 
 class OverviewTab extends StatelessWidget {
@@ -369,6 +370,17 @@ class OverviewTab extends StatelessWidget {
               ],
             ),
           ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // ── Budget health card ────────────────────────────────────────────────
+        StreamBuilder<List<Phase>>(
+          stream: projectService.phasesStream(projectId),
+          builder: (ctx, phSnap) {
+            final phases = phSnap.data ?? [];
+            return BudgetHealthCard(project: project, phases: phases);
+          },
         ),
 
         const SizedBox(height: 16),

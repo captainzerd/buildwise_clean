@@ -1665,3 +1665,8 @@ export const enforceProjectQuota = onCall(
 // Runs daily at 08:00 UTC; notifies builders (and owners when severely overdue)
 // when no project_update has been posted within the required updateFrequencyDays.
 export { updateReminderScheduler } from "./updateReminderScheduler";
+
+// ── Budget health alerts ──────────────────────────────────────────────────────
+// Fires when amountSpent changes on a project; sends traffic-light budget
+// threshold notifications to the project owner.
+export { budgetAlertTrigger } from "./budgetAlerts";
