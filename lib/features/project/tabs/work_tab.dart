@@ -29,6 +29,7 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/shimmer_box.dart';
 import '../../estimate/boq_page.dart';
 import '../widgets/phases_timeline.dart';
+import '../widgets/photo_evidence_section.dart';
 import '../widgets/project_shared_widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
@@ -274,6 +275,7 @@ class _PhasesTabState extends State<_PhasesTab> {
                                   );
                               },
                               child: _PhaseCard(
+                                projectId: widget.projectId,
                                 phase: phase,
                                 isOwner: widget.isOwner,
                                 isBuilder: widget.isBuilder,
@@ -486,6 +488,7 @@ class _EvKpi extends StatelessWidget {
 
 class _PhaseCard extends StatelessWidget {
   const _PhaseCard({
+    required this.projectId,
     required this.phase,
     required this.isOwner,
     required this.isBuilder,
@@ -496,6 +499,7 @@ class _PhaseCard extends StatelessWidget {
     required this.onReject,
   });
 
+  final String projectId;
   final Phase phase;
   final bool isOwner;
   final bool isBuilder;
@@ -542,6 +546,8 @@ class _PhaseCard extends StatelessWidget {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                _PhotoCountBadge(count: phase.completionPhotoUrls.length),
+                const SizedBox(width: 4),
                 _PhaseStatusChip(status: phase.status),
                 const SizedBox(width: 4),
                 if (isOwner)
@@ -663,8 +669,32 @@ class _PhaseCard extends StatelessWidget {
                 ),
               ),
             ),
-          // Approval action buttons
+          // ── Photo evidence section (builder only, in-progress phases) ──────
           if (isBuilder && phase.status == PhaseStatus.inProgress)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: PhotoEvidenceSection(
+                projectId: projectId,
+                phaseId: phase.id,
+                photoUrls: phase.completionPhotoUrls,
+                onPhotosChanged: () {
+                  // Firestore stream on the parent will auto-refresh the list.
+                },
+              ),
+            ),
+          // ── Approval action buttons ────────────────────────────────────────
+          if (isBuilder && phase.status == PhaseStatus.inProgress) ...[
+            if (phase.completionPhotoUrls.length < 2)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Text(
+                  'Add at least 2 progress photos to submit for approval.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: SizedBox(
@@ -672,10 +702,13 @@ class _PhaseCard extends StatelessWidget {
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.check_circle_outline, size: 16),
                   label: const Text('Submit for Approval'),
-                  onPressed: onSubmitForApproval,
+                  onPressed: phase.completionPhotoUrls.length >= 2
+                      ? onSubmitForApproval
+                      : null,
                 ),
               ),
             ),
+          ],
           if (isOwner && phase.status == PhaseStatus.pendingApproval) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -700,7 +733,8 @@ class _PhaseCard extends StatelessWidget {
               ),
             ),
           ],
-          if (phase.completionPhotoUrls.isNotEmpty)
+          // Owner/non-builder view: show existing photos read-only
+          if (!isBuilder && phase.completionPhotoUrls.isNotEmpty)
             SizedBox(
               height: 72,
               child: ListView.separated(
@@ -814,6 +848,32 @@ class _PhaseStatusChip extends StatelessWidget {
       child: Text(
         status.label,
         style: TextStyle(fontSize: 11, color: fg),
+      ),
+    );
+  }
+}
+
+// ── Photo count badge (shown on every phase card) ──────────────────────────────
+
+class _PhotoCountBadge extends StatelessWidget {
+  const _PhotoCountBadge({required this.count});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final meetsMinimum = count >= 2;
+    final bg = meetsMinimum ? Colors.green.shade100 : Colors.grey.shade200;
+    final fg = meetsMinimum ? Colors.green.shade800 : Colors.grey.shade600;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        count == 1 ? '1 photo' : '$count photos',
+        style: TextStyle(fontSize: 10, color: fg, fontWeight: FontWeight.w600),
       ),
     );
   }

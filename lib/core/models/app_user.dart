@@ -169,8 +169,9 @@ extension SubscriptionTierInfo on SubscriptionTier {
   /// PDF / CSV export requires Project Pass, Pro, or Business.
   bool get canExportPdf => this != SubscriptionTier.free;
 
-  /// Photo uploads require Project Pass, Pro, or Business.
-  bool get canUploadPhotos => this != SubscriptionTier.free;
+  /// Photo uploads within projects are always free — the owner pays the
+  /// subscription. Gate PDF/download of photos behind paid tiers instead.
+  bool get canUploadPhotos => true;
 
   /// Contracts require Project Pass, Pro, or Business.
   bool get canUseContracts => this != SubscriptionTier.free;
