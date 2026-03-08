@@ -29,6 +29,7 @@ class EstimateResultPage extends StatefulWidget {
 class _EstimateResultPageState extends State<EstimateResultPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController = TabController(length: 2, vsync: this);
+  late final String _saveDocId = const Uuid().v4();
   bool _saving = false;
   bool _saved = false;
 
@@ -295,12 +296,11 @@ class _EstimateResultPageState extends State<EstimateResultPage>
         'boqItems': boqItems,
         'createdAt': FieldValue.serverTimestamp(),
       };
-      final docId = const Uuid().v4();
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .collection('estimates')
-          .doc(docId)
+          .doc(_saveDocId)
           .set(data);
       if (mounted) setState(() => _saved = true);
       messenger.showSnackBar(const SnackBar(content: Text('Estimate saved')));
