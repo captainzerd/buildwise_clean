@@ -300,6 +300,7 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
       return;
     }
     if (!user.emailVerified) {
+      if (!mounted) return;
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
