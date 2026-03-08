@@ -107,6 +107,13 @@ service cloud.firestore {
         allow read: if isSignedIn() && isProjectMember();
         allow write: if isEmailVerified() &&
           (isProjectOwner() || isAssignedPm() || isCollaborator() || isAdmin());
+
+        match /receipts/{receiptId} {
+          allow read: if isSignedIn() && isProjectMember();
+          allow create: if isEmailVerified() && isProjectMember();
+          allow delete: if isSignedIn() && (isProjectOwner() || isAdmin());
+          allow update: if false; // receipts are immutable
+        }
       }
 
       match /costs/{costId} {
@@ -419,6 +426,14 @@ service cloud.firestore {
     match /users/{uid}/id_verification/{docId} {
       allow read: if isOwner(uid) || isAdmin();
       allow create, update: if isOwner(uid) && isEmailVerified();
+    }
+
+    // ─────────────────────────────────────────
+    // Saved Estimates (per-user sub-collection)
+    // ─────────────────────────────────────────
+
+    match /users/{uid}/estimates/{estimateId} {
+      allow read, write: if isSignedIn() && isOwner(uid);
     }
 
     // ─────────────────────────────────────────

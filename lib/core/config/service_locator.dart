@@ -7,9 +7,14 @@
 import 'package:get_it/get_it.dart';
 
 import '../services/audit_service.dart';
+import '../services/invitation_service.dart';
 import '../services/auth_service.dart';
 import '../services/boq_service.dart';
 import '../services/builder_profile_service.dart';
+import '../services/certification_service.dart';
+import '../services/id_verification_service.dart';
+import '../services/login_activity_service.dart';
+import '../services/work_experience_service.dart';
 import '../services/catalog_service.dart';
 import '../services/chat_service.dart';
 import '../services/complaint_service.dart';
@@ -33,6 +38,11 @@ import '../services/rfq_service.dart';
 import '../services/site_visit_service.dart';
 import '../services/snag_service.dart';
 import '../services/sync_service.dart';
+import '../services/task_service.dart';
+import '../services/risk_service.dart';
+import '../services/land_ownership_service.dart';
+import '../services/portfolio_service.dart';
+import '../services/receipt_service.dart';
 import '../services/variation_order_service.dart';
 import '../services/vendor_service.dart';
 import '../state/builder_project_state.dart';
@@ -63,6 +73,18 @@ Future<void> setupServiceLocator() async {
   sl.registerLazySingleton<StripeService>(() => StripeService());
   sl.registerLazySingleton<ProjectTemplateService>(() => ProjectTemplateService());
   sl.registerLazySingleton<ComplaintService>(() => ComplaintService());
+  sl.registerLazySingleton<WorkExperienceService>(() => WorkExperienceService());
+  sl.registerLazySingleton<CertificationService>(() => CertificationService());
+  sl.registerLazySingleton<IdVerificationService>(() => IdVerificationService());
+  sl.registerLazySingleton<LoginActivityService>(() => LoginActivityService());
+  sl.registerLazySingleton<TaskService>(() => TaskService());
+  sl.registerLazySingleton<RiskService>(() => RiskService());
+  sl.registerLazySingleton<LandOwnershipService>(() => LandOwnershipService());
+  sl.registerLazySingleton<PortfolioService>(() => PortfolioService());
+  sl.registerLazySingleton<ReceiptService>(() => ReceiptService());
+  sl.registerLazySingleton<InvitationService>(
+    () => InvitationService(projectService: sl<ProjectService>()),
+  );
 
   // ── ChangeNotifier services ──
   sl.registerLazySingleton<AuthService>(() => AuthService());

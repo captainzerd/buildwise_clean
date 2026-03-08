@@ -31,6 +31,7 @@ import '../../estimate/boq_page.dart';
 import '../widgets/phases_timeline.dart';
 import '../widgets/photo_evidence_section.dart';
 import '../widgets/project_shared_widgets.dart';
+import '../widgets/receipt_upload_section.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
@@ -111,6 +112,7 @@ class WorkTabState extends State<WorkTab> {
                 projectService: widget.projectService,
                 isOwner: widget.isOwner,
                 isBuilder: widget.isBuilder,
+                currentUserUid: widget.currentUserUid,
               ),
               _MonitorTab(
                 projectId: widget.projectId,
@@ -145,12 +147,14 @@ class _PhasesTab extends StatefulWidget {
     required this.projectService,
     required this.isOwner,
     required this.isBuilder,
+    required this.currentUserUid,
   });
 
   final String projectId;
   final ProjectService projectService;
   final bool isOwner;
   final bool isBuilder;
+  final String currentUserUid;
 
   @override
   State<_PhasesTab> createState() => _PhasesTabState();
@@ -279,6 +283,7 @@ class _PhasesTabState extends State<_PhasesTab> {
                                 phase: phase,
                                 isOwner: widget.isOwner,
                                 isBuilder: widget.isBuilder,
+                                currentUserUid: widget.currentUserUid,
                                 onTap: () => _showEditPhase(context, phase),
                                 onDelete: () async {
                                   final confirmed = await showDialog<bool>(
@@ -492,6 +497,7 @@ class _PhaseCard extends StatelessWidget {
     required this.phase,
     required this.isOwner,
     required this.isBuilder,
+    required this.currentUserUid,
     required this.onTap,
     required this.onDelete,
     required this.onSubmitForApproval,
@@ -503,6 +509,7 @@ class _PhaseCard extends StatelessWidget {
   final Phase phase;
   final bool isOwner;
   final bool isBuilder;
+  final String currentUserUid;
   final VoidCallback onTap;
   final VoidCallback onDelete;
   final VoidCallback onSubmitForApproval;
@@ -680,6 +687,16 @@ class _PhaseCard extends StatelessWidget {
                 onPhotosChanged: () {
                   // Firestore stream on the parent will auto-refresh the list.
                 },
+              ),
+            ),
+          // ── Receipt upload section (builder: upload; all members: view) ────
+          if (phase.status != PhaseStatus.pending)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: ReceiptUploadSection(
+                projectId: projectId,
+                phaseId: phase.id,
+                uploadedByUid: currentUserUid,
               ),
             ),
           // ── Approval action buttons ────────────────────────────────────────
