@@ -302,13 +302,20 @@ class PdfService {
   Future<Uint8List> generateProjectReport(ProjectReportData data) async {
     final (regular, bold) = await _loadFonts();
 
-    // Fetch up to 6 progress photos (skip failures silently)
+    // Fetch up to 6 progress photos concurrently (skip failures silently)
     final List<pw.MemoryImage> photos = [];
-    for (final url in data.photoUrls.take(6)) {
+    final futures = data.photoUrls.take(6).map((url) async {
       try {
-        final resp = await http.get(Uri.parse(url));
-        if (resp.statusCode == 200) photos.add(pw.MemoryImage(resp.bodyBytes));
+        final resp = await http
+            .get(Uri.parse(url))
+            .timeout(const Duration(seconds: 8));
+        if (resp.statusCode == 200) return pw.MemoryImage(resp.bodyBytes);
       } catch (_) {}
+      return null;
+    });
+    final results = await Future.wait(futures);
+    for (final img in results) {
+      if (img != null) photos.add(img);
     }
 
     final doc = pw.Document();

@@ -53,8 +53,8 @@ class _ReportBottomSheetState extends State<ReportBottomSheet> {
       );
       final bytes = await PdfService().generateProjectReport(data);
       final safeName = widget.project.title.replaceAll(RegExp(r'[^\w\s\-]'), '_').trim();
-      nav.pop();
       await Printing.sharePdf(bytes: bytes, filename: '${safeName}_report.pdf');
+      nav.pop();
     } catch (e) {
       if (mounted) {
         setState(() => _generating = false);

@@ -645,7 +645,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
           );
         }
       case _MenuAction.generateReport:
-        _showReportSheet(context, project);
+        if (context.mounted) _showReportSheet(context, project);
       case _MenuAction.export:
         if (context.mounted) {
           showModalBottomSheet<void>(
