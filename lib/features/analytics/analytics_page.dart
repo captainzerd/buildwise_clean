@@ -234,7 +234,7 @@ class _AnalyticsDashboardState extends State<_AnalyticsDashboard> {
 
           if (!widget.hasPortfolio) ...[
             // Upsell card for users who have basic access but not portfolio.
-            _PortfolioUpsellCard(),
+            const _PortfolioUpsellCard(),
           ] else ...[
             // ── Portfolio summary row ──
             _SummaryBar(
@@ -324,6 +324,8 @@ class _AnalyticsDashboardState extends State<_AnalyticsDashboard> {
 // ── Portfolio upsell card ─────────────────────────────────────────────────────
 
 class _PortfolioUpsellCard extends StatelessWidget {
+  const _PortfolioUpsellCard();
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -511,7 +513,7 @@ class _RetentionSummaryCard extends StatelessWidget {
             _RetentionRow(
               label: 'Retention Released',
               value: 'GHS ${fmt.format(totalRetentionReleased)}',
-              color: Colors.green,
+              color: cs.tertiary,
             ),
             if (totalContractValue > 0) ...[
               const SizedBox(height: 12),
@@ -522,7 +524,7 @@ class _RetentionSummaryCard extends StatelessWidget {
                       (totalRetentionHeld + totalRetentionReleased + 0.001),
                   minHeight: 6,
                   backgroundColor: cs.error.withValues(alpha: 0.2),
-                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.green),
+                  valueColor: AlwaysStoppedAnimation<Color>(cs.tertiary),
                 ),
               ),
               const SizedBox(height: 4),
