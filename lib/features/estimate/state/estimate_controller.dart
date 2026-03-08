@@ -479,7 +479,7 @@ class EstimateController extends ChangeNotifier {
 
   // ── Display helpers ──
 
-  static final _nfGhs = NumberFormat('#,##0.##', 'en_US');
+  static final _nf = NumberFormat('#,##0.##', 'en_US');
 
   /// Format [ghs] in the currently selected currency.
   String money(double ghs) {
@@ -494,7 +494,7 @@ class EstimateController extends ChangeNotifier {
     return '$sym${_fmt(converted)}';
   }
 
-  String _fmt(double v) => _nfGhs.format(v);
+  String _fmt(double v) => _nf.format(v);
 
   /// Serialises current inputs + result to a plain map for cloud/local storage.
   /// [userId] must be provided by the caller before persisting.
