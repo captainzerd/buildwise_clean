@@ -26,7 +26,6 @@ class VariationOrdersPage extends StatelessWidget {
     final auth = context.watch<AuthService>();
     final service = context.watch<VariationOrderService>();
     final isOwner = auth.role.isClient;
-    final isPm = auth.role.isProfessional;
 
     return Scaffold(
       appBar: AppBar(
@@ -64,7 +63,6 @@ class VariationOrdersPage extends StatelessWidget {
             itemBuilder: (_, i) => _VoCard(
               order: orders[i],
               isOwner: isOwner,
-              isPm: isPm,
               service: service,
             ),
           );
@@ -106,13 +104,11 @@ class _VoCard extends StatelessWidget {
   const _VoCard({
     required this.order,
     required this.isOwner,
-    required this.isPm,
     required this.service,
   });
 
   final VariationOrder order;
   final bool isOwner;
-  final bool isPm;
   final VariationOrderService service;
 
   @override
@@ -215,132 +211,35 @@ class _VoCard extends StatelessWidget {
                   .labelSmall
                   ?.copyWith(color: cs.outline),
             ),
-            // ── Certification badge ──────────────────────────────────────
-            if (order.certifiedByUid != null) ...[
-              const SizedBox(height: 8),
-              Chip(
-                avatar: const Icon(Icons.verified, size: 16),
-                label: Text(
-                  'Certified by ${order.certifiedByName ?? order.certifiedByUid}',
-                ),
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-              ),
-            ],
-            // ── Certification required warning ───────────────────────────
-            if (order.requiresCertification && order.certifiedByUid == null) ...[
-              const SizedBox(height: 8),
+            // ── Action buttons ───────────────────────────────────────────
+            if (order.status == VoStatus.pending && isOwner) ...[
+              const SizedBox(height: 12),
               Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded,
-                      size: 14, color: cs.error,),
-                  const SizedBox(width: 4),
                   Expanded(
-                    child: Text(
-                      'Requires PM certification (>5% of project budget)',
-                      style: Theme.of(context)
-                          .textTheme
-                          .labelSmall
-                          ?.copyWith(color: cs.error),
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: cs.error,
+                        side: BorderSide(color: cs.error),
+                      ),
+                      onPressed: () => _decide(context, approved: false),
+                      child: const Text('Reject'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => _decide(context, approved: true),
+                      child: const Text('Approve'),
                     ),
                   ),
                 ],
               ),
             ],
-            // ── Action buttons ───────────────────────────────────────────
-            if (order.status == VoStatus.pending) ...[
-              const SizedBox(height: 12),
-              // PM certify button
-              if (isPm &&
-                  order.requiresCertification &&
-                  order.certifiedByUid == null) ...[
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.verified_outlined),
-                    label: const Text('Certify'),
-                    onPressed: () => _certifyVo(context),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-              // Owner approve/reject buttons
-              if (isOwner) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: cs.error,
-                          side: BorderSide(color: cs.error),
-                        ),
-                        onPressed: () => _decide(context, approved: false),
-                        child: const Text('Reject'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: order.canBeApproved
-                            ? () => _decide(context, approved: true)
-                            : null,
-                        child: const Text('Approve'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
           ],
         ),
       ),
     );
-  }
-
-  Future<void> _certifyVo(BuildContext context) async {
-    final auth = context.read<AuthService>();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Certify Change Order?'),
-        content: Text(
-          'Certify "${order.title}" as a high-value variation order?'
-          '\n\nThis confirms the scope change has been reviewed.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Certify'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) return;
-
-    try {
-      await service.certifyVariationOrder(
-        projectId: order.projectId,
-        voId: order.id,
-        certifierUid: auth.currentUser?.uid ?? '',
-        certifierName: auth.currentUser?.displayName ?? 'PM',
-      );
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Change order certified')),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
-        );
-      }
-    }
   }
 
   Future<void> _decide(BuildContext context, {required bool approved}) async {
