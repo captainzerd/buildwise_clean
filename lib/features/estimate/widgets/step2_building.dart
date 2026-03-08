@@ -15,6 +15,7 @@ IconData _typologyIcon(BuildingTypology t) => switch (t) {
       BuildingTypology.residentialStandard => Icons.home_outlined,
       BuildingTypology.residentialMediumRise => Icons.apartment_outlined,
       BuildingTypology.residentialHighRise => Icons.location_city_outlined,
+      // Reserved for future expansion — not shown in MVP residential-only UI.
       BuildingTypology.commercialOffice => Icons.business_outlined,
       BuildingTypology.commercialRetail => Icons.storefront_outlined,
       BuildingTypology.commercialWarehouse => Icons.warehouse_outlined,
@@ -26,6 +27,7 @@ String _typologyShortLabel(BuildingTypology t) => switch (t) {
       BuildingTypology.residentialStandard => 'Residential Standard',
       BuildingTypology.residentialMediumRise => 'Medium-rise Apt',
       BuildingTypology.residentialHighRise => 'High-rise Apt',
+      // Reserved for future expansion — not shown in MVP residential-only UI.
       BuildingTypology.commercialOffice => 'Office / Institution',
       BuildingTypology.commercialRetail => 'Retail / Mixed Use',
       BuildingTypology.commercialWarehouse => 'Warehouse / Factory',
