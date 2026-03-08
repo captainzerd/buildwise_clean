@@ -32,27 +32,18 @@ class _OnboardingPageState extends State<OnboardingPage> {
   static const _pages = [
     _PageData(
       icon: Icons.calculate_outlined,
-      title: 'Estimate construction costs instantly',
-      body: 'Get accurate Ghana-region cost estimates based on '
-          'real surveyor data. Switch between GHS, USD, GBP and more with live FX rates.',
+      title: 'Know your build cost before you break ground',
+      body: 'Instant estimates based on Ghana market rates — in GHS, GBP, USD or EUR.',
     ),
     _PageData(
-      icon: Icons.work_outline,
-      title: 'Track every project in one place',
-      body: 'Manage phases, record costs, upload site photos, '
-          'attach receipts, and share PDF reports — all from your phone.',
+      icon: Icons.verified_outlined,
+      title: 'See every phase. Approve before paying.',
+      body: 'Your builder can\'t move to the next phase without your sign-off. Every payment is tracked.',
     ),
     _PageData(
-      icon: Icons.people_outline,
-      title: 'Find builders, PMs & vendors',
-      body: 'Browse rated contractors and project managers, '
-          'send digital contracts, and source building materials from verified suppliers.',
-    ),
-    // Role explanation slide — rendered separately as _RolesSlide
-    _PageData(
-      icon: Icons.person_outline,
-      title: 'Who are you building for?',
-      body: '',
+      icon: Icons.public_outlined,
+      title: 'Your build. Your control.',
+      body: 'Whether you\'re in Accra or London, WyseBrix puts you in charge.',
     ),
   ];
 
@@ -94,7 +85,20 @@ class _OnboardingPageState extends State<OnboardingPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Image.asset('assets/images/logo.png', height: 36),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset('assets/images/logo.png', height: 32),
+                      const Text(
+                        'WyseBrix',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
                   TextButton(
                     onPressed: _finish,
                     child: const Text('Skip'),
@@ -109,9 +113,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 controller: _controller,
                 itemCount: _pages.length,
                 onPageChanged: (i) => setState(() => _page = i),
-                itemBuilder: (_, i) => i == 3
-                    ? const _RolesSlide()
-                    : _OnboardPage(data: _pages[i]),
+                itemBuilder: (_, i) => _OnboardPage(data: _pages[i]),
               ),
             ),
 
@@ -217,113 +219,3 @@ class _PageData {
   final String body;
 }
 
-// ── Roles slide ────────────────────────────────────────────────────────────────
-
-class _RolesSlide extends StatelessWidget {
-  const _RolesSlide();
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            'Who are you building for?',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'BuildWise supports three types of accounts.',
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(color: cs.onSurfaceVariant),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 28),
-          _RoleCard(
-            icon: Icons.home_outlined,
-            title: 'Property Owner',
-            description:
-                'Create and manage your construction projects, '
-                'hire builders, approve payments, and track progress.',
-          ),
-          const SizedBox(height: 12),
-          _RoleCard(
-            icon: Icons.engineering_outlined,
-            title: 'Project Manager',
-            description:
-                'Oversee client projects, record costs, submit '
-                'site reports, and manage site teams on behalf of owners.',
-          ),
-          const SizedBox(height: 12),
-          _RoleCard(
-            icon: Icons.construction_outlined,
-            title: 'Builder / Contractor',
-            description:
-                'List your services in the marketplace, receive '
-                'project invitations, sign digital contracts, and get paid.',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RoleCard extends StatelessWidget {
-  const _RoleCard({
-    required this.icon,
-    required this.title,
-    required this.description,
-  });
-  final IconData icon;
-  final String title;
-  final String description;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        border: Border.all(color: cs.outlineVariant),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: cs.primary, size: 28),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: cs.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
