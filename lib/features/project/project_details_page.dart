@@ -402,12 +402,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
       ],
     ),
     4: (
-      // Chat
-      title: 'Chat Tab',
+      // Risks
+      title: 'Risks Tab',
       tips: [
-        'Message your project team (PM, builder) in real time.',
-        'All chat messages are stored securely in Firestore.',
-        'Tap the bell icon to manage notification preferences for this project.',
+        'Track project risks and mitigation strategies. Log any issues that could impact your timeline or budget.',
       ],
     ),
   };
