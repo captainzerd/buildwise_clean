@@ -133,6 +133,16 @@ class _ImageViewerState extends State<_ImageViewer> {
   final _transformCtrl = TransformationController();
 
   @override
+  void initState() {
+    super.initState();
+    // Trigger a rebuild after the first frame so annotation pins can
+    // resolve _imageKey.currentContext once the image widget is mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   void dispose() {
     _commentCtrl.dispose();
     _transformCtrl.dispose();
