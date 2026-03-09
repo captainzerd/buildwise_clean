@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/config/service_locator.dart';
 import '../../../core/models/app_user.dart';
 import '../../../core/models/builder_contract.dart';
+import '../../../core/models/pm_profile.dart';
 import '../../../core/models/deletion_request.dart';
 import '../../../core/models/invitation.dart';
 import '../../../core/models/land_ownership_record.dart';
@@ -32,7 +33,10 @@ import '../../../core/services/site_visit_service.dart';
 import '../../../core/services/snag_service.dart';
 import '../../../core/services/task_service.dart';
 import '../builder_marketplace_page.dart';
+import '../pm_marketplace_page.dart';
+import '../pm_profile_detail_page.dart';
 import '../widgets/budget_health_card.dart';
+import '../widgets/hire_pm_sheet.dart';
 import '../widgets/market_prices_card.dart';
 import '../widgets/whatsapp_contact_button.dart';
 import '../../../core/models/materials_price.dart';
@@ -499,6 +503,21 @@ class OverviewTab extends StatelessWidget {
 
         const SizedBox(height: 16),
 
+        // ── PM assignment card ────────────────────────────────────────────────
+        _AssignedPmSection(
+          project: project,
+          isOwner: isOwner,
+          onFindPm: () => _openPmMarketplace(context),
+          onRemovePm: () => _removePmFromProject(context),
+          onViewProfile: (pm) => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => PmProfileDetailPage(pm: pm),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
         // ── Team members card ─────────────────────────────────────────────────
         _TeamMembersCard(
           project: project,
@@ -804,6 +823,58 @@ class OverviewTab extends StatelessWidget {
     }
   }
 
+  void _openPmMarketplace(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PmMarketplacePage(
+          onSelect: (pm) {
+            Navigator.of(context).pop();
+            _handlePmSelected(context, pm);
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handlePmSelected(BuildContext context, PmProfile pm) async {
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => HirePmSheet(pm: pm, project: project),
+    );
+    if (confirmed == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${pm.displayName} assigned as PM')),
+      );
+    }
+  }
+
+  Future<void> _removePmFromProject(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove Project Manager?'),
+        content: const Text(
+          'This will unassign the current Project Manager from this project.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      await projectService.removePm(projectId);
+    }
+  }
+
   Future<void> _ratePm(BuildContext context) async {
     double qualityRating = 5;
     double timelinessRating = 5;
@@ -908,6 +979,123 @@ class OverviewTab extends StatelessWidget {
 
 // ── Progress tab (Phases + Updates) ──────────────────────────────────────────────
 
+// ── Assigned PM section ───────────────────────────────────────────────────────
+
+class _AssignedPmSection extends StatelessWidget {
+  const _AssignedPmSection({
+    required this.project,
+    required this.isOwner,
+    required this.onFindPm,
+    required this.onRemovePm,
+    required this.onViewProfile,
+  });
+
+  final Project project;
+  final bool isOwner;
+  final VoidCallback onFindPm;
+  final VoidCallback onRemovePm;
+  final void Function(PmProfile pm) onViewProfile;
+
+  bool get _hasPm =>
+      project.assignedPmUid != null && project.assignedPmUid!.isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: cs.tertiaryContainer,
+                  child: Icon(
+                    Icons.manage_accounts_outlined,
+                    color: cs.onTertiaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Project Manager',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                      Text(
+                        _hasPm
+                            ? (project.assignedPmName ?? 'PM Assigned')
+                            : 'No Project Manager',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: _hasPm ? null : cs.outline,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_hasPm && isOwner)
+                  IconButton(
+                    icon: Icon(
+                      Icons.person_remove_outlined,
+                      color: cs.error,
+                      size: 20,
+                    ),
+                    tooltip: 'Remove PM',
+                    onPressed: onRemovePm,
+                  ),
+              ],
+            ),
+            if (!_hasPm) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Assign a PM to oversee this project.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: cs.outline,
+                    ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            if (_hasPm)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.person_outlined, size: 18),
+                  label: const Text('View Profile'),
+                  onPressed: () {
+                    // Navigate to PM profile detail using a minimal PmProfile
+                    // built from the stored name and uid.
+                    final pm = PmProfile(
+                      uid: project.assignedPmUid!,
+                      displayName: project.assignedPmName ?? '',
+                      role: PmRole.architect,
+                      createdAt: DateTime.now(),
+                      updatedAt: DateTime.now(),
+                    );
+                    onViewProfile(pm);
+                  },
+                ),
+              )
+            else if (isOwner)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.person_search_outlined, size: 18),
+                  label: const Text('Find a PM'),
+                  onPressed: onFindPm,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _ContractStatusChip extends StatelessWidget {
   const _ContractStatusChip({required this.status});
