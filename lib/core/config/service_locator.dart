@@ -44,6 +44,7 @@ import '../services/risk_service.dart';
 import '../services/land_ownership_service.dart';
 import '../services/portfolio_service.dart';
 import '../services/receipt_service.dart';
+import '../services/permit_service.dart';
 import '../services/variation_order_service.dart';
 import '../services/vendor_service.dart';
 import '../state/builder_project_state.dart';
@@ -84,6 +85,7 @@ Future<void> setupServiceLocator() async {
   sl.registerLazySingleton<LandOwnershipService>(() => LandOwnershipService());
   sl.registerLazySingleton<PortfolioService>(() => PortfolioService());
   sl.registerLazySingleton<ReceiptService>(() => ReceiptService());
+  sl.registerLazySingleton<PermitService>(() => PermitService());
   sl.registerLazySingleton<InvitationService>(
     () => InvitationService(projectService: sl<ProjectService>()),
   );
