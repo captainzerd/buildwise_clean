@@ -42,7 +42,7 @@ import '../widgets/whatsapp_contact_button.dart';
 import '../../../core/models/materials_price.dart';
 import '../../../core/services/materials_price_service.dart';
 
-class OverviewTab extends StatelessWidget {
+class OverviewTab extends StatefulWidget {
   const OverviewTab({
     super.key,
     required this.project,
@@ -62,6 +62,24 @@ class OverviewTab extends StatelessWidget {
   final String currentUserUid;
   final bool isOwner;
   final DeletionRequestService deletionRequestService;
+
+  @override
+  State<OverviewTab> createState() => _OverviewTabState();
+}
+
+class _OverviewTabState extends State<OverviewTab> {
+  bool _removingPm = false;
+
+  // Convenience getters so the existing build/method bodies below don't need
+  // updating for widget.* access patterns.
+  Project get project => widget.project;
+  String get projectId => widget.projectId;
+  ProjectService get projectService => widget.projectService;
+  BuilderProfileService get builderProfileService => widget.builderProfileService;
+  ContractService get contractService => widget.contractService;
+  String get currentUserUid => widget.currentUserUid;
+  bool get isOwner => widget.isOwner;
+  DeletionRequestService get deletionRequestService => widget.deletionRequestService;
 
   @override
   Widget build(BuildContext context) {
@@ -766,17 +784,60 @@ class OverviewTab extends StatelessWidget {
       MaterialPageRoute<void>(
         builder: (_) => BuilderMarketplacePage(
           initialRegion: project.region.isNotEmpty ? project.region : null,
-          onSelect: (builder) async {
+          onSelect: (builder) {
             Navigator.of(context).pop();
-            await projectService.assignPm(
-              projectId,
-              pmUid: builder.uid,
-              pmName: builder.displayName,
-            );
+            if (context.mounted) _handleBuilderSelected(context, builder);
           },
         ),
       ),
     );
+  }
+
+  Future<void> _handleBuilderSelected(
+      BuildContext context, BuilderProfile builder,) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Assign Builder?'),
+        content: Text(
+          'Assign ${builder.displayName} as the builder for this project?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await projectService.assignPm(
+        projectId,
+        pmUid: builder.uid,
+        pmName: builder.displayName,
+      );
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('${builder.displayName} assigned as builder')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            duration: const Duration(seconds: 10),
+          ),
+        );
+      }
+    }
   }
 
   void _openContractFlow(BuildContext context) {
@@ -851,6 +912,8 @@ class OverviewTab extends StatelessWidget {
   }
 
   Future<void> _removePmFromProject(BuildContext context) async {
+    if (_removingPm) return;
+    final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -870,8 +933,26 @@ class OverviewTab extends StatelessWidget {
         ],
       ),
     );
-    if (confirmed == true && context.mounted) {
+    if (confirmed != true) return;
+    setState(() => _removingPm = true);
+    try {
       await projectService.removePm(projectId);
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Project Manager removed')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            duration: const Duration(seconds: 10),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _removingPm = false);
     }
   }
 
@@ -1069,11 +1150,14 @@ class _AssignedPmSection extends StatelessWidget {
                   label: const Text('View Profile'),
                   onPressed: () {
                     // Navigate to PM profile detail using a minimal PmProfile
-                    // built from the stored name and uid.
+                    // built from the stored name and uid. The Project model does
+                    // not store assignedPmRole, so we use PmRole.values.first
+                    // (architect) as a generic fallback — the real profile page
+                    // will fetch the full document from Firestore.
                     final pm = PmProfile(
                       uid: project.assignedPmUid!,
                       displayName: project.assignedPmName ?? '',
-                      role: PmRole.architect,
+                      role: PmRole.values.first,
                       createdAt: DateTime.now(),
                       updatedAt: DateTime.now(),
                     );

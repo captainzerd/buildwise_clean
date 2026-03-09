@@ -2,10 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:go_router/go_router.dart';
 import '../models/app_notification.dart';
 import 'auth_service.dart';
-import '../../features/account/pending_contracts_page.dart';
-import '../../features/project/project_details_page.dart';
 
 @pragma('vm:entry-point')
 Future<void> _onBackgroundMessage(RemoteMessage _) async {}
@@ -13,8 +12,8 @@ Future<void> _onBackgroundMessage(RemoteMessage _) async {}
 class NotificationService {
   static final navigatorKey = GlobalKey<NavigatorState>();
 
-  static const _channelId = 'buildwise_high';
-  static const _channelName = 'BuildWise Notifications';
+  static const _channelId = 'wysebrix_high';
+  static const _channelName = 'WyseBrix Notifications';
 
   final _fcm = FirebaseMessaging.instance;
   final _local = FlutterLocalNotificationsPlugin();
@@ -44,7 +43,7 @@ class NotificationService {
         ?.createNotificationChannel(const AndroidNotificationChannel(
           _channelId,
           _channelName,
-          description: 'Project and contract updates from BuildWise',
+          description: 'Project and contract updates from WyseBrix',
           importance: Importance.high,
         ),);
 
@@ -107,10 +106,17 @@ class NotificationService {
       .doc(uid)
       .set({'fcmToken': token}, SetOptions(merge: true));
 
-  Future<void> _clearToken(String uid) => _db
-      .collection('users')
-      .doc(uid)
-      .update({'fcmToken': FieldValue.delete()});
+  Future<void> _clearToken(String uid) async {
+    try {
+      await _db
+          .collection('users')
+          .doc(uid)
+          .update({'fcmToken': FieldValue.delete()});
+    } catch (_) {
+      // Silently ignore — user may already be signed out and lack Firestore
+      // permission; the stale token is harmless since it is bound to the device.
+    }
+  }
 
   void _showLocalNotification(RemoteMessage msg) {
     final n = msg.notification;
@@ -158,6 +164,18 @@ class NotificationService {
         );
   }
 
+  /// Stream of unread chat message notification count.
+  Stream<int> unreadChatCountStream(String uid) {
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('notifications')
+        .where('data.type', isEqualTo: 'chat_message')
+        .where('read', isEqualTo: false)
+        .snapshots()
+        .map((s) => s.docs.length);
+  }
+
   /// Stream of unread notification count.
   Stream<int> unreadCountStream(String uid) {
     return _db
@@ -177,6 +195,78 @@ class NotificationService {
         .collection('notifications')
         .doc(notifId)
         .update({'read': true});
+  }
+
+  // ── Notification preferences ─────────────────────────────────────────────
+
+  static const Map<String, bool> defaultPrefs = {
+    'project_updates': true,
+    'phase_changes': true,
+    'cost_entries': true,
+    'deletion_requests': true,
+    'contracts': true,
+    'assignment': true,
+    // P3 additions
+    'quote_responses': true,
+    'site_inspections': true,
+    'snag_list': true,
+    'change_orders': true,
+    'chat_messages': true,
+    'budget_alerts': true,
+    // Collaboration
+    'task_comments': true,
+    // Construction monitoring
+    'issue_reports': true,
+    'safety_incidents': true,
+  };
+
+  /// Stream the user's notification preferences map.
+  Stream<Map<String, bool>> prefsStream(String uid) {
+    return _db
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .map((snap) {
+      final raw = snap.data()?['notificationPrefs'];
+      if (raw is Map) {
+        return Map<String, bool>.from(
+          defaultPrefs.map(
+            (k, v) => MapEntry(k, raw[k] as bool? ?? v),
+          ),
+        );
+      }
+      return Map<String, bool>.from(defaultPrefs);
+    });
+  }
+
+  /// Persist the user's notification preferences to Firestore.
+  Future<void> savePrefs(String uid, Map<String, bool> prefs) {
+    return _db
+        .collection('users')
+        .doc(uid)
+        .set({'notificationPrefs': prefs}, SetOptions(merge: true));
+  }
+
+  /// Write a notification document to the given user's inbox.
+  Future<void> createNotification({
+    required String uid,
+    required String title,
+    required String body,
+    required String type,
+    Map<String, dynamic> data = const {},
+  }) {
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('notifications')
+        .add({
+      'title': title,
+      'body': body,
+      'type': type,
+      'data': data,
+      'createdAt': FieldValue.serverTimestamp(),
+      'read': false,
+    });
   }
 
   /// Mark all unread notifications as read.
@@ -208,17 +298,13 @@ class NotificationService {
   void routeFromData(Map<String, dynamic> data) {
     final type = data['type'] as String? ?? '';
     final projectId = data['projectId'] as String? ?? '';
-    final nav = navigatorKey.currentState;
-    if (nav == null) return;
+    final ctx = navigatorKey.currentContext;
+    if (ctx == null) return;
 
     if (type == 'contract_new') {
-      nav.push(MaterialPageRoute(
-        builder: (_) => const PendingContractsPage(),
-      ),);
+      GoRouter.of(ctx).push('/account/contracts/pending');
     } else if (projectId.isNotEmpty) {
-      nav.push(MaterialPageRoute(
-        builder: (_) => ProjectDetailsPage(projectId: projectId),
-      ),);
+      GoRouter.of(ctx).push('/projects/$projectId');
     }
   }
 }

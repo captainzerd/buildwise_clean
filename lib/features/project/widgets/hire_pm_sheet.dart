@@ -1,10 +1,10 @@
 // lib/features/project/widgets/hire_pm_sheet.dart
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/config/service_locator.dart';
 import '../../../core/models/pm_profile.dart';
 import '../../../core/models/project.dart';
+import '../../../core/services/notification_service.dart';
 import '../../../core/services/project_service.dart';
 
 class HirePmSheet extends StatefulWidget {
@@ -35,20 +35,15 @@ class _HirePmSheetState extends State<HirePmSheet> {
         pmUid: widget.pm.uid,
         pmName: widget.pm.displayName,
       );
-      // Notify the PM via Firestore inbox
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.pm.uid)
-          .collection('notifications')
-          .add({
-        'title': 'You have been assigned to a project',
-        'body':
+      // Notify the PM via notification service inbox
+      await sl<NotificationService>().createNotification(
+        uid: widget.pm.uid,
+        title: 'You have been assigned to a project',
+        body:
             'You have been assigned as Project Manager for "${widget.project.title}".',
-        'type': 'pm_assigned',
-        'projectId': widget.project.id,
-        'createdAt': FieldValue.serverTimestamp(),
-        'read': false,
-      },);
+        type: 'pm_assigned',
+        data: {'projectId': widget.project.id},
+      );
       nav.pop(true); // true = success
     } catch (e) {
       if (mounted) {
