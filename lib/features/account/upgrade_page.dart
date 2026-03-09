@@ -272,7 +272,7 @@ class _UpgradePageState extends State<UpgradePage> {
               'Verified badge display',
               'Access client projects',
             ],
-            ctaLabel: 'Get Builder Pass',
+            ctaLabel: 'Get Builder SKU',
             onSelect: currentTier == SubscriptionTier.builderSku
                 ? null
                 : () => _selectPlan(
