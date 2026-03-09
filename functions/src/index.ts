@@ -1675,3 +1675,8 @@ export { budgetAlertTrigger } from "./budgetAlerts";
 // Runs daily at 06:00 UTC; writes seeded Accra supplier prices to
 // market_prices/ghana_current for display in the project overview card.
 export { refreshMarketPrices } from "./marketPricesUpdater";
+
+// ── AI cost optimiser (P4.2) ──────────────────────────────────────────────────
+// HTTPS callable; uses Claude claude-haiku-4-5 to suggest cost savings for a
+// given construction estimate. Secret: ANTHROPIC_API_KEY in Secret Manager.
+export { analyseEstimateCosts } from "./aiCostOptimiser";

@@ -1,4 +1,3 @@
-import '../../core/config/service_locator.dart';
 // lib/features/estimate/estimate_result_page.dart
 //
 // Full-screen result page pushed after a successful estimate computation.
@@ -6,6 +5,7 @@ import '../../core/config/service_locator.dart';
 // line rows, and two CTAs: Save and Create Project.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../core/config/service_locator.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -19,6 +19,7 @@ import '../../core/services/catalog_service.dart';
 import '../project/create_project_page.dart';
 import 'boq_page.dart';
 import 'state/estimate_controller.dart';
+import 'widgets/ai_optimiser_sheet.dart';
 import 'widgets/budget_compare_card.dart';
 
 class EstimateResultPage extends StatefulWidget {
@@ -235,6 +236,34 @@ class _EstimateResultPageState extends State<EstimateResultPage>
               onPressed: () => Navigator.of(context).pop(),
               icon: const Icon(Icons.edit_outlined, size: 18),
               label: const Text('Edit estimate'),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => AiOptimiserSheet(
+                  typology: controller.typology.name,
+                  quality: controller.quality,
+                  region: controller.region ?? 'Greater Accra',
+                  floorAreaM2: r.totalBuiltUpArea,
+                  floors: controller.floors.length,
+                  totalGhs: r.totalPlannedGhs,
+                  breakdownGhs: Map<String, double>.from(
+                    r.phaseBreakdownGhs,
+                  ),
+                  preliminariesPct: controller.preliminariesPct,
+                  ohpPct: sl<CatalogService>().ohpDefaultPct,
+                  contingencyPct: controller.contingencyPct,
+                ),
+              ),
+              icon: const Icon(Icons.auto_awesome, size: 18),
+              label: const Text('AI Cost Optimiser'),
             ),
           ),
 
