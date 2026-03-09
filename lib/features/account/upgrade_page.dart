@@ -193,12 +193,13 @@ class _UpgradePageState extends State<UpgradePage> {
           ),
           const SizedBox(height: 16),
 
-          // ── Project Pass ───────────────────────────────────────────────────
+          // ── Project Pass (Builder Pass) ────────────────────────────────────
           _PlanCard(
             tier: SubscriptionTier.projectPass,
             isCurrentPlan: currentTier == SubscriptionTier.projectPass,
             priceDisplay: _priceDisplay(SubscriptionTier.projectPass, fx),
             ghsNote: _ghsNote(SubscriptionTier.projectPass),
+            gbpNote: '~£17 one-time',
             badge: 'Best for self-builders',
             features: const [
               '1 project — full access for 24 months',
@@ -222,6 +223,7 @@ class _UpgradePageState extends State<UpgradePage> {
             highlighted: true,
             priceDisplay: _priceDisplay(SubscriptionTier.pro, fx),
             ghsNote: _ghsNote(SubscriptionTier.pro),
+            gbpNote: '~£5.99/month',
             features: const [
               'Unlimited projects',
               'Analytics dashboard',
@@ -241,6 +243,7 @@ class _UpgradePageState extends State<UpgradePage> {
             isCurrentPlan: currentTier == SubscriptionTier.business,
             priceDisplay: _priceDisplay(SubscriptionTier.business, fx),
             ghsNote: _ghsNote(SubscriptionTier.business),
+            gbpNote: '~£15/month',
             features: const [
               'Everything in Pro',
               'Listed in builder/PM marketplace',
@@ -252,6 +255,28 @@ class _UpgradePageState extends State<UpgradePage> {
                 ? null
                 : () => _selectPlan(
                     context, SubscriptionTier.business, email, uid, fx,
+                  ),
+          ),
+          const SizedBox(height: 16),
+
+          // ── Builder SKU tier (supply-side) ────────────────────────────────
+          _PlanCard(
+            tier: SubscriptionTier.builderSku,
+            isCurrentPlan: currentTier == SubscriptionTier.builderSku,
+            priceDisplay: _priceDisplay(SubscriptionTier.builderSku, fx),
+            ghsNote: _ghsNote(SubscriptionTier.builderSku),
+            gbpNote: '~£1.80/month',
+            badge: 'For professionals',
+            features: const [
+              'Marketplace visibility',
+              'Verified badge display',
+              'Access client projects',
+            ],
+            ctaLabel: 'Get Builder Pass',
+            onSelect: currentTier == SubscriptionTier.builderSku
+                ? null
+                : () => _selectPlan(
+                    context, SubscriptionTier.builderSku, email, uid, fx,
                   ),
           ),
           const SizedBox(height: 28),
@@ -692,8 +717,10 @@ class _PlanCard extends StatelessWidget {
     required this.onSelect,
     required this.priceDisplay,
     this.ghsNote,
+    this.gbpNote,
     this.highlighted = false,
     this.badge,
+    this.ctaLabel,
   });
 
   final SubscriptionTier tier;
@@ -703,7 +730,11 @@ class _PlanCard extends StatelessWidget {
   final VoidCallback? onSelect;
   final String priceDisplay;
   final String? ghsNote;
+  /// Hardcoded GBP approximate price shown below the primary price.
+  final String? gbpNote;
   final String? badge; // e.g. "Best for self-builders"
+  /// Custom CTA label override (e.g. "Get Builder Pass" for supply-side tiers).
+  final String? ctaLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -748,6 +779,16 @@ class _PlanCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           ghsNote!,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                        ),
+                      ],
+                      if (gbpNote != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          gbpNote!,
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: cs.onSurfaceVariant,
@@ -802,9 +843,10 @@ class _PlanCard extends StatelessWidget {
                       : FilledButton(
                           onPressed: onSelect,
                           child: Text(
-                            tier == SubscriptionTier.projectPass
-                                ? 'Buy Project Pass'
-                                : 'Upgrade to ${tier.label}',
+                            ctaLabel ??
+                                (tier == SubscriptionTier.projectPass
+                                    ? 'Buy Builder Pass'
+                                    : 'Upgrade to ${tier.label}'),
                           ),
                         ),
             ),
@@ -851,6 +893,7 @@ class SubscriptionGate extends StatelessWidget {
       SubscriptionTier.pro =>
         tier == SubscriptionTier.pro || tier == SubscriptionTier.business,
       SubscriptionTier.business => tier == SubscriptionTier.business,
+      SubscriptionTier.builderSku => tier == SubscriptionTier.builderSku,
     };
 
     if (allowed) return child;

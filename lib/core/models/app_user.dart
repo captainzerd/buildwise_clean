@@ -117,14 +117,15 @@ extension IdVerificationStatusInfo on IdVerificationStatus {
 
 // ── Subscription tiers ────────────────────────────────────────────────────────
 
-enum SubscriptionTier { free, projectPass, pro, business }
+enum SubscriptionTier { free, projectPass, pro, business, builderSku }
 
 extension SubscriptionTierInfo on SubscriptionTier {
   String get label => switch (this) {
         SubscriptionTier.free => 'Free',
-        SubscriptionTier.projectPass => 'Project Pass',
+        SubscriptionTier.projectPass => 'Builder Pass',
         SubscriptionTier.pro => 'Pro',
         SubscriptionTier.business => 'Business',
+        SubscriptionTier.builderSku => 'Builder SKU',
       };
 
   String get priceLabel => switch (this) {
@@ -132,6 +133,7 @@ extension SubscriptionTierInfo on SubscriptionTier {
         SubscriptionTier.projectPass => 'GH₵349 one-time',
         SubscriptionTier.pro => 'From GH₵99 / mo',
         SubscriptionTier.business => 'From GH₵249 / mo',
+        SubscriptionTier.builderSku => 'GH₵30 / mo',
       };
 
   /// Amount in GHS pesewas (× 100) for Paystack — authoritative base price.
@@ -140,6 +142,7 @@ extension SubscriptionTierInfo on SubscriptionTier {
         SubscriptionTier.projectPass => 34900, // GH₵349 one-time
         SubscriptionTier.pro => 9900,           // GH₵99 / mo
         SubscriptionTier.business => 24900,     // GH₵249 / mo
+        SubscriptionTier.builderSku => 3000,    // GH₵30 / mo
       };
 
   /// USD fallback cents for Stripe when FX rates are unavailable.
@@ -148,6 +151,7 @@ extension SubscriptionTierInfo on SubscriptionTier {
         SubscriptionTier.projectPass => 2900, // ~$29 one-time
         SubscriptionTier.pro => 1400,          // $14 / mo
         SubscriptionTier.business => 2500,     // $25 / mo
+        SubscriptionTier.builderSku => 230,    // ~$2.30 / mo
       };
 
   // ── Feature gates ─────────────────────────────────────────────────────────
@@ -176,8 +180,16 @@ extension SubscriptionTierInfo on SubscriptionTier {
   /// Contracts require Project Pass, Pro, or Business.
   bool get canUseContracts => this != SubscriptionTier.free;
 
-  /// Marketplace listing requires Business tier.
-  bool get canListInMarketplace => this == SubscriptionTier.business;
+  /// Marketplace listing requires Business tier or Builder SKU tier.
+  bool get canListInMarketplace =>
+      this == SubscriptionTier.business || this == SubscriptionTier.builderSku;
+
+  /// Phase approval (owner action) requires a paid tier.
+  /// Free-tier clients must upgrade to approve/release builder phases.
+  bool get canSubmitPhases => this != SubscriptionTier.free;
+
+  /// True when the user is on the builder-specific supply-side tier.
+  bool get isBuilderTier => this == SubscriptionTier.builderSku;
 
   /// Maximum number of active projects (free = 1, others = unlimited).
   int get maxProjects => switch (this) {
@@ -185,6 +197,7 @@ extension SubscriptionTierInfo on SubscriptionTier {
         SubscriptionTier.projectPass => 1,
         SubscriptionTier.pro => 999,
         SubscriptionTier.business => 999,
+        SubscriptionTier.builderSku => 999,
       };
 
   /// Maximum cost entries per project on the free tier.
@@ -197,6 +210,7 @@ extension SubscriptionTierInfo on SubscriptionTier {
         'project_pass' => SubscriptionTier.projectPass,
         'pro' => SubscriptionTier.pro,
         'business' => SubscriptionTier.business,
+        'builder_sku' => SubscriptionTier.builderSku,
         _ => SubscriptionTier.free,
       };
 }
@@ -343,6 +357,7 @@ class AppUser {
 
   static String _tierToString(SubscriptionTier t) => switch (t) {
         SubscriptionTier.projectPass => 'project_pass',
+        SubscriptionTier.builderSku => 'builder_sku',
         _ => t.name,
       };
 
