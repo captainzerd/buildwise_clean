@@ -26,6 +26,7 @@ import '../../core/services/project_template_service.dart';
 import '../../core/services/snag_service.dart';
 import '../estimate/widgets/mortgage_calculator_sheet.dart';
 import 'cost_analytics_page.dart';
+import 'drawings_page.dart';
 import 'export_sheet.dart';
 import 'progress_timeline_page.dart';
 // Chat: deferred to Phase 2 — using WhatsApp deeplink for MVP
@@ -158,6 +159,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                     PopupMenuItem(
                       value: _MenuAction.siteVisits,
                       child: Text('Site Inspections'),
+                    ),
+                    PopupMenuItem(
+                      value: _MenuAction.drawings,
+                      child: Text('Drawings'),
                     ),
                     PopupMenuItem(
                       value: _MenuAction.manageTasks,
@@ -746,6 +751,14 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
             extra: {'projectTitle': project.title},
           );
         }
+      case _MenuAction.drawings:
+        if (context.mounted) {
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => DrawingsPage(projectId: widget.projectId),
+            ),
+          );
+        }
       case _MenuAction.manageTasks:
         if (context.mounted) {
           showModalBottomSheet<void>(
@@ -965,6 +978,7 @@ enum _MenuAction {
   laborTracking,
   changeOrders,
   siteVisits,
+  drawings,
   manageTasks,
   generateInvoice,
   saveAsTemplate,

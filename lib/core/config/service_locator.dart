@@ -22,6 +22,7 @@ import '../services/connectivity_service.dart';
 import '../services/contract_service.dart';
 import '../services/csv_service.dart';
 import '../services/deletion_request_service.dart';
+import '../services/drawing_service.dart';
 import '../services/due_diligence_service.dart';
 import '../services/fx_service.dart';
 import '../services/labor_service.dart';
@@ -66,6 +67,7 @@ Future<void> setupServiceLocator() async {
   sl.registerLazySingleton<PdfService>(() => PdfService());
   sl.registerLazySingleton<CsvService>(() => CsvService());
   sl.registerLazySingleton<DueDiligenceService>(() => DueDiligenceService());
+  sl.registerLazySingleton<DrawingService>(() => DrawingService());
   sl.registerLazySingleton<SnagService>(() => SnagService());
   sl.registerLazySingleton<LaborService>(() => LaborService());
   sl.registerLazySingleton<SiteVisitService>(() => SiteVisitService());
