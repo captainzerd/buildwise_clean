@@ -24,6 +24,7 @@ import '../../core/services/paystack_service.dart';
 import '../../core/services/project_service.dart';
 import '../../core/services/project_template_service.dart';
 import '../../core/services/snag_service.dart';
+import '../estimate/widgets/mortgage_calculator_sheet.dart';
 import 'cost_analytics_page.dart';
 import 'export_sheet.dart';
 import 'progress_timeline_page.dart';
@@ -113,6 +114,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                     PopupMenuItem(
                       value: _MenuAction.viewAnalytics,
                       child: Text('View Analytics'),
+                    ),
+                    PopupMenuItem(
+                      value: _MenuAction.mortgageCalculator,
+                      child: Text('Mortgage Calculator'),
                     ),
                     PopupMenuItem(
                       value: _MenuAction.buildTimeline,
@@ -633,6 +638,17 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
             ),
           );
         }
+      case _MenuAction.mortgageCalculator:
+        if (context.mounted) {
+          showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            showDragHandle: false,
+            builder: (_) => MortgageCalculatorSheet(
+              initialLoanAmountGhs: project.budget > 0 ? project.budget : null,
+            ),
+          );
+        }
       case _MenuAction.buildTimeline:
         if (context.mounted) {
           await Navigator.of(context).push(
@@ -937,6 +953,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
 enum _MenuAction {
   editProject,
   viewAnalytics,
+  mortgageCalculator,
   buildTimeline,
   generateReport,
   export,
