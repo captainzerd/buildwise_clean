@@ -15,7 +15,6 @@ IconData _typologyIcon(BuildingTypology t) => switch (t) {
       BuildingTypology.residentialStandard => Icons.home_outlined,
       BuildingTypology.residentialMediumRise => Icons.apartment_outlined,
       BuildingTypology.residentialHighRise => Icons.location_city_outlined,
-      // Reserved for future expansion — not shown in MVP residential-only UI.
       BuildingTypology.commercialOffice => Icons.business_outlined,
       BuildingTypology.commercialRetail => Icons.storefront_outlined,
       BuildingTypology.commercialWarehouse => Icons.warehouse_outlined,
@@ -27,7 +26,6 @@ String _typologyShortLabel(BuildingTypology t) => switch (t) {
       BuildingTypology.residentialStandard => 'Residential Standard',
       BuildingTypology.residentialMediumRise => 'Medium-rise Apt',
       BuildingTypology.residentialHighRise => 'High-rise Apt',
-      // Reserved for future expansion — not shown in MVP residential-only UI.
       BuildingTypology.commercialOffice => 'Office / Institution',
       BuildingTypology.commercialRetail => 'Retail / Mixed Use',
       BuildingTypology.commercialWarehouse => 'Warehouse / Factory',
@@ -47,7 +45,6 @@ class Step2Building extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<EstimateController>();
-    final cardWidth = (MediaQuery.of(context).size.width - 48) / 2;
     final cs = Theme.of(context).colorScheme;
 
     return StepScaffold(
@@ -59,73 +56,82 @@ class Step2Building extends StatelessWidget {
         children: [
           sectionLabel(context, 'Building specification'),
           const SizedBox(height: 16),
-          // ── Typology card grid ──────────────────────────────────────────────
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final t in const [
-                BuildingTypology.residentialStandard,
-                BuildingTypology.residentialMediumRise,
-                BuildingTypology.residentialHighRise,
-              ])
-                GestureDetector(
-                  onTap: () => controller.setProgramme(typology_: t),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    width: cardWidth,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: controller.typology == t
-                          ? cs.primaryContainer
-                          : cs.surfaceContainerHighest,
-                      border: Border.all(
-                        color: controller.typology == t
-                            ? cs.primary
-                            : cs.outlineVariant,
-                        width: controller.typology == t ? 2 : 1,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          _typologyIcon(t),
-                          color: controller.typology == t
-                              ? cs.primary
-                              : cs.onSurfaceVariant,
-                          size: 28,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _typologyShortLabel(t),
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: controller.typology == t
-                                    ? cs.onPrimaryContainer
-                                    : cs.onSurface,
-                              ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          t.subtitle,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: controller.typology == t
-                                        ? cs.onPrimaryContainer
-                                        : cs.onSurfaceVariant,
-                                  ),
-                        ),
-                      ],
-                    ),
+          // ── Typology card list ──────────────────────────────────────────────
+          for (final t in const [
+            BuildingTypology.residentialStandard,
+            BuildingTypology.residentialMediumRise,
+            BuildingTypology.residentialHighRise,
+            BuildingTypology.commercialOffice,
+            BuildingTypology.commercialRetail,
+            BuildingTypology.commercialWarehouse,
+          ]) ...[
+            GestureDetector(
+              onTap: () => controller.setProgramme(typology_: t),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: controller.typology == t
+                      ? cs.primaryContainer
+                      : cs.surfaceContainerHighest,
+                  border: Border.all(
+                    color: controller.typology == t
+                        ? cs.primary
+                        : cs.outlineVariant,
+                    width: controller.typology == t ? 2 : 1,
                   ),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-            ],
-          ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _typologyIcon(t),
+                      color: controller.typology == t
+                          ? cs.primary
+                          : cs.onSurfaceVariant,
+                      size: 28,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _typologyShortLabel(t),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: controller.typology == t
+                                      ? cs.onPrimaryContainer
+                                      : cs.onSurface,
+                                ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            t.subtitle,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: controller.typology == t
+                                      ? cs.onPrimaryContainer
+                                      : cs.onSurfaceVariant,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (controller.typology == t)
+                      Icon(Icons.check_circle, color: cs.primary, size: 20),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           const SizedBox(height: 16),
           // ── Quality ────────────────────────────────────────────────────────
           DropdownButtonFormField<String>(
