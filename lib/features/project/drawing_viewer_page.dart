@@ -83,12 +83,15 @@ class _PdfFallback extends StatelessWidget {
               icon: const Icon(Icons.open_in_browser),
               label: const Text('Open in Browser'),
               onPressed: () async {
+                // Capture messenger before the first await to avoid
+                // using context across an async gap.
+                final messenger = ScaffoldMessenger.of(context);
                 final uri = Uri.tryParse(drawing.fileUrl);
                 if (uri != null && await canLaunchUrl(uri)) {
                   await launchUrl(uri, mode: LaunchMode.externalApplication);
                 } else {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    messenger.showSnackBar(
                       const SnackBar(
                         content: Text('Could not open the file URL.'),
                       ),
@@ -125,25 +128,26 @@ class _ImageViewerState extends State<_ImageViewer> {
   // The key lets us measure the rendered image size for hit-testing.
   final _imageKey = GlobalKey();
 
+  // TransformationController tracks zoom/pan so tap positions can be
+  // converted from gesture space to scene (image) space.
+  final _transformCtrl = TransformationController();
+
   @override
   void dispose() {
     _commentCtrl.dispose();
+    _transformCtrl.dispose();
     super.dispose();
   }
 
-  Size? get _renderedImageSize {
-    final rb = _imageKey.currentContext?.findRenderObject() as RenderBox?;
-    return rb?.size;
-  }
-
   void _onTapUp(TapUpDetails details) {
-    final sz = _renderedImageSize;
-    if (sz == null) return;
-
-    final local = details.localPosition;
-    // Clamp to 0–1 range.
-    final nx = (local.dx / sz.width).clamp(0.0, 1.0);
-    final ny = (local.dy / sz.height).clamp(0.0, 1.0);
+    final rb = _imageKey.currentContext?.findRenderObject() as RenderBox?;
+    if (rb == null) return;
+    final sz = rb.size;
+    // Convert from gesture space to scene (image) space before normalising,
+    // so zoom/pan applied by InteractiveViewer is accounted for.
+    final scene = _transformCtrl.toScene(details.localPosition);
+    final nx = (scene.dx / sz.width).clamp(0.0, 1.0);
+    final ny = (scene.dy / sz.height).clamp(0.0, 1.0);
 
     setState(() {
       _pendingPin = Offset(nx, ny);
@@ -206,6 +210,10 @@ class _ImageViewerState extends State<_ImageViewer> {
   }
 
   void _showAnnotationCard() {
+    // The sheet dismisses itself (via Navigator.pop) before _saveAnnotation is
+    // called, so any _saving state change happens after the sheet is gone.
+    // The saving parameter has therefore been removed from _AnnotationInputSheet
+    // to avoid a stale-snapshot confusion.
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -213,7 +221,6 @@ class _ImageViewerState extends State<_ImageViewer> {
       isDismissible: true,
       builder: (_) => _AnnotationInputSheet(
         controller: _commentCtrl,
-        saving: _saving,
         onCancel: () {
           Navigator.of(context).pop();
           _cancelPending();
@@ -240,10 +247,14 @@ class _ImageViewerState extends State<_ImageViewer> {
     return InteractiveViewer(
       minScale: 0.5,
       maxScale: 6.0,
+      transformationController: _transformCtrl,
       child: GestureDetector(
         onTapUp: _onTapUp,
         child: Stack(
           children: [
+            // Note: Stack is sized by Image.network (no independent height constraint),
+            // so Image origin == Stack origin. Pin Positioned offsets are correct.
+            // If a fixed Stack height is ever added, recalculate using image RenderBox offset.
             // Base image
             Image.network(
               widget.drawing.fileUrl,
@@ -389,16 +400,18 @@ class _PendingPin extends StatelessWidget {
 
 // ── Annotation input sheet ────────────────────────────────────────────────────
 
+// The sheet is a StatelessWidget; it does not reflect _saving state changes
+// because the sheet is dismissed (via onSave → Navigator.pop) before
+// _saveAnnotation begins its async work. The saving parameter is intentionally
+// omitted to avoid stale-snapshot confusion.
 class _AnnotationInputSheet extends StatelessWidget {
   const _AnnotationInputSheet({
     required this.controller,
-    required this.saving,
     required this.onCancel,
     required this.onSave,
   });
 
   final TextEditingController controller;
-  final bool saving;
   final VoidCallback onCancel;
   final VoidCallback onSave;
 
@@ -435,21 +448,15 @@ class _AnnotationInputSheet extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: saving ? null : onCancel,
+                  onPressed: onCancel,
                   child: const Text('Cancel'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton(
-                  onPressed: saving ? null : onSave,
-                  child: saving
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Save'),
+                  onPressed: onSave,
+                  child: const Text('Save'),
                 ),
               ),
             ],
