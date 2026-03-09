@@ -44,9 +44,10 @@ class _DaContactsPageState extends State<DaContactsPage> {
     final messenger = ScaffoldMessenger.of(context);
     final uri = Uri(scheme: 'tel', path: phone.replaceAll(' ', ''));
     if (await canLaunchUrl(uri)) {
+      if (!mounted) return;
       await launchUrl(uri);
     } else {
-      if (!context.mounted) return;
+      if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text('Cannot dial $phone')),
       );
@@ -58,9 +59,10 @@ class _DaContactsPageState extends State<DaContactsPage> {
     final url = website.startsWith('http') ? website : 'https://$website';
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
+      if (!mounted) return;
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-      if (!context.mounted) return;
+      if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text('Cannot open $website')),
       );
