@@ -24,7 +24,7 @@ void main() {
   group('AppException.fromFirebase', () {
     test('maps permission-denied to friendly message', () {
       final fe = FirebaseException(
-          plugin: 'cloud_firestore', code: 'permission-denied');
+          plugin: 'cloud_firestore', code: 'permission-denied',);
       expect(
         AppException.from(fe).message,
         "You don't have permission to do that.",
@@ -51,7 +51,7 @@ void main() {
 
     test('maps deadline-exceeded to friendly message', () {
       final fe = FirebaseException(
-          plugin: 'cloud_firestore', code: 'deadline-exceeded');
+          plugin: 'cloud_firestore', code: 'deadline-exceeded',);
       expect(
         AppException.from(fe).message,
         'Request timed out. Check your connection.',
@@ -60,7 +60,7 @@ void main() {
 
     test('maps resource-exhausted to friendly message', () {
       final fe = FirebaseException(
-          plugin: 'cloud_firestore', code: 'resource-exhausted');
+          plugin: 'cloud_firestore', code: 'resource-exhausted',);
       expect(
         AppException.from(fe).message,
         'Too many requests. Please wait a moment.',
@@ -78,7 +78,7 @@ void main() {
 
     test('maps network-request-failed to friendly message', () {
       final fe = FirebaseException(
-          plugin: 'firebase_auth', code: 'network-request-failed');
+          plugin: 'firebase_auth', code: 'network-request-failed',);
       expect(
         AppException.from(fe).message,
         'Network error. Check your connection.',
@@ -116,12 +116,12 @@ void main() {
       final fe =
           FirebaseException(plugin: 'cloud_firestore', code: 'unknown-code');
       expect(
-          AppException.from(fe).message, 'Something went wrong. Please try again.');
+          AppException.from(fe).message, 'Something went wrong. Please try again.',);
     });
 
     test('fromFirebase preserves the error code', () {
       final fe = FirebaseException(
-          plugin: 'cloud_firestore', code: 'permission-denied');
+          plugin: 'cloud_firestore', code: 'permission-denied',);
       expect(AppException.from(fe).code, 'permission-denied');
     });
   });
