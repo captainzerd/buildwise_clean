@@ -3,7 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wysebrix/core/widgets/loading_button.dart';
 
 void main() {
-  testWidgets('LoadingButton shows spinner while async work runs', (tester) async {
+  // Tests the LoadingButton widget used throughout the app.
+  // id_verification_page.dart uses an inline busy-state pattern instead,
+  // but this covers the shared widget's spinner/label contract.
+  testWidgets('LoadingButton widget: shows spinner while async work runs', (tester) async {
     var completed = false;
     await tester.pumpWidget(
       MaterialApp(
