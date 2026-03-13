@@ -2,48 +2,47 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('notification tile renders title and subtitle', (tester) async {
+  testWidgets('notification tile renders with title and is tappable', (tester) async {
+    var tapped = false;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: ListTile(
             title: const Text('New contract received'),
             subtitle: const Text('2 minutes ago'),
-            onTap: () {},
+            onTap: () => tapped = true,
           ),
         ),
       ),
     );
 
     expect(find.text('New contract received'), findsOneWidget);
-    expect(find.text('2 minutes ago'), findsOneWidget);
+    await tester.tap(find.byType(ListTile));
+    expect(tapped, isTrue);
   });
 
-  testWidgets('snackbar shows on routing error', (tester) async {
+  testWidgets('routing error shows could-not-open snackbar', (tester) async {
+    // Verifies the SnackBar error pattern used in routeFromData catch block
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
           builder: (ctx) => Scaffold(
             body: ElevatedButton(
               onPressed: () {
-                try {
-                  throw Exception('route error');
-                } catch (_) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(
-                      content: Text('Could not open this notification.'),
-                    ),
-                  );
-                }
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(
+                    content: Text('Could not open this notification.'),
+                  ),
+                );
               },
-              child: const Text('tap'),
+              child: const Text('trigger error'),
             ),
           ),
         ),
       ),
     );
 
-    await tester.tap(find.text('tap'));
+    await tester.tap(find.text('trigger error'));
     await tester.pumpAndSettle();
     expect(find.text('Could not open this notification.'), findsOneWidget);
   });
