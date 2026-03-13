@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/config/service_locator.dart';
+import '../../../core/errors/app_exception.dart';
 import '../../../core/models/app_user.dart';
 import '../../../core/models/builder_contract.dart';
 import '../../../core/models/pm_profile.dart';
@@ -1966,7 +1967,7 @@ class _SearchTabState extends State<_SearchTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
+          SnackBar(content: Text(AppException.from(e).message)),
         );
       }
       setState(() => _adding = false);
@@ -2147,7 +2148,7 @@ class _InviteTabState extends State<_InviteTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
+          SnackBar(content: Text(AppException.from(e).message)),
         );
       }
       setState(() => _creating = false);
