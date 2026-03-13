@@ -206,18 +206,21 @@ class _IdVerificationPageState extends State<IdVerificationPage> {
                         const SizedBox(height: 24),
                         SizedBox(
                           width: double.infinity,
-                          child: FilledButton(
+                          child: FilledButton.icon(
                             onPressed: _busy ? null : _submit,
-                            child: _busy
+                            icon: _busy
                                 ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
+                                    width: 18,
+                                    height: 18,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                       color: Colors.white,
                                     ),
                                   )
-                                : const Text('Submit for Verification'),
+                                : const Icon(Icons.upload_outlined),
+                            label: Text(
+                              _busy ? 'Please wait…' : 'Submit for Verification',
+                            ),
                           ),
                         ),
                       ],
