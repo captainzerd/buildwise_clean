@@ -193,36 +193,12 @@ class _OwnerProjectsViewState extends State<_OwnerProjectsView> {
       );
     }
     if (_projects.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.construction_outlined,
-              size: 72,
-              color: Colors.grey,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No projects yet',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 32),
-              child: Text(
-                'Start with an estimate, then create your first project.',
-                textAlign: TextAlign.center,
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: () => context.go('/estimate'),
-              icon: const Icon(Icons.calculate_outlined),
-              label: const Text('Get Estimate'),
-            ),
-          ],
-        ),
+      return EmptyState(
+        icon: Icons.construction_outlined,
+        title: 'No projects yet',
+        message: 'Start with an estimate, then create your first project.',
+        actionLabel: 'Get Estimate',
+        onAction: () => context.go('/estimate'),
       );
     }
 
