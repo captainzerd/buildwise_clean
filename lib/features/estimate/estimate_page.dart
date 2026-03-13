@@ -126,11 +126,25 @@ class _EstimatePageState extends State<EstimatePage> {
             ),
           ],
           bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(4),
-            child: LinearProgressIndicator(
-              value: (_step + 1) / _totalSteps,
-              backgroundColor:
-                  Theme.of(context).colorScheme.surfaceContainerHighest,
+            preferredSize: const Size.fromHeight(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    'Step ${_step + 1} of $_totalSteps',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                LinearProgressIndicator(
+                  value: (_step + 1) / _totalSteps,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
+                ),
+              ],
             ),
           ),
         ),
