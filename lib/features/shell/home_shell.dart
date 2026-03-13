@@ -65,13 +65,13 @@ class _HomeShellState extends State<HomeShell> {
     final projectsLabel =
         auth.isSignedIn && auth.role.isProfessional ? 'My Work' : 'Projects';
 
-    // Account tab is rendered as the full page (embedded — no inner AppBar).
+    // Account and Estimate tabs supply their own AppBar (inner Scaffold).
     // All other tabs are wrapped in the outer Scaffold AppBar.
-    final onAccountTab = _index == _kAccount;
+    final onCustomAppBarTab = _index == _kAccount || _index == _kEstimate;
 
     return Scaffold(
-      appBar: onAccountTab
-          ? null // AccountPage supplies its own AppBar
+      appBar: onCustomAppBarTab
+          ? null
           : AppBar(
               title: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -172,25 +172,15 @@ class _NavBar extends StatelessWidget {
               if (unreadChats > 0)
                 '$unreadChats unread chat message${unreadChats == 1 ? '' : 's'}',
             ].join(', '),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Badge(
-                  isLabelVisible: pendingDeletions > 0,
-                  label: Text(
-                    pendingDeletions > 99 ? '99+' : '$pendingDeletions',
-                  ),
-                  child: const Icon(Icons.work_outline),
-                ),
-                if (unreadChats > 0)
-                  Positioned(
-                    right: -4,
-                    top: -4,
-                    child: Badge(
-                      label: Text(unreadChats > 99 ? '99+' : '$unreadChats'),
-                    ),
-                  ),
-              ],
+            child: Badge(
+              isLabelVisible: pendingDeletions > 0,
+              label: Text(pendingDeletions > 99 ? '99+' : '$pendingDeletions'),
+              child: Badge(
+                isLabelVisible: unreadChats > 0,
+                label: Text(unreadChats > 99 ? '99+' : '$unreadChats'),
+                alignment: AlignmentDirectional.bottomStart,
+                child: const Icon(Icons.work_outline),
+              ),
             ),
           ),
           selectedIcon: Semantics(
@@ -200,25 +190,15 @@ class _NavBar extends StatelessWidget {
               if (unreadChats > 0)
                 '$unreadChats unread chat message${unreadChats == 1 ? '' : 's'}',
             ].join(', '),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Badge(
-                  isLabelVisible: pendingDeletions > 0,
-                  label: Text(
-                    pendingDeletions > 99 ? '99+' : '$pendingDeletions',
-                  ),
-                  child: const Icon(Icons.work),
-                ),
-                if (unreadChats > 0)
-                  Positioned(
-                    right: -4,
-                    top: -4,
-                    child: Badge(
-                      label: Text(unreadChats > 99 ? '99+' : '$unreadChats'),
-                    ),
-                  ),
-              ],
+            child: Badge(
+              isLabelVisible: pendingDeletions > 0,
+              label: Text(pendingDeletions > 99 ? '99+' : '$pendingDeletions'),
+              child: Badge(
+                isLabelVisible: unreadChats > 0,
+                label: Text(unreadChats > 99 ? '99+' : '$unreadChats'),
+                alignment: AlignmentDirectional.bottomStart,
+                child: const Icon(Icons.work),
+              ),
             ),
           ),
           label: projectsLabel,
