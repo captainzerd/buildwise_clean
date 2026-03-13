@@ -1185,9 +1185,7 @@ class CostsTabState extends State<CostsTab> {
                               builder: (dlgCtx) => AlertDialog(
                                 title: const Text('Delete cost entry?'),
                                 content: Text(
-                                  'Delete "${entries[i].category}" — '
-                                  'GH₵${NumberFormat('#,##0.00').format(entries[i].amountGhs)}?\n\n'
-                                  'This action cannot be undone.',
+                                  '${entries[i].category} (${NumberFormat('#,##0.00').format(entries[i].amountGhs)} GHS) will be permanently removed.\n\nThis action cannot be undone.',
                                 ),
                                 actions: [
                                   TextButton(
