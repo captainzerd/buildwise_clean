@@ -106,6 +106,34 @@ MilestoneApprovalStatus milestoneApprovalStatusFromString(String? s) =>
       _ => MilestoneApprovalStatus.pending,
     };
 
+/// Tracks the lifecycle of the actual funds transfer once PSP is connected.
+/// Until then all milestones default to [notStarted].
+enum MilestoneDisbursementStatus { notStarted, pending, disbursed, failed }
+
+extension MilestoneDisbursementStatusLabel on MilestoneDisbursementStatus {
+  String get label => switch (this) {
+        MilestoneDisbursementStatus.notStarted => 'Not Started',
+        MilestoneDisbursementStatus.pending => 'Processing',
+        MilestoneDisbursementStatus.disbursed => 'Disbursed',
+        MilestoneDisbursementStatus.failed => 'Failed',
+      };
+
+  String get firestoreValue => switch (this) {
+        MilestoneDisbursementStatus.notStarted => 'notStarted',
+        MilestoneDisbursementStatus.pending => 'pending',
+        MilestoneDisbursementStatus.disbursed => 'disbursed',
+        MilestoneDisbursementStatus.failed => 'failed',
+      };
+}
+
+MilestoneDisbursementStatus milestoneDisbursementStatusFromString(String? s) =>
+    switch (s) {
+      'pending' => MilestoneDisbursementStatus.pending,
+      'disbursed' => MilestoneDisbursementStatus.disbursed,
+      'failed' => MilestoneDisbursementStatus.failed,
+      _ => MilestoneDisbursementStatus.notStarted,
+    };
+
 class PaymentMilestone {
   const PaymentMilestone({
     required this.id,
@@ -117,6 +145,10 @@ class PaymentMilestone {
     this.approvalStatus = MilestoneApprovalStatus.pending,
     this.releasedAt,
     this.releasedByName,
+    this.disbursementStatus = MilestoneDisbursementStatus.notStarted,
+    this.paystackReference,
+    this.capturedAt,
+    this.disbursedAt,
   });
 
   final String id;
@@ -128,6 +160,13 @@ class PaymentMilestone {
   final MilestoneApprovalStatus approvalStatus;
   final DateTime? releasedAt;
   final String? releasedByName;
+  final MilestoneDisbursementStatus disbursementStatus;
+  /// Paystack transaction reference — null until PSP is connected.
+  final String? paystackReference;
+  /// When the owner's payment was captured — null until PSP is connected.
+  final DateTime? capturedAt;
+  /// When funds were disbursed to the builder — null until PSP is connected.
+  final DateTime? disbursedAt;
 
   bool get isOverdue =>
       dueDate != null && !isPaid && dueDate!.isBefore(DateTime.now());
@@ -142,6 +181,10 @@ class PaymentMilestone {
         'approvalStatus': approvalStatus.firestoreValue,
         if (releasedAt != null) 'releasedAt': Timestamp.fromDate(releasedAt!),
         if (releasedByName != null) 'releasedByName': releasedByName,
+        'disbursementStatus': disbursementStatus.firestoreValue,
+        if (paystackReference != null) 'paystackReference': paystackReference,
+        if (capturedAt != null) 'capturedAt': Timestamp.fromDate(capturedAt!),
+        if (disbursedAt != null) 'disbursedAt': Timestamp.fromDate(disbursedAt!),
       };
 
   factory PaymentMilestone.fromMap(Map<String, dynamic> m) => PaymentMilestone(
@@ -156,6 +199,12 @@ class PaymentMilestone {
         ),
         releasedAt: (m['releasedAt'] as Timestamp?)?.toDate(),
         releasedByName: m['releasedByName'] as String?,
+        disbursementStatus: milestoneDisbursementStatusFromString(
+          m['disbursementStatus'] as String?,
+        ),
+        paystackReference: m['paystackReference'] as String?,
+        capturedAt: (m['capturedAt'] as Timestamp?)?.toDate(),
+        disbursedAt: (m['disbursedAt'] as Timestamp?)?.toDate(),
       );
 
   PaymentMilestone copyWith({
@@ -167,6 +216,10 @@ class PaymentMilestone {
     MilestoneApprovalStatus? approvalStatus,
     DateTime? releasedAt,
     String? releasedByName,
+    MilestoneDisbursementStatus? disbursementStatus,
+    String? paystackReference,
+    DateTime? capturedAt,
+    DateTime? disbursedAt,
   }) =>
       PaymentMilestone(
         id: id,
@@ -178,6 +231,10 @@ class PaymentMilestone {
         approvalStatus: approvalStatus ?? this.approvalStatus,
         releasedAt: releasedAt ?? this.releasedAt,
         releasedByName: releasedByName ?? this.releasedByName,
+        disbursementStatus: disbursementStatus ?? this.disbursementStatus,
+        paystackReference: paystackReference ?? this.paystackReference,
+        capturedAt: capturedAt ?? this.capturedAt,
+        disbursedAt: disbursedAt ?? this.disbursedAt,
       );
 }
 
