@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/config/service_locator.dart';
+import '../../core/errors/app_exception.dart';
 import '../../core/models/app_user.dart';
 import '../../core/models/project.dart';
 import '../../core/services/auth_service.dart';
@@ -183,11 +184,12 @@ class _OwnerProjectsViewState extends State<_OwnerProjectsView> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null && _projects.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text('Error loading projects: $_error', textAlign: TextAlign.center),
-        ),
+      return EmptyState(
+        icon: Icons.cloud_off_outlined,
+        title: 'Could not load projects',
+        message: AppException.from(_error!).message,
+        actionLabel: 'Retry',
+        onAction: _loadFirst,
       );
     }
     if (_projects.isEmpty) {
@@ -437,11 +439,12 @@ class _BuilderProjectsViewState extends State<_BuilderProjectsView> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null && _projects.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text('Error loading projects: $_error', textAlign: TextAlign.center),
-        ),
+      return EmptyState(
+        icon: Icons.cloud_off_outlined,
+        title: 'Could not load projects',
+        message: AppException.from(_error!).message,
+        actionLabel: 'Retry',
+        onAction: _loadFirst,
       );
     }
     if (_projects.isEmpty) {

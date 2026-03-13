@@ -1,17 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/config/service_locator.dart';
+import '../../core/errors/app_exception.dart';
 import '../../core/models/app_notification.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/notification_service.dart';
+import '../../core/widgets/empty_state.dart';
 
-class NotificationCentrePage extends StatelessWidget {
+class NotificationCentrePage extends StatefulWidget {
   const NotificationCentrePage({super.key});
 
   @override
+  State<NotificationCentrePage> createState() =>
+      _NotificationCentrePageState();
+}
+
+class _NotificationCentrePageState extends State<NotificationCentrePage> {
+  @override
   Widget build(BuildContext context) {
     final auth = context.read<AuthService>();
-    final svc = context.read<NotificationService>();
+    final svc = sl<NotificationService>();
     final uid = auth.currentUser?.uid ?? '';
 
     return Scaffold(
@@ -29,6 +38,15 @@ class NotificationCentrePage extends StatelessWidget {
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (snap.hasError) {
+            return EmptyState(
+              icon: Icons.cloud_off_outlined,
+              title: 'Could not load notifications',
+              message: AppException.from(snap.error!).message,
+              actionLabel: 'Retry',
+              onAction: () => setState(() {}),
+            );
           }
           final items = snap.data ?? [];
           if (items.isEmpty) {

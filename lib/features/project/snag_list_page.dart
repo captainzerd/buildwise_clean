@@ -1,6 +1,7 @@
 import '../../core/config/service_locator.dart';
 // lib/features/project/snag_list_page.dart
 import '../../core/errors/app_exception.dart';
+import '../../core/widgets/empty_state.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
@@ -60,6 +61,15 @@ class _SnagListPageState extends State<SnagListPage> {
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (snap.hasError) {
+            return EmptyState(
+              icon: Icons.cloud_off_outlined,
+              title: 'Could not load issues',
+              message: AppException.from(snap.error!).message,
+              actionLabel: 'Retry',
+              onAction: () => setState(() {}),
+            );
           }
           final allItems = snap.data ?? [];
 

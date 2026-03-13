@@ -4,13 +4,20 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/errors/app_exception.dart';
 import '../../core/models/builder_contract.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/contract_service.dart';
+import '../../core/widgets/empty_state.dart';
 
-class PendingContractsPage extends StatelessWidget {
+class PendingContractsPage extends StatefulWidget {
   const PendingContractsPage({super.key});
 
+  @override
+  State<PendingContractsPage> createState() => _PendingContractsPageState();
+}
+
+class _PendingContractsPageState extends State<PendingContractsPage> {
   @override
   Widget build(BuildContext context) {
     final auth = context.read<AuthService>();
@@ -26,7 +33,13 @@ class PendingContractsPage extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (snap.hasError) {
-            return Center(child: Text('Error: ${snap.error}'));
+            return EmptyState(
+              icon: Icons.cloud_off_outlined,
+              title: 'Could not load contracts',
+              message: AppException.from(snap.error!).message,
+              actionLabel: 'Retry',
+              onAction: () => setState(() {}),
+            );
           }
           final contracts = snap.data ?? [];
           if (contracts.isEmpty) {
