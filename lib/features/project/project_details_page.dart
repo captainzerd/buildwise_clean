@@ -108,90 +108,104 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
               if (project != null)
                 PopupMenuButton<_MenuAction>(
                   onSelected: (action) => _handleMenu(context, action, project),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
+                  itemBuilder: (ctx) => [
+                    // ── Project ──
+                    const PopupMenuItem(
                       value: _MenuAction.editProject,
-                      child: Text('Edit Project'),
+                      child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Edit Project')),
                     ),
-                    PopupMenuItem(
-                      value: _MenuAction.viewAnalytics,
-                      child: Text('View Analytics'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.mortgageCalculator,
-                      child: Text('Mortgage Calculator'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.buildTimeline,
-                      child: Text('Build Timeline'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.generateReport,
-                      child: Text('Generate Report'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.export,
-                      child: Text('Export'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.viewAuditLog,
-                      child: Text('View Audit Log'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.viewQuotes,
-                      child: Text('View Quotes'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.dueDiligence,
-                      child: Text('Due Diligence'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.snagList,
-                      child: Text('Snag List'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.laborTracking,
-                      child: Text('Labour Tracking'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.changeOrders,
-                      child: Text('Change Orders'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.siteVisits,
-                      child: Text('Site Inspections'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.drawings,
-                      child: Text('Drawings'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.permits,
-                      child: Text('Permits'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.manageTasks,
-                      child: Text('Manage Tasks'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.generateInvoice,
-                      child: Text('Generate Invoice'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.saveAsTemplate,
-                      child: Text('Save as Template'),
-                    ),
-                    PopupMenuItem(
-                      value: _MenuAction.viewTemplates,
-                      child: Text('My Templates'),
-                    ),
-                    PopupMenuItem(
+                    const PopupMenuItem(
                       value: _MenuAction.editStatus,
-                      child: Text('Change status'),
+                      child: ListTile(leading: Icon(Icons.flag_outlined), title: Text('Change Status')),
                     ),
+                    const PopupMenuItem(
+                      value: _MenuAction.buildTimeline,
+                      child: ListTile(leading: Icon(Icons.timeline_outlined), title: Text('Build Timeline')),
+                    ),
+                    const PopupMenuItem(
+                      value: _MenuAction.viewAnalytics,
+                      child: ListTile(leading: Icon(Icons.analytics_outlined), title: Text('View Analytics')),
+                    ),
+                    const PopupMenuItem(
+                      value: _MenuAction.mortgageCalculator,
+                      child: ListTile(leading: Icon(Icons.calculate_outlined), title: Text('Mortgage Calculator')),
+                    ),
+                    const PopupMenuDivider(),
+                    // ── Documents ──
+                    const PopupMenuItem(
+                      value: _MenuAction.generateReport,
+                      child: ListTile(leading: Icon(Icons.summarize_outlined), title: Text('Generate Report')),
+                    ),
+                    const PopupMenuItem(
+                      value: _MenuAction.export,
+                      child: ListTile(leading: Icon(Icons.upload_outlined), title: Text('Export')),
+                    ),
+                    const PopupMenuItem(
+                      value: _MenuAction.generateInvoice,
+                      child: ListTile(leading: Icon(Icons.receipt_outlined), title: Text('Generate Invoice')),
+                    ),
+                    const PopupMenuItem(
+                      value: _MenuAction.viewAuditLog,
+                      child: ListTile(leading: Icon(Icons.history_outlined), title: Text('Audit Log')),
+                    ),
+                    const PopupMenuDivider(),
+                    // ── Work ──
+                    const PopupMenuItem(
+                      value: _MenuAction.manageTasks,
+                      child: ListTile(leading: Icon(Icons.checklist_outlined), title: Text('Manage Tasks')),
+                    ),
+                    const PopupMenuItem(
+                      value: _MenuAction.laborTracking,
+                      child: ListTile(leading: Icon(Icons.engineering_outlined), title: Text('Labour Tracking')),
+                    ),
+                    const PopupMenuItem(
+                      value: _MenuAction.changeOrders,
+                      child: ListTile(leading: Icon(Icons.edit_note_outlined), title: Text('Change Orders')),
+                    ),
+                    const PopupMenuItem(
+                      value: _MenuAction.siteVisits,
+                      child: ListTile(leading: Icon(Icons.location_on_outlined), title: Text('Site Inspections')),
+                    ),
+                    const PopupMenuItem(
+                      value: _MenuAction.snagList,
+                      child: ListTile(leading: Icon(Icons.bug_report_outlined), title: Text('Snag List')),
+                    ),
+                    const PopupMenuItem(
+                      value: _MenuAction.drawings,
+                      child: ListTile(leading: Icon(Icons.architecture_outlined), title: Text('Drawings')),
+                    ),
+                    const PopupMenuItem(
+                      value: _MenuAction.permits,
+                      child: ListTile(leading: Icon(Icons.approval_outlined), title: Text('Permits')),
+                    ),
+                    const PopupMenuDivider(),
+                    // ── Marketplace ──
+                    const PopupMenuItem(
+                      value: _MenuAction.viewQuotes,
+                      child: ListTile(leading: Icon(Icons.request_quote_outlined), title: Text('View Quotes')),
+                    ),
+                    const PopupMenuItem(
+                      value: _MenuAction.dueDiligence,
+                      child: ListTile(leading: Icon(Icons.verified_outlined), title: Text('Due Diligence')),
+                    ),
+                    const PopupMenuDivider(),
+                    // ── Templates ──
+                    const PopupMenuItem(
+                      value: _MenuAction.saveAsTemplate,
+                      child: ListTile(leading: Icon(Icons.save_outlined), title: Text('Save as Template')),
+                    ),
+                    const PopupMenuItem(
+                      value: _MenuAction.viewTemplates,
+                      child: ListTile(leading: Icon(Icons.folder_copy_outlined), title: Text('My Templates')),
+                    ),
+                    const PopupMenuDivider(),
+                    // ── Danger ──
                     PopupMenuItem(
                       value: _MenuAction.delete,
-                      child: Text('Delete project'),
+                      child: ListTile(
+                        leading: Icon(Icons.delete_outlined, color: Theme.of(ctx).colorScheme.error),
+                        title: Text('Delete Project', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                      ),
                     ),
                   ],
                 ),
