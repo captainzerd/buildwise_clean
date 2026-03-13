@@ -1,4 +1,5 @@
 import '../../core/config/service_locator.dart';
+import '../../core/errors/app_exception.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -712,6 +713,7 @@ class _VerificationBanner extends StatefulWidget {
 
 class _VerificationBannerState extends State<_VerificationBanner> {
   bool _busy = false;
+  bool _checking = false;
 
   Future<void> _resend() async {
     setState(() => _busy = true);
@@ -733,47 +735,92 @@ class _VerificationBannerState extends State<_VerificationBanner> {
     }
   }
 
+  Future<void> _checkVerification() async {
+    setState(() => _checking = true);
+    try {
+      await widget.auth.refreshEmailVerificationStatus();
+      if (mounted && !widget.auth.isEmailVerified) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Email not verified yet. Check your inbox.'),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not check status. Try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final anyBusy = _busy || _checking;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cs.errorContainer,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.warning_amber_outlined, color: cs.onErrorContainer),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Email not verified',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: cs.onErrorContainer,
-                  ),
+          Row(
+            children: [
+              Icon(Icons.warning_amber_outlined, color: cs.onErrorContainer),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Email not verified',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: cs.onErrorContainer,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Some features require a verified email.',
+                      style: TextStyle(fontSize: 12, color: cs.onErrorContainer),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'Some features require a verified email.',
-                  style: TextStyle(fontSize: 12, color: cs.onErrorContainer),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: _busy ? null : _resend,
-            child: _busy
-                ? const SizedBox(
-                    height: 16,
-                    width: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Resend'),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: anyBusy ? null : _resend,
+                child: _busy
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Resend'),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: anyBusy ? null : _checkVerification,
+                child: _checking
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text("I've verified"),
+              ),
+            ],
           ),
         ],
       ),
@@ -1354,7 +1401,7 @@ class _RoleSwitchSheetState extends State<_RoleSwitchSheet> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Switch role?'),
+        title: Text('Switch to ${_selected.label}?'),
         content: Text(
           'Your account will be switched to ${_selected.label}. '
           'You can switch back at any time.',
@@ -1380,7 +1427,7 @@ class _RoleSwitchSheetState extends State<_RoleSwitchSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not switch role: $e'), duration: const Duration(seconds: 10)),
+          SnackBar(content: Text('Could not switch role: ${AppException.from(e).message}'), duration: const Duration(seconds: 10)),
         );
       }
     } finally {
