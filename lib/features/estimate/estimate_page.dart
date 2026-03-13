@@ -38,7 +38,10 @@ class _EstimatePageState extends State<EstimatePage> {
   int _step = 0;
   static const _totalSteps = 5;
 
-  bool get _isDirty => _step > 0;
+  bool _isDirty(EstimateController controller) =>
+      _step > 0 ||
+      controller.projectNameCtrl.text.isNotEmpty ||
+      controller.region != null;
 
   static String _hoursAgo(DateTime dt) {
     final diff = DateTime.now().difference(dt);
@@ -80,7 +83,7 @@ class _EstimatePageState extends State<EstimatePage> {
     const stepTitles = ['Project', 'Building', 'Floors', 'Extras', 'Review'];
 
     return PopScope(
-      canPop: !_isDirty,
+      canPop: !_isDirty(controller),
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         final nav = Navigator.of(context);
