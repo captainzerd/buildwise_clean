@@ -301,10 +301,16 @@ class NotificationService {
     final ctx = navigatorKey.currentContext;
     if (ctx == null) return;
 
-    if (type == 'contract_new') {
-      GoRouter.of(ctx).push('/account/contracts/pending');
-    } else if (projectId.isNotEmpty) {
-      GoRouter.of(ctx).push('/projects/$projectId');
+    try {
+      if (type == 'contract_new') {
+        GoRouter.of(ctx).push('/account/contracts/pending');
+      } else if (projectId.isNotEmpty) {
+        GoRouter.of(ctx).push('/projects/$projectId');
+      }
+    } catch (_) {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(content: Text('Could not open this notification.')),
+      );
     }
   }
 }

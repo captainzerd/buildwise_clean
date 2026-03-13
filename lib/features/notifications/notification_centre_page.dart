@@ -121,7 +121,13 @@ class _NotifTile extends StatelessWidget {
     return InkWell(
       onTap: () {
         if (unread) svc.markRead(uid, notif.id);
-        svc.routeFromData(notif.data);
+        try {
+          svc.routeFromData(notif.data);
+        } catch (_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open this notification.')),
+          );
+        }
       },
       child: Container(
         color: unread ? cs.primaryContainer.withValues(alpha: 0.15) : null,
