@@ -1,5 +1,6 @@
 // lib/features/project/tabs/work_tab.dart  (Progress tab)
 import 'dart:async';
+import '../../../core/errors/app_exception.dart';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -1273,7 +1274,7 @@ class CostsTabState extends State<CostsTab> {
         const SnackBar(content: Text('Deletion request sent to owner.')),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
+      messenger.showSnackBar(SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)));
     }
   }
 }
@@ -2165,7 +2166,7 @@ class ProjectAddIssueSheetState extends State<ProjectAddIssueSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
+          SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)),
         );
       }
     } finally {

@@ -1,6 +1,7 @@
 // lib/features/admin/admin_page.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../core/errors/app_exception.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -44,7 +45,7 @@ class _AdminPageState extends State<AdminPage> {
 
       setState(() => _msg = 'OK: ${res.data}');
     } catch (e) {
-      setState(() => _msg = 'Error: $e');
+      setState(() => _msg = AppException.from(e).message);
     } finally {
       setState(() => _busy = false);
     }

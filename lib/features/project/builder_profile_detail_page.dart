@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config/service_locator.dart';
+import '../../core/errors/app_exception.dart';
 import '../../core/models/builder_profile.dart';
 import '../../core/models/portfolio_item.dart';
 import '../../core/services/auth_service.dart';
@@ -177,7 +178,7 @@ class _BuilderProfileDetailPageState extends State<BuilderProfileDetailPage> {
                       } catch (e) {
                         if (mounted) {
                           messenger.showSnackBar(
-                            SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
+                            SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)),
                           );
                         }
                       } finally {

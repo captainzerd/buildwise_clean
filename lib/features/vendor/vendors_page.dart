@@ -1,5 +1,6 @@
 import '../../core/config/service_locator.dart';
 // lib/features/vendor/vendors_page.dart
+import '../../core/errors/app_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -479,7 +480,7 @@ class _VendorCard extends StatelessWidget {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
+            SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)),
           );
         }
       }
@@ -514,7 +515,7 @@ class _VendorCard extends StatelessWidget {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
+            SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)),
           );
         }
       }
@@ -679,7 +680,7 @@ class _AddVendorSheetState extends State<_AddVendorSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
+          SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)),
         );
       }
     } finally {

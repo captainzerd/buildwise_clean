@@ -1,5 +1,6 @@
 // lib/features/project/variation_orders_page.dart
 import 'package:flutter/material.dart';
+import '../../core/errors/app_exception.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -309,7 +310,7 @@ class _VoCard extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
+          SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)),
         );
       }
     }
@@ -383,7 +384,7 @@ class _SubmitVoSheetState extends State<_SubmitVoSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
-        messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
+        messenger.showSnackBar(SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)));
       }
     }
   }

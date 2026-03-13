@@ -4,6 +4,7 @@
 // Each item includes photos, project type, region, value, and client name.
 
 import 'dart:io';
+import '../../core/errors/app_exception.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -313,7 +314,7 @@ class _AddPortfolioSheetState extends State<_AddPortfolioSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
+          SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)),
         );
       }
     } finally {

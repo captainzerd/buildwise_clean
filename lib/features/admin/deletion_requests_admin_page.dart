@@ -1,5 +1,6 @@
 // lib/features/admin/deletion_requests_admin_page.dart
 import 'package:flutter/material.dart';
+import '../../core/errors/app_exception.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/config/service_locator.dart';
@@ -72,7 +73,7 @@ class _RequestCardState extends State<_RequestCard> {
     } catch (e) {
       if (mounted) {
         setState(() => _busy = false);
-        messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+        messenger.showSnackBar(SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)));
       }
     }
   }
@@ -86,7 +87,7 @@ class _RequestCardState extends State<_RequestCard> {
     } catch (e) {
       if (mounted) {
         setState(() => _busy = false);
-        messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+        messenger.showSnackBar(SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)));
       }
     }
   }

@@ -833,7 +833,7 @@ class _OverviewTabState extends State<OverviewTab> {
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text(AppException.from(e).message),
             duration: const Duration(seconds: 10),
           ),
         );
@@ -947,7 +947,7 @@ class _OverviewTabState extends State<OverviewTab> {
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text(AppException.from(e).message),
             duration: const Duration(seconds: 10),
           ),
         );
@@ -1052,7 +1052,7 @@ class _OverviewTabState extends State<OverviewTab> {
           const SnackBar(content: Text('Rating submitted')),
         );
       } catch (e) {
-        messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
+        messenger.showSnackBar(SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)));
       }
     }
     commentCtrl.dispose();
@@ -2382,7 +2382,7 @@ class _DeletionRequestsSection extends StatelessWidget {
         const SnackBar(content: Text('Item deleted.')),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
+      messenger.showSnackBar(SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)));
     }
   }
 
@@ -2397,7 +2397,7 @@ class _DeletionRequestsSection extends StatelessWidget {
         const SnackBar(content: Text('Deletion request denied.')),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
+      messenger.showSnackBar(SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)));
     }
   }
 }

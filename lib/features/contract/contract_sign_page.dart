@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:signature/signature.dart';
 
 import '../../core/config/service_locator.dart';
+import '../../core/errors/app_exception.dart';
 import '../../core/models/builder_contract.dart';
 import '../../core/services/contract_service.dart';
 
@@ -95,7 +96,7 @@ class _ContractSignPageState extends State<ContractSignPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
+          SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)),
         );
       }
     } finally {

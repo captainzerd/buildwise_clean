@@ -1,5 +1,6 @@
 // lib/features/project/tabs/finance_tab.dart
 import 'dart:async';
+import '../../../core/errors/app_exception.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -314,7 +315,7 @@ class ProjectAttachEstimateSheetState extends State<ProjectAttachEstimateSheet> 
     } catch (e) {
       if (mounted) {
         setState(() => _attaching = false);
-        messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
+        messenger.showSnackBar(SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)));
       }
     }
   }
@@ -627,7 +628,7 @@ class _PaymentsTabState extends State<_PaymentsTab> {
         const SnackBar(content: Text('Deletion request sent to owner.')),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
+      messenger.showSnackBar(SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)));
     }
   }
 }
@@ -888,7 +889,7 @@ class ProjectAddPaymentSheetState extends State<ProjectAddPaymentSheet> {
       );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)));
+      messenger.showSnackBar(SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

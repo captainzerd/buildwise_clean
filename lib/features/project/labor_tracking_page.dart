@@ -1,5 +1,6 @@
 import '../../core/config/service_locator.dart';
 import '../../core/data/ghana_labour_rates.dart';
+import '../../core/errors/app_exception.dart';
 // lib/features/project/labor_tracking_page.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -412,7 +413,7 @@ class _AddLaborSheetState extends State<_AddLaborSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
+          SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)),
         );
       }
     } finally {

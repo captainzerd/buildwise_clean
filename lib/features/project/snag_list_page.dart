@@ -1,5 +1,6 @@
 import '../../core/config/service_locator.dart';
 // lib/features/project/snag_list_page.dart
+import '../../core/errors/app_exception.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
@@ -662,7 +663,7 @@ class _AddSnagSheetState extends State<_AddSnagSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 10)),
+          SnackBar(content: Text(AppException.from(e).message), duration: const Duration(seconds: 10)),
         );
       }
     } finally {
