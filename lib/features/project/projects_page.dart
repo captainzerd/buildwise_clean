@@ -50,7 +50,7 @@ class _OwnerProjectsViewState extends State<_OwnerProjectsView> {
   DocumentSnapshot? _cursor;
   bool _hasMore = true;
   bool _loading = false;
-  String? _error;
+  Object? _error;
 
   static const _pageSize = 20;
 
@@ -89,7 +89,7 @@ class _OwnerProjectsViewState extends State<_OwnerProjectsView> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = e;
         _loading = false;
       });
     }
@@ -344,7 +344,7 @@ class _BuilderProjectsViewState extends State<_BuilderProjectsView> {
   List<Project> _projects = [];
   bool _hasMore = true;
   bool _loading = false;
-  String? _error;
+  Object? _error;
 
   static const _pageSize = 20;
 
@@ -379,7 +379,7 @@ class _BuilderProjectsViewState extends State<_BuilderProjectsView> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = e;
         _loading = false;
       });
     }

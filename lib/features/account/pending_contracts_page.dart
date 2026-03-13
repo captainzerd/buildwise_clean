@@ -1,9 +1,9 @@
-import '../../core/config/service_locator.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/config/service_locator.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/models/builder_contract.dart';
 import '../../core/services/auth_service.dart';
