@@ -6,6 +6,7 @@ import '../../core/models/pm_profile.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/pm_profile_service.dart';
 import '../../core/services/regional_index_provider.dart';
+import '../../widgets/validators.dart';
 
 class PmProfilePage extends StatefulWidget {
   const PmProfilePage({super.key});
@@ -190,6 +191,7 @@ class _PmProfilePageState extends State<PmProfilePage> {
                 border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.phone,
+              validator: Validators.phone,
             ),
             const SizedBox(height: 14),
 

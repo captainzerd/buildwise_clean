@@ -14,6 +14,7 @@ import '../../core/models/builder_profile.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/builder_profile_service.dart';
 import '../../core/services/regional_index_provider.dart';
+import '../../widgets/validators.dart';
 
 class BuilderProfilePage extends StatefulWidget {
   const BuilderProfilePage({super.key});
@@ -420,6 +421,7 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
                 border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.phone,
+              validator: Validators.phone,
             ),
             const SizedBox(height: 14),
 
@@ -433,6 +435,7 @@ class _BuilderProfilePageState extends State<BuilderProfilePage> {
                 border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.phone,
+              validator: Validators.phone,
             ),
             const SizedBox(height: 14),
 

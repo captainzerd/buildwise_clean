@@ -22,9 +22,7 @@ class TrustScoreWidget extends StatelessWidget {
   void _showBreakdown(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      showDragHandle: true,
       builder: (_) => Padding(
         padding: const EdgeInsets.all(24),
         child: Column(

@@ -1,11 +1,12 @@
+import '../../core/config/service_locator.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models/builder_contract.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/contract_service.dart';
-import '../project/contract_view_page.dart';
 
 class PendingContractsPage extends StatelessWidget {
   const PendingContractsPage({super.key});
@@ -13,7 +14,7 @@ class PendingContractsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.read<AuthService>();
-    final service = context.read<ContractService>();
+    final service = sl<ContractService>();
     final uid = auth.currentUser!.uid;
 
     return Scaffold(
@@ -66,7 +67,6 @@ class PendingContractsPage extends StatelessWidget {
             itemBuilder: (_, i) => _ContractCard(
               contract: contracts[i],
               currentUserUid: uid,
-              contractService: service,
             ),
           );
         },
@@ -79,11 +79,9 @@ class _ContractCard extends StatelessWidget {
   const _ContractCard({
     required this.contract,
     required this.currentUserUid,
-    required this.contractService,
   });
   final BuilderContract contract;
   final String currentUserUid;
-  final ContractService contractService;
 
   @override
   Widget build(BuildContext context) {
@@ -94,14 +92,14 @@ class _ContractCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => ContractViewPage(
-              contract: contract,
-              currentUserUid: currentUserUid,
-              contractService: contractService,
-            ),
-          ),
+        onTap: () => context.push(
+          '/projects/${contract.projectId}/contract/view',
+          extra: {
+            'contract': contract,
+            'currentUserUid': currentUserUid,
+            'signerName':
+                context.read<AuthService>().currentUser?.displayName ?? '',
+          },
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),

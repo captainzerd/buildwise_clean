@@ -389,6 +389,7 @@ class _CreateAccountFormState extends State<_CreateAccountForm> {
                 border: OutlineInputBorder(),
               ),
               enabled: !_busy,
+              validator: Validators.phone,
             ),
             const SizedBox(height: 16),
             TextFormField(

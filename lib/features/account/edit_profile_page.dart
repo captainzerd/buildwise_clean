@@ -12,6 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/services/auth_service.dart';
+import '../../core/utils/validators.dart' as core_validators;
 import '../../widgets/validators.dart';
 
 class EditProfilePage extends StatefulWidget {
@@ -261,6 +262,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 prefixIcon: Icon(Icons.phone_outlined),
                 border: OutlineInputBorder(),
               ),
+              validator: core_validators.Validators.phone,
             ),
             const SizedBox(height: 32),
 
