@@ -1,66 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/config/service_locator.dart';
 import '../../core/models/builder_contract.dart';
 import '../../core/services/contract_service.dart';
+import '../contract/contract_sign_page.dart';
+import 'widgets/milestone_release_sheet.dart';
 
 class ContractViewPage extends StatefulWidget {
   const ContractViewPage({
     super.key,
     required this.contract,
     required this.currentUserUid,
-    required this.contractService,
+    this.signerName = '',
   });
 
   final BuilderContract contract;
   final String currentUserUid;
-  final ContractService contractService;
+  final String signerName;
 
   @override
   State<ContractViewPage> createState() => _ContractViewPageState();
 }
 
 class _ContractViewPageState extends State<ContractViewPage> {
-  final _sigCtrl = TextEditingController();
   bool _busy = false;
   String? _error;
 
   bool get _isOwner => widget.currentUserUid == widget.contract.ownerUid;
   bool get _isBuilder => widget.currentUserUid == widget.contract.builderUid;
-
-  @override
-  void dispose() {
-    _sigCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _accept() async {
-    if (_sigCtrl.text.trim().length < 3) {
-      setState(() => _error = 'Please type your full name to sign.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await widget.contractService.builderAccept(
-        contract: widget.contract,
-        signatureName: _sigCtrl.text.trim(),
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Contract signed. You are now assigned to the project.'),
-        ),
-      );
-      Navigator.of(context).pop();
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
 
   Future<void> _decline() async {
     final confirmed = await showDialog<bool>(
@@ -85,7 +54,7 @@ class _ContractViewPageState extends State<ContractViewPage> {
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      await widget.contractService.builderDecline(widget.contract.id);
+      await sl<ContractService>().builderDecline(widget.contract.id);
       if (!mounted) return;
       Navigator.of(context).pop();
     } catch (e) {
@@ -116,7 +85,7 @@ class _ContractViewPageState extends State<ContractViewPage> {
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      await widget.contractService.ownerCancel(widget.contract.id);
+      await sl<ContractService>().ownerCancel(widget.contract.id);
       if (!mounted) return;
       Navigator.of(context).pop();
     } catch (e) {
@@ -124,6 +93,55 @@ class _ContractViewPageState extends State<ContractViewPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _showHelp(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.help_outline,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Builder Contract',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ...[
+              'The owner creates the contract with scope of work and payment milestones.',
+              'The builder must sign (accept) before any milestone payments are released.',
+              'Payment milestones are released by the owner after verifying phase completion.',
+              'A retention % is held back until project completion to protect the owner.',
+              'Once both parties have signed, the contract status becomes Active.',
+              'To decline a contract, tap the Decline button — the owner will be notified.',
+            ].map(
+              (tip) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('• ', style: TextStyle(fontSize: 16)),
+                    Expanded(child: Text(tip)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -139,6 +157,11 @@ class _ContractViewPageState extends State<ContractViewPage> {
       appBar: AppBar(
         title: const Text('Contract'),
         actions: [
+          IconButton(
+            tooltip: 'Help',
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => _showHelp(context),
+          ),
           if (_isOwner && isPending)
             TextButton(
               onPressed: _busy ? null : _cancel,
@@ -212,6 +235,38 @@ class _ContractViewPageState extends State<ContractViewPage> {
             'GHS ${moneyFmt.format(c.totalAmountGhs)}',
             bold: true,
           ),
+          if (c.retentionPct > 0) ...[
+            _InfoRow(
+              'Retention (${c.retentionPct.toStringAsFixed(0)}%)',
+              'GHS ${moneyFmt.format(c.retentionAmountGhs)}',
+            ),
+            _InfoRow(
+              'Releasable',
+              'GHS ${moneyFmt.format(c.amountReleasableGhs)}',
+            ),
+            if (c.retentionReleasedAt != null)
+              _InfoRow(
+                'Retention released',
+                fmt.format(c.retentionReleasedAt!),
+              )
+            else if (_isOwner && c.status == ContractStatus.active)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: TextButton.icon(
+                  icon: const Icon(Icons.lock_open_outlined, size: 16),
+                  label: const Text('Release Retention'),
+                  onPressed: () async {
+                    await sl<ContractService>()
+                        .releaseRetention(widget.contract.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Retention released')),
+                      );
+                    }
+                  },
+                ),
+              ),
+          ],
           if (c.milestones.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
@@ -242,6 +297,19 @@ class _ContractViewPageState extends State<ContractViewPage> {
                 ),
               ),
           ],
+          const SizedBox(height: 16),
+
+          const SizedBox(height: 16),
+
+          // Milestone tracker
+          _SectionTitle('Milestone Tracker'),
+          _MilestoneTrackerSection(
+            contract: c,
+            isOwner: _isOwner,
+            isBuilder: _isBuilder,
+            currentUserName: widget.signerName,
+          ),
+
           const SizedBox(height: 16),
 
           // Signatures
@@ -278,89 +346,64 @@ class _ContractViewPageState extends State<ContractViewPage> {
             ),
           ),
 
+          // Signed PDF download link
+          if (c.signedPdfUrl != null) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                label: const Text('Download Signed Contract (PDF)'),
+                onPressed: () async {
+                  final uri = Uri.tryParse(c.signedPdfUrl!);
+                  if (uri != null && await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+              ),
+            ),
+          ],
+
           // Builder sign / decline actions
           if (_isBuilder && isPending) ...[
             const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(color: cs.outlineVariant),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.draw_outlined, size: 18, color: cs.primary),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Your Signature',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(color: cs.primary),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'By typing your full name and tapping Accept, you agree to '
-                    'the terms above under the Ghana Electronic Transactions '
-                    'Act, 2008.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: cs.outline,
-                        ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _sigCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Type your full name *',
-                      border: OutlineInputBorder(),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _busy ? null : _decline,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: cs.error,
+                      side: BorderSide(color: cs.error),
                     ),
-                    textCapitalization: TextCapitalization.words,
+                    child: const Text('Decline'),
                   ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      _error!,
-                      style: TextStyle(color: cs.error, fontSize: 12),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _busy ? null : _decline,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: cs.error,
-                            side: BorderSide(color: cs.error),
-                          ),
-                          child: const Text('Decline'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: _busy ? null : _accept,
-                          child: _busy
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Text('Accept & Sign'),
-                        ),
-                      ),
-                    ],
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _busy
+                        ? null
+                        : () async {
+                            final signed = await Navigator.of(
+                              context,
+                            ).push<bool>(
+                              MaterialPageRoute(
+                                builder: (_) => ContractSignPage(
+                                  contract: widget.contract,
+                                  signerName: widget.signerName,
+                                ),
+                              ),
+                            );
+                            if (signed == true && context.mounted) {
+                              Navigator.of(context).pop();
+                            }
+                          },
+                    icon: const Icon(Icons.draw_outlined, size: 16),
+                    label: const Text('Sign Contract'),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
 
@@ -516,6 +559,154 @@ class _StatusBanner extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Milestone tracker section ────────────────────────────────────────────────
+
+class _MilestoneTrackerSection extends StatelessWidget {
+  const _MilestoneTrackerSection({
+    required this.contract,
+    required this.isOwner,
+    required this.isBuilder,
+    required this.currentUserName,
+  });
+
+  final BuilderContract contract;
+  final bool isOwner;
+  final bool isBuilder;
+  final String currentUserName;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final moneyFmt = NumberFormat('#,##0.00');
+    final dateFmt = DateFormat('d MMM yyyy');
+    final milestones = contract.milestones;
+
+    if (milestones.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'No payment milestones defined.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: cs.outline,
+                ),
+          ),
+        ),
+      );
+    }
+
+    final totalPaid = milestones
+        .where((m) => m.isPaid)
+        .fold<double>(0.0, (sum, m) => sum + m.amountGhs);
+    final totalAmount =
+        milestones.fold<double>(0.0, (sum, m) => sum + m.amountGhs);
+
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'GHS ${moneyFmt.format(totalPaid)} released of '
+                    '${moneyFmt.format(totalAmount)}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: cs.outline,
+                        ),
+                  ),
+                ),
+                Text(
+                  '${milestones.where((m) => m.isPaid).length}/${milestones.length}',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: cs.outline,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 0),
+          for (final m in milestones)
+            Builder(
+              builder: (ctx) {
+                final overdue = m.dueDate != null &&
+                    !m.isPaid &&
+                    m.dueDate!.isBefore(DateTime.now());
+                final statusColor = switch (m.approvalStatus) {
+                  MilestoneApprovalStatus.released => Colors.green.shade700,
+                  MilestoneApprovalStatus.pendingRelease =>
+                    Colors.orange.shade700,
+                  _ => cs.outline,
+                };
+                final statusIcon = switch (m.approvalStatus) {
+                  MilestoneApprovalStatus.released =>
+                    Icons.check_circle_outline,
+                  MilestoneApprovalStatus.pendingRelease =>
+                    Icons.hourglass_top_outlined,
+                  _ => overdue
+                      ? Icons.warning_amber_outlined
+                      : Icons.radio_button_unchecked,
+                };
+
+                Widget? trailingWidget;
+                if (m.approvalStatus == MilestoneApprovalStatus.pending &&
+                    isBuilder &&
+                    contract.status == ContractStatus.active) {
+                  trailingWidget = TextButton(
+                    onPressed: () => sl<ContractService>()
+                        .requestMilestoneRelease(contract.id, m.id),
+                    child: const Text('Request\nRelease', textAlign: TextAlign.center),
+                  );
+                } else if (m.approvalStatus ==
+                        MilestoneApprovalStatus.pendingRelease &&
+                    isOwner) {
+                  trailingWidget = FilledButton.tonal(
+                    onPressed: () => MilestoneReleaseSheet.show(
+                      context,
+                      contract: contract,
+                      milestone: m,
+                      releasedByName: currentUserName,
+                    ),
+                    child: const Text('Release'),
+                  );
+                }
+
+                return ListTile(
+                  leading: Icon(statusIcon, color: statusColor, size: 22),
+                  title: Text(
+                    m.description,
+                    style: TextStyle(
+                      decoration:
+                          m.isPaid ? TextDecoration.lineThrough : null,
+                      color: m.isPaid ? cs.outline : null,
+                    ),
+                  ),
+                  subtitle: Text(
+                    [
+                      'GHS ${moneyFmt.format(m.amountGhs)}',
+                      if (m.dueDate != null)
+                        'due ${dateFmt.format(m.dueDate!)}',
+                      if (m.isPaid && m.paidAt != null)
+                        'released ${dateFmt.format(m.paidAt!)}',
+                      m.approvalStatus.label,
+                    ].join(' · '),
+                    style: TextStyle(
+                      color: overdue ? cs.error : cs.outline,
+                      fontSize: 12,
+                    ),
+                  ),
+                  trailing: trailingWidget,
+                );
+              },
+            ),
         ],
       ),
     );
