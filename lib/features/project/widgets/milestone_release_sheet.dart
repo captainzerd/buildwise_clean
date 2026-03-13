@@ -57,8 +57,9 @@ class _MilestoneReleaseSheetState extends State<MilestoneReleaseSheet> {
         widget.releasedByName,
       );
       if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.of(context).pop(true);
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text(
               'Payment recorded. Automated disbursement will be available '
