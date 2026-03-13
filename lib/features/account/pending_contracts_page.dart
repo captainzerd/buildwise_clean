@@ -43,33 +43,11 @@ class _PendingContractsPageState extends State<PendingContractsPage> {
           }
           final contracts = snap.data ?? [];
           if (contracts.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.description_outlined,
-                      size: 64,
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No pending contracts',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Contracts sent to you by project owners will appear here.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
+            return const EmptyState(
+              icon: Icons.description_outlined,
+              title: 'No pending contracts',
+              message:
+                  'Contracts sent to you by project owners will appear here.',
             );
           }
 

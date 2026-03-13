@@ -228,7 +228,11 @@ class _OwnerProjectsViewState extends State<_OwnerProjectsView> {
 
     final projects = _filtered;
     if (projects.isEmpty) {
-      return const Center(child: Text('No projects match your search.'));
+      return const EmptyState(
+        icon: Icons.search_off_outlined,
+        title: 'No matches',
+        message: 'Try a different search term.',
+      );
     }
 
     Widget buildItem(int i) {
@@ -459,7 +463,11 @@ class _BuilderProjectsViewState extends State<_BuilderProjectsView> {
 
     final projects = _filtered;
     if (projects.isEmpty) {
-      return const Center(child: Text('No projects match your search.'));
+      return const EmptyState(
+        icon: Icons.search_off_outlined,
+        title: 'No matches',
+        message: 'Try a different search term.',
+      );
     }
 
     // Group by ownerName

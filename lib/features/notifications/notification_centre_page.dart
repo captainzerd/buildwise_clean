@@ -50,15 +50,11 @@ class _NotificationCentrePageState extends State<NotificationCentrePage> {
           }
           final items = snap.data ?? [];
           if (items.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.notifications_none_outlined, size: 64),
-                  SizedBox(height: 12),
-                  Text('No notifications yet'),
-                ],
-              ),
+            return const EmptyState(
+              icon: Icons.notifications_none_outlined,
+              title: 'No notifications yet',
+              message:
+                  'You\'ll see alerts for contracts, approvals, and updates here.',
             );
           }
           return ListView.separated(
