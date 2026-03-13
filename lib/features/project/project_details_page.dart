@@ -109,7 +109,19 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                 PopupMenuButton<_MenuAction>(
                   onSelected: (action) => _handleMenu(context, action, project),
                   itemBuilder: (ctx) => [
-                    // ── Project ──
+                    PopupMenuItem<_MenuAction>(
+                      enabled: false,
+                      height: 24,
+                      child: Text(
+                        'PROJECT',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                          color: Theme.of(ctx).colorScheme.primary,
+                        ),
+                      ),
+                    ),
                     const PopupMenuItem(
                       value: _MenuAction.editProject,
                       child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Edit Project')),
@@ -131,7 +143,19 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                       child: ListTile(leading: Icon(Icons.calculate_outlined), title: Text('Mortgage Calculator')),
                     ),
                     const PopupMenuDivider(),
-                    // ── Documents ──
+                    PopupMenuItem<_MenuAction>(
+                      enabled: false,
+                      height: 24,
+                      child: Text(
+                        'DOCUMENTS',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                          color: Theme.of(ctx).colorScheme.primary,
+                        ),
+                      ),
+                    ),
                     const PopupMenuItem(
                       value: _MenuAction.generateReport,
                       child: ListTile(leading: Icon(Icons.summarize_outlined), title: Text('Generate Report')),
@@ -149,7 +173,19 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                       child: ListTile(leading: Icon(Icons.history_outlined), title: Text('Audit Log')),
                     ),
                     const PopupMenuDivider(),
-                    // ── Work ──
+                    PopupMenuItem<_MenuAction>(
+                      enabled: false,
+                      height: 24,
+                      child: Text(
+                        'WORK',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                          color: Theme.of(ctx).colorScheme.primary,
+                        ),
+                      ),
+                    ),
                     const PopupMenuItem(
                       value: _MenuAction.manageTasks,
                       child: ListTile(leading: Icon(Icons.checklist_outlined), title: Text('Manage Tasks')),
@@ -179,7 +215,19 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                       child: ListTile(leading: Icon(Icons.approval_outlined), title: Text('Permits')),
                     ),
                     const PopupMenuDivider(),
-                    // ── Marketplace ──
+                    PopupMenuItem<_MenuAction>(
+                      enabled: false,
+                      height: 24,
+                      child: Text(
+                        'MARKETPLACE',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                          color: Theme.of(ctx).colorScheme.primary,
+                        ),
+                      ),
+                    ),
                     const PopupMenuItem(
                       value: _MenuAction.viewQuotes,
                       child: ListTile(leading: Icon(Icons.request_quote_outlined), title: Text('View Quotes')),
@@ -189,7 +237,19 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                       child: ListTile(leading: Icon(Icons.verified_outlined), title: Text('Due Diligence')),
                     ),
                     const PopupMenuDivider(),
-                    // ── Templates ──
+                    PopupMenuItem<_MenuAction>(
+                      enabled: false,
+                      height: 24,
+                      child: Text(
+                        'TEMPLATES',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                          color: Theme.of(ctx).colorScheme.primary,
+                        ),
+                      ),
+                    ),
                     const PopupMenuItem(
                       value: _MenuAction.saveAsTemplate,
                       child: ListTile(leading: Icon(Icons.save_outlined), title: Text('Save as Template')),
@@ -199,7 +259,6 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                       child: ListTile(leading: Icon(Icons.folder_copy_outlined), title: Text('My Templates')),
                     ),
                     const PopupMenuDivider(),
-                    // ── Danger ──
                     PopupMenuItem(
                       value: _MenuAction.delete,
                       child: ListTile(
