@@ -30,7 +30,7 @@ void main() {
           ),
         ),
       ),
-    ));
+    ),);
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();

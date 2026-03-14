@@ -22,9 +22,9 @@ void main() {
                     value: 'delete',
                     child: ListTile(
                       leading: Icon(Icons.delete_outlined,
-                          color: Colors.red),
+                          color: Colors.red,),
                       title: Text('Delete Project',
-                          style: TextStyle(color: Colors.red)),
+                          style: TextStyle(color: Colors.red),),
                     ),
                   ),
                 ],

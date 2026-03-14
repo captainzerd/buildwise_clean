@@ -26,7 +26,7 @@ void main() {
           ),
         ),
       ),
-    ));
+    ),);
 
     expect(find.text('Could not load payment page'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);

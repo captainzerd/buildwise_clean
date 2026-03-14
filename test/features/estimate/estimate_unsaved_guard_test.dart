@@ -29,8 +29,8 @@ void main() {
           },
           child: const Text('trigger'),
         ),
-      )),
-    ));
+      ),),
+    ),);
 
     await tester.tap(find.text('trigger'));
     await tester.pumpAndSettle();
