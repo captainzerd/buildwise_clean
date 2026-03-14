@@ -53,7 +53,7 @@ class StripeService {
     await Stripe.instance.initPaymentSheet(
       paymentSheetParameters: SetupPaymentSheetParameters(
         paymentIntentClientSecret: clientSecret,
-        merchantDisplayName: 'BuildWise',
+        merchantDisplayName: 'WyseBrix',
         googlePay: PaymentSheetGooglePay(
           merchantCountryCode: 'GH',
           currencyCode: currency.toUpperCase(),

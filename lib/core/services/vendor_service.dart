@@ -13,6 +13,7 @@ class VendorService extends ChangeNotifier {
   Stream<List<Vendor>> listAll() {
     return _col
         .orderBy('name')
+        .limit(100)
         .snapshots()
         .map((s) => s.docs.map((d) => d.data()).toList());
   }

@@ -16,6 +16,7 @@ class DeletionRequestService {
     return _col(projectId)
         .where('status', isEqualTo: DeletionStatus.pending.firestoreValue)
         .orderBy('createdAt', descending: true)
+        .limit(100)
         .snapshots()
         .map(
           (s) => s.docs
@@ -34,6 +35,7 @@ class DeletionRequestService {
         .collectionGroup('deletionRequests')
         .where('status', isEqualTo: DeletionStatus.pending.firestoreValue)
         .orderBy('createdAt', descending: true)
+        .limit(100)
         .snapshots()
         .map(
           (s) => s.docs
@@ -69,18 +71,31 @@ class DeletionRequestService {
 
       if (req.itemType == DeletionItemType.costEntry &&
           req.amountGhs != null) {
-        // Transaction: atomically delete cost + reverse amountSpent + mark approved.
+        // Transaction: atomically delete cost + reverse amountSpent + update phase + mark approved.
         await _db.runTransaction((tx) async {
+          final costRef = projectRef.collection('costs').doc(req.itemId);
+          final costSnap = await tx.get(costRef);
+          final phaseId = costSnap.data()?['phaseId'] as String?;
           final snap = await tx.get(projectRef);
           final current =
               (snap.data()?['amountSpent'] as num?)?.toDouble() ?? 0;
-          tx.delete(projectRef.collection('costs').doc(req.itemId));
+          tx.delete(costRef);
           tx.update(reqRef, approvedData);
           tx.update(projectRef, {
             'amountSpent':
                 (current - req.amountGhs!).clamp(0, double.infinity),
             'updatedAt': FieldValue.serverTimestamp(),
           });
+          if (phaseId != null && phaseId.isNotEmpty) {
+            final phaseRef = projectRef.collection('phases').doc(phaseId);
+            final phaseSnap = await tx.get(phaseRef);
+            final cur =
+                (phaseSnap.data()?['actualCostGhs'] as num?)?.toDouble() ?? 0;
+            tx.update(phaseRef, {
+              'actualCostGhs':
+                  (cur - req.amountGhs!).clamp(0, double.infinity),
+            });
+          }
         });
       } else {
         final subCol = switch (req.itemType) {

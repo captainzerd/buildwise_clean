@@ -28,6 +28,7 @@ class PmProfileService extends ChangeNotifier {
     return _db
         .collection('pm_profiles')
         .where('isActive', isEqualTo: true)
+        .limit(100)
         .snapshots()
         .map(
           (s) => s.docs

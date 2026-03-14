@@ -92,6 +92,10 @@ class AuthService extends ChangeNotifier {
         signInMethod: method,
       );
 
+      // Force a token refresh so Firestore security rules see the latest auth
+      // claim — avoids a race condition where the token isn't propagated yet.
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
+
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -166,8 +170,12 @@ class AuthService extends ChangeNotifier {
     await FirebaseAuth.instance.verifyPhoneNumber(
       phoneNumber: phoneE164,
       verificationCompleted: (_) {},
-      verificationFailed: (e) => completer.completeError(e),
-      codeSent: (verificationId, _) => completer.complete(verificationId),
+      verificationFailed: (e) {
+        if (!completer.isCompleted) completer.completeError(e);
+      },
+      codeSent: (verificationId, _) {
+        if (!completer.isCompleted) completer.complete(verificationId);
+      },
       codeAutoRetrievalTimeout: (_) {},
     );
     return completer.future;
@@ -393,9 +401,17 @@ class AuthService extends ChangeNotifier {
       role: _currentUser!.role,
       emailVerified: _currentUser!.emailVerified,
       createdAt: _currentUser!.createdAt,
+      firstName: _currentUser!.firstName,
+      lastName: _currentUser!.lastName,
       phone: clearPhone ? null : (phone ?? _currentUser!.phone),
       photoUrl: clearPhoto ? null : (photoUrl ?? _currentUser!.photoUrl),
       subscriptionTier: _currentUser!.subscriptionTier,
+      projectPassExpiresAt: _currentUser!.projectPassExpiresAt,
+      phoneVerified: _currentUser!.phoneVerified,
+      phoneVerifiedAt: _currentUser!.phoneVerifiedAt,
+      idVerificationStatus: _currentUser!.idVerificationStatus,
+      trustScore: _currentUser!.trustScore,
+      twoFactorEnabled: _currentUser!.twoFactorEnabled,
     );
     notifyListeners();
   }
@@ -429,6 +445,10 @@ class AuthService extends ChangeNotifier {
           .collection('users')
           .doc(refreshed.uid)
           .update({'emailVerified': refreshed.emailVerified});
+
+      // Force a token refresh so Firestore security rules (email_verified claim)
+      // immediately see the updated verification status.
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
 
       _currentUser = _currentUser!.copyWith(
         emailVerified: refreshed.emailVerified,
