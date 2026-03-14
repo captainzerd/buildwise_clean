@@ -1,5 +1,6 @@
 // lib/features/project/pm_profile_detail_page.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -50,7 +51,7 @@ class PmProfileDetailPage extends StatelessWidget {
                 radius: 36,
                 backgroundColor: cs.primaryContainer,
                 backgroundImage:
-                    pm.photoUrl != null ? NetworkImage(pm.photoUrl!) : null,
+                    pm.photoUrl != null ? CachedNetworkImageProvider(pm.photoUrl!) : null,
                 child: pm.photoUrl == null
                     ? Text(
                         _initials(pm.displayName),

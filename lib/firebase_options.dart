@@ -28,10 +28,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for windows - '
@@ -58,6 +55,15 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyDtMGwUy-XJUAcC1GZZmuP902KiDh7DUCg',
+    appId: '1:329020058091:ios:c59f8eee4424aa0d4691ae',
+    messagingSenderId: '329020058091',
+    projectId: 'building-estimator',
+    storageBucket: 'building-estimator.firebasestorage.app',
+    iosBundleId: 'com.example.buildwiseClean',
+  );
+
+  static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDtMGwUy-XJUAcC1GZZmuP902KiDh7DUCg',
     appId: '1:329020058091:ios:c59f8eee4424aa0d4691ae',
     messagingSenderId: '329020058091',

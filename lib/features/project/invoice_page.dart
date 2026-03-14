@@ -160,7 +160,7 @@ class _InvoicePageState extends State<InvoicePage> {
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Failed to record payment: $e')),
+        SnackBar(content: Text('Failed to record payment: $e'), duration: const Duration(seconds: 10)),
       );
     } finally {
       if (mounted) setState(() => _markingPaid = false);
@@ -226,7 +226,7 @@ class _InvoicePageState extends State<InvoicePage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error generating invoice: $e')),
+          SnackBar(content: Text('Error generating invoice: $e'), duration: const Duration(seconds: 10)),
         );
       }
     } finally {

@@ -1,4 +1,5 @@
 // lib/features/project/pm_marketplace_page.dart
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -147,7 +148,7 @@ class _PmCard extends StatelessWidget {
                   radius: 24,
                   backgroundColor: cs.primaryContainer,
                   backgroundImage: pm.photoUrl != null
-                      ? NetworkImage(pm.photoUrl!)
+                      ? CachedNetworkImageProvider(pm.photoUrl!)
                       : null,
                   child: pm.photoUrl == null
                       ? Text(

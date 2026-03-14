@@ -1,8 +1,8 @@
+import '../../core/config/service_locator.dart';
 // lib/features/project/cost_analytics_page.dart
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 
 import '../../core/models/cost_entry.dart';
 import '../../core/models/payment_record.dart';
@@ -20,8 +20,8 @@ class CostAnalyticsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final svc = context.read<ProjectService>();
-    final paySvc = context.read<PaymentService>();
+    final svc = sl<ProjectService>();
+    final paySvc = sl<PaymentService>();
 
     return Scaffold(
       appBar: AppBar(title: Text('${project.title} — Analytics')),

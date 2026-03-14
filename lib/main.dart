@@ -1,3 +1,4 @@
+import 'package:app_links/app_links.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -81,6 +82,37 @@ Future<void> main() async {
   await sl<BoqService>().init();
   sl<ConnectivityService>().start();
 
+  // ── Deep link wiring (wysebrix:// scheme) ──────────────────────────────
+  final appLinks = AppLinks();
+
+  // Handle links that arrive while the app is running (foreground/background).
+  appLinks.uriLinkStream.listen((uri) {
+    if (uri.scheme == 'wysebrix' && uri.host == 'join') {
+      final token = uri.queryParameters['token'];
+      if (token != null && token.isNotEmpty) {
+        appRouter.go('/join?token=$token');
+      }
+    }
+  });
+
+  // Handle the initial link that launched the app from a cold start.
+  try {
+    final initial = await appLinks.getInitialLink();
+    if (initial != null &&
+        initial.scheme == 'wysebrix' &&
+        initial.host == 'join') {
+      final token = initial.queryParameters['token'];
+      if (token != null && token.isNotEmpty) {
+        // Defer until after the widget tree is built.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          appRouter.go('/join?token=$token');
+        });
+      }
+    }
+  } catch (e) {
+    debugPrint('AppLinks initial link error: $e');
+  }
+
   runApp(const AppRoot());
 }
 
@@ -108,7 +140,7 @@ class AppRoot extends StatelessWidget {
       ],
       child: _PostFrameInit(
         onReady: (context) => context.read<EstimateController>().init(),
-        child: const BuildWiseApp(),
+        child: const WyseBrixApp(),
       ),
     );
   }
@@ -137,8 +169,8 @@ class _PostFrameInitState extends State<_PostFrameInit> {
 }
 
 
-class BuildWiseApp extends StatelessWidget {
-  const BuildWiseApp({super.key});
+class WyseBrixApp extends StatelessWidget {
+  const WyseBrixApp({super.key});
 
   static const _seed = Color(0xFF1565C0); // Blue 800 — professional, enterprise
 
@@ -404,7 +436,7 @@ class BuildWiseApp extends StatelessWidget {
 
     return MaterialApp.router(
       routerConfig: appRouter,
-      title: 'BuildWise',
+      title: 'WyseBrix',
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,
       theme: _buildTheme(Brightness.light),

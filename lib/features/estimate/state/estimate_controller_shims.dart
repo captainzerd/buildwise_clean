@@ -2,7 +2,7 @@
   Lightweight shims that adapt whatever the current EstimateController exposes
   to what the UI expects, without removing any functionality.
 */
-import 'package:buildwise_clean/features/estimate/state/estimate_controller.dart';
+import 'package:wysebrix/features/estimate/state/estimate_controller.dart';
 
 extension EstimateControllerShims on EstimateController {
   Map<String, num> get phasePlanned {
