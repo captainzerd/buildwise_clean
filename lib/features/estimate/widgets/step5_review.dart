@@ -9,13 +9,6 @@ import '../../../core/widgets/loading_button.dart';
 import '../state/estimate_controller.dart';
 import 'step_scaffold.dart';
 
-/// Strips the parenthetical descriptor from a displayLabel.
-/// e.g. "Residential Standard (Bungalow / Duplex)" → "Residential Standard"
-String _shortLabel(String displayLabel) {
-  final idx = displayLabel.indexOf(' (');
-  return idx >= 0 ? displayLabel.substring(0, idx) : displayLabel;
-}
-
 // ── Step 5 ────────────────────────────────────────────────────────────────────
 
 class Step5Review extends StatelessWidget {
@@ -50,7 +43,7 @@ class Step5Review extends StatelessWidget {
           SummaryRow('Region', c.region ?? 'Default'),
           SummaryRow('Currency', '${c.currency.code}  ${c.currency.symbol}'),
           const Divider(height: 24),
-          SummaryRow('Building type', _shortLabel(c.typology.displayLabel)),
+          SummaryRow('Building type', c.typology.shortLabel),
           SummaryRow('Quality', c.quality),
           SummaryRow('Foundation', c.foundation),
           SummaryRow('Soil', c.soil),

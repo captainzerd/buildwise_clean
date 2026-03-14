@@ -20,17 +20,6 @@ IconData _typologyIcon(BuildingTypology t) => switch (t) {
       BuildingTypology.commercialWarehouse => Icons.warehouse_outlined,
     };
 
-// ── Short label mapping ────────────────────────────────────────────────────────
-
-String _typologyShortLabel(BuildingTypology t) => switch (t) {
-      BuildingTypology.residentialStandard => 'Residential Standard',
-      BuildingTypology.residentialMediumRise => 'Medium-rise Apt',
-      BuildingTypology.residentialHighRise => 'High-rise Apt',
-      BuildingTypology.commercialOffice => 'Office / Institution',
-      BuildingTypology.commercialRetail => 'Retail / Mixed Use',
-      BuildingTypology.commercialWarehouse => 'Warehouse / Factory',
-    };
-
 // ── Step 2 ────────────────────────────────────────────────────────────────────
 
 class Step2Building extends StatelessWidget {
@@ -98,7 +87,7 @@ class Step2Building extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _typologyShortLabel(t),
+                            t.shortLabel,
                             style: Theme.of(context)
                                 .textTheme
                                 .labelMedium

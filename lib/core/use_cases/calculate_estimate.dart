@@ -41,6 +41,15 @@ enum BuildingTypology {
           'Commercial Warehouse / Factory / Store',
       };
 
+  String get shortLabel => switch (this) {
+        BuildingTypology.residentialStandard => 'Residential Standard',
+        BuildingTypology.residentialMediumRise => 'Medium-rise Apt',
+        BuildingTypology.residentialHighRise => 'High-rise Apt',
+        BuildingTypology.commercialOffice => 'Office / Institution',
+        BuildingTypology.commercialRetail => 'Retail / Mixed Use',
+        BuildingTypology.commercialWarehouse => 'Warehouse / Factory',
+      };
+
   String get subtitle => switch (this) {
         BuildingTypology.residentialStandard =>
           'Bungalow, duplex or terraced house',
