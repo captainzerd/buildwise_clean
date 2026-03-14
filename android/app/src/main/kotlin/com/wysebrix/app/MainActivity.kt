@@ -1,4 +1,4 @@
-package com.example.buildwise_clean
+package com.wysebrix.app
 
 import io.flutter.embedding.android.FlutterActivity
 

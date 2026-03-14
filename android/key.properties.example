@@ -1,0 +1,10 @@
+# Copy to key.properties (gitignored) and fill in your values.
+# Step 1 – Generate keystore (run once, keep the .jks file safe):
+#   keytool -genkey -v -keystore buildwise-release.jks \
+#     -alias buildwise -keyalg RSA -keysize 2048 -validity 10000
+# Step 2 – Place buildwise-release.jks in the android/ directory.
+# Step 3 – Fill in the values below.
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=buildwise
+storeFile=../buildwise-release.jks

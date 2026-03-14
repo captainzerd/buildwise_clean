@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -9,8 +12,15 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Reads key.properties if present; falls back to debug signing if not.
+val keystorePropsFile = rootProject.file("key.properties")
+val keystoreProps = Properties()
+if (keystorePropsFile.exists()) {
+    FileInputStream(keystorePropsFile).use { keystoreProps.load(it) }
+}
+
 android {
-    namespace = "com.example.buildwise_clean"
+    namespace = "com.wysebrix.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -24,20 +34,30 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.buildwise.app"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "com.wysebrix.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (keystoreProps["storeFile"] != null) {
+            create("release") {
+                keyAlias     = keystoreProps["keyAlias"]     as String
+                keyPassword  = keystoreProps["keyPassword"]  as String
+                storeFile    = file(keystoreProps["storeFile"] as String)
+                storePassword = keystoreProps["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keystoreProps["storeFile"] != null)
+                signingConfigs.getByName("release")
+            else
+                signingConfigs.getByName("debug")
         }
     }
 }
