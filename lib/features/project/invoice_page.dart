@@ -384,13 +384,17 @@ class _InvoicePageState extends State<InvoicePage> {
               _LineItemRow(
                 index: i,
                 ctrl: _items[i],
+                canRemove: _items.length > 1,
                 onRemove: _items.length > 1 ? () => _removeItem(i) : null,
                 onChanged: () => setState(() {}),
               ),
-            TextButton.icon(
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add line item'),
-              onPressed: _addItem,
+            Tooltip(
+              message: 'Add a new line item',
+              child: TextButton.icon(
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add line item'),
+                onPressed: _addItem,
+              ),
             ),
             const SizedBox(height: 16),
 
@@ -434,21 +438,26 @@ class _InvoicePageState extends State<InvoicePage> {
             ),
             const SizedBox(height: 24),
 
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _generating ? null : _generate,
-                icon: _generating
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.picture_as_pdf_outlined),
-                label: Text(_generating ? 'Generating…' : 'Generate & Share PDF'),
+            Tooltip(
+              message: _items.isEmpty
+                  ? 'Add at least one line item first'
+                  : 'Generate and share the invoice PDF',
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: (_generating || _items.isEmpty) ? null : _generate,
+                  icon: _generating
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.picture_as_pdf_outlined),
+                  label: Text(_generating ? 'Generating…' : 'Generate & Share PDF'),
+                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -564,10 +573,12 @@ class _LineItemRow extends StatelessWidget {
     required this.ctrl,
     required this.onChanged,
     this.onRemove,
+    this.canRemove = true,
   });
   final int index;
   final _LineItemController ctrl;
   final VoidCallback? onRemove;
+  final bool canRemove;
   final VoidCallback onChanged;
 
   @override
@@ -586,13 +597,17 @@ class _LineItemRow extends StatelessWidget {
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
                 const Spacer(),
-                if (onRemove != null)
-                  IconButton(
+                Tooltip(
+                  message: canRemove
+                      ? 'Remove item'
+                      : 'At least one line item is required',
+                  child: IconButton(
                     icon: const Icon(Icons.close, size: 18),
                     onPressed: onRemove,
                     visualDensity: VisualDensity.compact,
-                    tooltip: 'Remove',
+                    color: canRemove ? null : Theme.of(context).disabledColor,
                   ),
+                ),
               ],
             ),
             const SizedBox(height: 6),

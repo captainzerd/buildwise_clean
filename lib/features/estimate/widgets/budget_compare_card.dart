@@ -49,13 +49,25 @@ class BudgetCompareCard extends StatelessWidget {
               color: estimate <= budget ? Colors.green : Colors.red,
             ),
             const SizedBox(height: 8),
-            Text(
-              estimate <= budget
-                  ? 'Within budget ✅'
-                  : 'Over budget ❌ (${((estimate - budget) / budget * 100).toStringAsFixed(1)}%)',
-              style: TextStyle(
-                color: estimate <= budget ? Colors.green : Colors.red,
-              ),
+            Row(
+              children: [
+                Icon(
+                  estimate <= budget ? Icons.check_circle : Icons.cancel,
+                  size: 16,
+                  color: estimate <= budget ? Colors.green : Colors.red,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    estimate <= budget
+                        ? 'Within budget'
+                        : 'Over budget (${((estimate - budget) / budget * 100).toStringAsFixed(1)}% over)',
+                    style: TextStyle(
+                      color: estimate <= budget ? Colors.green : Colors.red,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

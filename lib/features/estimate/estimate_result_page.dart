@@ -13,6 +13,8 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:go_router/go_router.dart';
+
 import '../../core/services/auth_service.dart';
 import '../../core/services/boq_service.dart';
 import '../../core/services/catalog_service.dart';
@@ -220,11 +222,9 @@ class _EstimateResultPageState extends State<EstimateResultPage>
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Sign in to save estimates')),
-                ),
+                onPressed: () => context.go('/sign-in'),
                 icon: const Icon(Icons.bookmark_add_outlined),
-                label: const Text('Save estimate'),
+                label: const Text('Sign in to save estimate'),
               ),
             ),
 
@@ -292,6 +292,11 @@ class _EstimateResultPageState extends State<EstimateResultPage>
             width: double.infinity,
             child: FilledButton.tonalIcon(
               onPressed: () {
+                final auth = context.read<AuthService>();
+                if (!auth.isSignedIn) {
+                  context.go('/sign-in');
+                  return;
+                }
                 final boqItems = sl<BoqService>()
                     .generate(
                       phaseBreakdown: r.phaseBreakdownGhs,

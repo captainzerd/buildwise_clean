@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -289,7 +290,8 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
     final auth = context.read<AuthService>();
     final user = auth.currentUser;
     if (user == null) {
-      setState(() => _error = 'You must be signed in to create a project.');
+      if (!mounted) return;
+      context.go('/sign-in');
       return;
     }
     if (!user.emailVerified) {
@@ -306,6 +308,17 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
               child: const Text('OK'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                await auth.sendEmailVerification();
+                if (!ctx.mounted) return;
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Verification email sent')),
+                );
+              },
+              child: const Text('Resend email'),
             ),
           ],
         ),

@@ -78,8 +78,11 @@ class _TipBannerState extends State<TipBanner> {
             Expanded(
               child: Text(
                 widget.message,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: cs.onSecondaryContainer,
+                      height: 1.4,
                     ),
               ),
             ),
