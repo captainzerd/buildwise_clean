@@ -1,6 +1,7 @@
 import 'package:app_links/app_links.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
@@ -53,6 +54,14 @@ Future<void> main() async {
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true;
   };
+
+  // Phone auth: disable reCAPTCHA/APNs verification on simulator / debug builds.
+  // This prevents the fatal crash on iOS simulator where APNs is unavailable.
+  // Has no effect on production builds.
+  if (kDebugMode) {
+    await FirebaseAuth.instance
+        .setSettings(appVerificationDisabledForTesting: true);
+  }
 
   // Firestore offline persistence — must be set before any Firestore calls.
   FirebaseFirestore.instance.settings = const Settings(
