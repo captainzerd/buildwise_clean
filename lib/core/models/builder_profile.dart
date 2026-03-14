@@ -44,6 +44,14 @@ const kBuilderTrades = [
   'Landscaping',
 ];
 
+/// NCA contractor classes used by the National Construction Authority, Ghana.
+/// G = general contractor, D = specialist, K = sub-contractor.
+const kNcaClasses = [
+  'G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8',
+  'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8',
+  'K1', 'K2', 'K3', 'K4', 'K5',
+];
+
 @immutable
 class BuilderProfile {
   const BuilderProfile({
@@ -63,7 +71,6 @@ class BuilderProfile {
     this.averageRating = 0.0,
     this.reviewCount = 0,
     this.yearsExperience,
-    // New Sprint 4 fields
     this.availableForHire = true,
     this.minimumBudgetGhs,
     this.preferredRegions = const [],
@@ -78,6 +85,27 @@ class BuilderProfile {
     this.ghanaCardNumber,
     this.verifiedAt,
     this.contractorGrade,
+    this.licenceDocUrls = const {},
+    this.licenceVerificationStatus = 'unverified',
+    this.licenceVerifiedAt,
+    this.trustScore = 0,
+    // Business registration (Registrar General's Department)
+    this.businessRegNumber,
+    this.businessRegUrl,
+    this.businessRegStatus = 'unverified',
+    // NCA License (National Construction Authority)
+    this.ncaLicenseNumber,
+    this.ncaClass,
+    // Insurance
+    this.insurancePliUrl,
+    this.insurancePliExpiry,
+    this.insurancePiiUrl,
+    this.insurancePiiExpiry,
+    this.insuranceStatus = 'unverified',
+    // Reputation scores (computed from reviews)
+    this.projectSuccessScore = 0.0,
+    this.safetyComplianceScore = 0.0,
+    this.disputeCount = 0,
   });
 
   final String uid;
@@ -97,7 +125,6 @@ class BuilderProfile {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  // Sprint 4 additions
   final bool availableForHire;
   final double? minimumBudgetGhs;
   final List<String> preferredRegions;
@@ -112,6 +139,72 @@ class BuilderProfile {
   final String? ghanaCardNumber;
   final DateTime? verifiedAt;
   final String? contractorGrade;
+
+  /// Keys: 'gia' | 'gioe' | 'greda' | 'nca'. Values: download URLs.
+  final Map<String, String> licenceDocUrls;
+  final String licenceVerificationStatus; // unverified | pending | verified | rejected
+  final DateTime? licenceVerifiedAt;
+  final int trustScore;
+
+  // ── Business Registration (Registrar General's Department / DTIID) ──────────
+  /// Certificate of Incorporation number (e.g. CS-123456789)
+  final String? businessRegNumber;
+
+  /// Firebase Storage URL of uploaded certificate of incorporation document.
+  final String? businessRegUrl;
+
+  /// 'unverified' | 'pending' | 'verified' | 'rejected'
+  final String businessRegStatus;
+
+  // ── NCA Licence (National Construction Authority) ────────────────────────────
+  /// NCA registration/licence number.
+  final String? ncaLicenseNumber;
+
+  /// NCA class: 'G1'–'G8' (general), 'D1'–'D8' (specialist), 'K1'–'K5' (sub-contractor).
+  final String? ncaClass;
+
+  // ── Insurance ────────────────────────────────────────────────────────────────
+  /// Public Liability Insurance document URL.
+  final String? insurancePliUrl;
+
+  /// PLI expiry date.
+  final DateTime? insurancePliExpiry;
+
+  /// Professional Indemnity Insurance document URL.
+  final String? insurancePiiUrl;
+
+  /// PII expiry date.
+  final DateTime? insurancePiiExpiry;
+
+  /// 'unverified' | 'pending' | 'verified' | 'expired'
+  final String insuranceStatus;
+
+  // ── Reputation Scores (computed, 0–100) ─────────────────────────────────────
+  /// Average timeliness rating × 20. Updated after each review.
+  final double projectSuccessScore;
+
+  /// Average safety rating × 20. Updated after each review.
+  final double safetyComplianceScore;
+
+  /// Count of variation order escalations / formal disputes.
+  final int disputeCount;
+
+  // ── Computed helpers ─────────────────────────────────────────────────────────
+
+  /// True if insurance is verified AND not expired.
+  bool get isInsuranceValid {
+    if (insuranceStatus != 'verified') return false;
+    if (insurancePliExpiry != null &&
+        insurancePliExpiry!.isBefore(DateTime.now())) {
+      return false;
+    }
+    return true;
+  }
+
+  /// True if NCA licence document is in the licenceDocUrls map AND licence is verified.
+  bool get isNcaVerified =>
+      licenceVerificationStatus == 'verified' &&
+      licenceDocUrls.containsKey('nca');
 
   factory BuilderProfile.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
@@ -149,6 +242,33 @@ class BuilderProfile {
       ghanaCardNumber: d['ghanaCardNumber'] as String?,
       verifiedAt: (d['verifiedAt'] as Timestamp?)?.toDate(),
       contractorGrade: d['contractorGrade'] as String?,
+      licenceDocUrls:
+          (d['licenceDocUrls'] as Map<String, dynamic>?)
+              ?.cast<String, String>() ??
+              const {},
+      licenceVerificationStatus:
+          d['licenceVerificationStatus'] as String? ?? 'unverified',
+      licenceVerifiedAt: (d['licenceVerifiedAt'] as Timestamp?)?.toDate(),
+      trustScore: (d['trustScore'] as num?)?.toInt() ?? 0,
+      // Business registration
+      businessRegNumber: d['businessRegNumber'] as String?,
+      businessRegUrl: d['businessRegUrl'] as String?,
+      businessRegStatus: d['businessRegStatus'] as String? ?? 'unverified',
+      // NCA
+      ncaLicenseNumber: d['ncaLicenseNumber'] as String?,
+      ncaClass: d['ncaClass'] as String?,
+      // Insurance
+      insurancePliUrl: d['insurancePliUrl'] as String?,
+      insurancePliExpiry: (d['insurancePliExpiry'] as Timestamp?)?.toDate(),
+      insurancePiiUrl: d['insurancePiiUrl'] as String?,
+      insurancePiiExpiry: (d['insurancePiiExpiry'] as Timestamp?)?.toDate(),
+      insuranceStatus: d['insuranceStatus'] as String? ?? 'unverified',
+      // Reputation scores
+      projectSuccessScore:
+          (d['projectSuccessScore'] as num?)?.toDouble() ?? 0.0,
+      safetyComplianceScore:
+          (d['safetyComplianceScore'] as num?)?.toDouble() ?? 0.0,
+      disputeCount: (d['disputeCount'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -182,6 +302,30 @@ class BuilderProfile {
         if (ghanaCardNumber != null) 'ghanaCardNumber': ghanaCardNumber,
         if (verifiedAt != null) 'verifiedAt': Timestamp.fromDate(verifiedAt!),
         if (contractorGrade != null) 'contractorGrade': contractorGrade,
+        'licenceDocUrls': licenceDocUrls,
+        'licenceVerificationStatus': licenceVerificationStatus,
+        if (licenceVerifiedAt != null)
+          'licenceVerifiedAt': Timestamp.fromDate(licenceVerifiedAt!),
+        'trustScore': trustScore,
+        // Business registration
+        if (businessRegNumber != null) 'businessRegNumber': businessRegNumber,
+        if (businessRegUrl != null) 'businessRegUrl': businessRegUrl,
+        'businessRegStatus': businessRegStatus,
+        // NCA
+        if (ncaLicenseNumber != null) 'ncaLicenseNumber': ncaLicenseNumber,
+        if (ncaClass != null) 'ncaClass': ncaClass,
+        // Insurance
+        if (insurancePliUrl != null) 'insurancePliUrl': insurancePliUrl,
+        if (insurancePliExpiry != null)
+          'insurancePliExpiry': Timestamp.fromDate(insurancePliExpiry!),
+        if (insurancePiiUrl != null) 'insurancePiiUrl': insurancePiiUrl,
+        if (insurancePiiExpiry != null)
+          'insurancePiiExpiry': Timestamp.fromDate(insurancePiiExpiry!),
+        'insuranceStatus': insuranceStatus,
+        // Reputation scores
+        'projectSuccessScore': projectSuccessScore,
+        'safetyComplianceScore': safetyComplianceScore,
+        'disputeCount': disputeCount,
       };
 
   BuilderProfile copyWith({
@@ -206,6 +350,23 @@ class BuilderProfile {
     String? gredaMembership,
     String? ghanaCardNumber,
     String? contractorGrade,
+    Map<String, String>? licenceDocUrls,
+    String? licenceVerificationStatus,
+    DateTime? licenceVerifiedAt,
+    int? trustScore,
+    String? businessRegNumber,
+    String? businessRegUrl,
+    String? businessRegStatus,
+    String? ncaLicenseNumber,
+    String? ncaClass,
+    String? insurancePliUrl,
+    DateTime? insurancePliExpiry,
+    String? insurancePiiUrl,
+    DateTime? insurancePiiExpiry,
+    String? insuranceStatus,
+    double? projectSuccessScore,
+    double? safetyComplianceScore,
+    int? disputeCount,
   }) =>
       BuilderProfile(
         uid: uid,
@@ -238,5 +399,24 @@ class BuilderProfile {
         ghanaCardNumber: ghanaCardNumber ?? this.ghanaCardNumber,
         verifiedAt: verifiedAt,
         contractorGrade: contractorGrade ?? this.contractorGrade,
+        licenceDocUrls: licenceDocUrls ?? this.licenceDocUrls,
+        licenceVerificationStatus:
+            licenceVerificationStatus ?? this.licenceVerificationStatus,
+        licenceVerifiedAt: licenceVerifiedAt ?? this.licenceVerifiedAt,
+        trustScore: trustScore ?? this.trustScore,
+        businessRegNumber: businessRegNumber ?? this.businessRegNumber,
+        businessRegUrl: businessRegUrl ?? this.businessRegUrl,
+        businessRegStatus: businessRegStatus ?? this.businessRegStatus,
+        ncaLicenseNumber: ncaLicenseNumber ?? this.ncaLicenseNumber,
+        ncaClass: ncaClass ?? this.ncaClass,
+        insurancePliUrl: insurancePliUrl ?? this.insurancePliUrl,
+        insurancePliExpiry: insurancePliExpiry ?? this.insurancePliExpiry,
+        insurancePiiUrl: insurancePiiUrl ?? this.insurancePiiUrl,
+        insurancePiiExpiry: insurancePiiExpiry ?? this.insurancePiiExpiry,
+        insuranceStatus: insuranceStatus ?? this.insuranceStatus,
+        projectSuccessScore: projectSuccessScore ?? this.projectSuccessScore,
+        safetyComplianceScore:
+            safetyComplianceScore ?? this.safetyComplianceScore,
+        disputeCount: disputeCount ?? this.disputeCount,
       );
 }

@@ -69,10 +69,10 @@ class Estimate {
       };
 
   static Estimate fromJson(Map<String, dynamic> json) {
-    List<double> _asDoubles(dynamic v) =>
+    List<double> asDoubles(dynamic v) =>
         (v as List<dynamic>).map((e) => (e as num).toDouble()).toList();
 
-    Map<String, double> _asDoubleMap(dynamic v) =>
+    Map<String, double> asDoubleMap(dynamic v) =>
         (v as Map<String, dynamic>).map(
           (k, val) => MapEntry(k.toString(), (val as num).toDouble()),
         );
@@ -82,8 +82,8 @@ class Estimate {
       projectName: (json['projectName'] ?? '').toString(),
       region: (json['region'] ?? '').toString(),
       city: (json['city'] ?? '').toString(),
-      areasSqm: _asDoubles(json['areasSqm'] ?? const <double>[]),
-      floorHeightsM: _asDoubles(json['floorHeightsM'] ?? const <double>[]),
+      areasSqm: asDoubles(json['areasSqm'] ?? const <double>[]),
+      floorHeightsM: asDoubles(json['floorHeightsM'] ?? const <double>[]),
       totalAreaSqm: (json['totalAreaSqm'] as num? ?? 0).toDouble(),
       baseCostGhs: (json['baseCostGhs'] as num? ?? 0).toDouble(),
       extraSubstructureGhs:
@@ -91,7 +91,7 @@ class Estimate {
       stairsCostGhs: (json['stairsCostGhs'] as num? ?? 0).toDouble(),
       totalPlannedGhs: (json['totalPlannedGhs'] as num? ?? 0).toDouble(),
       phaseBreakdown:
-          _asDoubleMap(json['phaseBreakdown'] ?? const <String, double>{}),
+          asDoubleMap(json['phaseBreakdown'] ?? const <String, double>{}),
       currencyCode: (json['currencyCode'] ?? 'GHS').toString(),
       currencySymbol: (json['currencySymbol'] ?? '₵').toString(),
     );
