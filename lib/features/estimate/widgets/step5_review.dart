@@ -9,6 +9,13 @@ import '../../../core/widgets/loading_button.dart';
 import '../state/estimate_controller.dart';
 import 'step_scaffold.dart';
 
+/// Strips the parenthetical descriptor from a displayLabel.
+/// e.g. "Residential Standard (Bungalow / Duplex)" → "Residential Standard"
+String _shortLabel(String displayLabel) {
+  final idx = displayLabel.indexOf(' (');
+  return idx >= 0 ? displayLabel.substring(0, idx) : displayLabel;
+}
+
 // ── Step 5 ────────────────────────────────────────────────────────────────────
 
 class Step5Review extends StatelessWidget {
@@ -43,7 +50,7 @@ class Step5Review extends StatelessWidget {
           SummaryRow('Region', c.region ?? 'Default'),
           SummaryRow('Currency', '${c.currency.code}  ${c.currency.symbol}'),
           const Divider(height: 24),
-          SummaryRow('Building type', c.typology.displayLabel),
+          SummaryRow('Building type', _shortLabel(c.typology.displayLabel)),
           SummaryRow('Quality', c.quality),
           SummaryRow('Foundation', c.foundation),
           SummaryRow('Soil', c.soil),
@@ -98,17 +105,35 @@ class SummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final ts = secondary
         ? Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: cs.onSurfaceVariant,
             )
-        : Theme.of(context).textTheme.bodyMedium;
+        : Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: cs.onSurface,
+            );
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: Text(label, style: ts)),
-          Text(value, style: ts?.copyWith(fontWeight: FontWeight.w500)),
+          Expanded(
+            flex: 2,
+            child: Text(
+              label,
+              style: ts?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            flex: 3,
+            child: Text(
+              value,
+              style: ts?.copyWith(fontWeight: FontWeight.w600),
+              textAlign: TextAlign.end,
+            ),
+          ),
         ],
       ),
     );
