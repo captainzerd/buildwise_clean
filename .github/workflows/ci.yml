@@ -123,3 +123,40 @@ jobs:
           name: wysebrix-prod-apk-${{ github.sha }}
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
+
+  test-rules:
+    name: Firestore Rules Tests
+    runs-on: ubuntu-latest
+    needs: []   # runs in parallel with analyze-and-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Install functions deps
+        run: npm ci
+        working-directory: functions
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+      - name: Run rules tests via emulators
+        run: |
+          firebase emulators:exec \
+            --only auth,firestore \
+            --project wysebrix-test \
+            "npm run test:rules --prefix functions"
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+  test-functions:
+    name: Cloud Functions Unit Tests
+    runs-on: ubuntu-latest
+    needs: []   # runs in parallel with analyze-and-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Install functions deps
+        run: npm ci
+        working-directory: functions
+      - name: Run Cloud Functions unit tests
+        run: npm run test:unit
+        working-directory: functions
