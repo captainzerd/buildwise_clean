@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:provider/provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'core/config/app_config.dart';
 import 'core/config/router.dart';
@@ -122,7 +123,21 @@ Future<void> main() async {
     debugPrint('AppLinks initial link error: $e');
   }
 
-  runApp(const AppRoot());
+  const sentryDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
+
+  if (sentryDsn.isNotEmpty && !kDebugMode) {
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = sentryDsn;
+        options.environment = kEnv; // 'dev', 'staging', or 'prod'
+        options.tracesSampleRate = kIsProduction ? 0.2 : 0.0;
+        options.enableAutoSessionTracking = true;
+      },
+      appRunner: () => runApp(const AppRoot()),
+    );
+  } else {
+    runApp(const AppRoot());
+  }
 }
 
 class AppRoot extends StatelessWidget {
