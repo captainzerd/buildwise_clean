@@ -1695,3 +1695,11 @@ export { refreshMarketPrices } from "./marketPricesUpdater";
 // HTTPS callable; uses Claude claude-haiku-4-5 to suggest cost savings for a
 // given construction estimate. Secret: ANTHROPIC_API_KEY in Secret Manager.
 export { analyseEstimateCosts } from "./aiCostOptimiser";
+
+// ── Data retention (B3) ───────────────────────────────────────────────────────
+// enforceDataRetention: scheduled daily 04:00 UTC — purges old audit logs,
+//   login activity, and soft-deleted projects per retention policy.
+// exportUserData: callable — returns a full GDPR data export for the caller.
+// processAccountDeletion: Firestore trigger — executes account wipe when a
+//   deletion_requests document transitions to status == 'approved'.
+export { enforceDataRetention, exportUserData, processAccountDeletion } from "./dataRetention";
