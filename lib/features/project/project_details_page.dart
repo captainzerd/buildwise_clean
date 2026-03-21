@@ -196,6 +196,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
                       child: ListTile(leading: Icon(Icons.engineering_outlined), title: Text('Labour Tracking')),
                     ),
                     const PopupMenuItem(
+                      key: Key('change_orders_menu_item'),
                       value: _MenuAction.changeOrders,
                       child: ListTile(leading: Icon(Icons.edit_note_outlined), title: Text('Change Orders')),
                     ),
