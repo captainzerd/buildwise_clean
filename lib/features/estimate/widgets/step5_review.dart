@@ -49,7 +49,7 @@ class Step5Review extends StatelessWidget {
           SummaryRow('Currency', '${c.currency.code}  ${c.currency.symbol}'),
           const Divider(height: 24),
           SummaryRow(
-            key: const Key('step5_total_label'),
+            key: const Key('step5_review_section'),
             'Building type',
             c.typology.shortLabel,
           ),

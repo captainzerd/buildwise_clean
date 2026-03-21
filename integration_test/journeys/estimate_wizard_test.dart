@@ -49,8 +49,8 @@ void main() {
     await tester.tap(find.byKey(const Key('wizard_next_button')));
     await tester.pumpAndSettle();
 
-    // Step 5: review — check non-zero total label visible
-    expect(find.byKey(const Key('step5_total_label')), findsOneWidget);
+    // Step 5: review — check review section is visible
+    expect(find.byKey(const Key('step5_review_section')), findsOneWidget);
 
     // Calculate
     await tester.tap(find.byKey(const Key('calculate_button')));
