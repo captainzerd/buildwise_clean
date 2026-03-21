@@ -50,3 +50,7 @@ firebase/envs/staging/google-services.json
 firebase/envs/staging/GoogleService-Info.plist
 firebase/envs/prod/google-services.json
 firebase/envs/prod/GoogleService-Info.plist
+
+# Firebase credential files (injected by CI — never commit these)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist

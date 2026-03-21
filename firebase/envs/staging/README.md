@@ -8,8 +8,9 @@ Never commit actual config files here.
 - `GoogleService-Info.plist` — from Firebase Console: wysebrix-staging project → iOS app
 
 ## GitHub Secrets required:
-- `GOOGLE_SERVICES_JSON_STAGING` — base64-encoded or raw google-services.json content
-- `GOOGLE_SERVICES_PLIST_STAGING` — base64-encoded or raw GoogleService-Info.plist content
+- `GOOGLE_SERVICES_JSON_STAGING` — raw google-services.json content
+- `GOOGLE_SERVICES_PLIST_STAGING` — raw GoogleService-Info.plist content
+- `FIREBASE_TOKEN_STAGING` — firebase login:ci token for wysebrix-staging
 
 ## Setup steps:
 1. Create a new Firebase project named `wysebrix-staging`

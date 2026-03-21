@@ -14,4 +14,3 @@ Never commit actual config files here.
 - `GOOGLE_SERVICES_JSON_PROD` — raw google-services.json content
 - `GOOGLE_SERVICES_PLIST_PROD` — raw GoogleService-Info.plist content
 - `FIREBASE_TOKEN_PROD` — firebase login:ci token for building-estimator
-- `FIREBASE_TOKEN_STAGING` — firebase login:ci token for wysebrix-staging
