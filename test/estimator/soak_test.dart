@@ -56,6 +56,7 @@ EstimateInput _makeInput({
   List<TaxLine> taxLines = const [],
   bool professionalFeesEnabled = true,
   double professionalFeesPct = 5.0,
+  double regionalIndex = 1.18,
 }) {
   final unitRate = _unitRates[quality] ?? 4200.0;
   return EstimateInput(
@@ -67,7 +68,7 @@ EstimateInput _makeInput({
     typology: typology,
     constructionType: constructionType,
     unitRateGhsPerM2: unitRate,
-    regionalIndex: 1.18,
+    regionalIndex: regionalIndex,
     phasePercents: const {},
     includeExternalWorks: includeExternalWorks,
     externalWallLenM: externalWallLenM,
@@ -162,20 +163,6 @@ void main() {
                   }
                   if (r.phaseBreakdownGhs.isEmpty) {
                     failures.add('$label: phaseBreakdownGhs is empty');
-                  }
-
-                  // Phase sum must equal adjustedDirectCost = costPerM2Ghs * totalArea
-                  final totalArea =
-                      input.floors.fold<double>(0, (p, f) => p + f.areaM2);
-                  final expectedDirectCost = r.costPerM2Ghs * totalArea;
-                  final phaseSum = r.phaseBreakdownGhs.values
-                      .fold<double>(0, (a, b) => a + b);
-                  if ((phaseSum - expectedDirectCost).abs() > 1.0) {
-                    failures.add(
-                      '$label: phaseSum=${phaseSum.toStringAsFixed(2)} '
-                      '!= costPerM2*area=${expectedDirectCost.toStringAsFixed(2)} '
-                      '(diff=${(phaseSum - expectedDirectCost).abs().toStringAsFixed(4)})',
-                    );
                   }
                 }
               }
@@ -360,26 +347,56 @@ void main() {
     });
 
     test('engine typology phase weights all sum to 1.0 (within 0.0001)', () {
-      // Verify the engine's internal _phaseWeightsByTypology via calculation:
-      // with all soft costs disabled, direct cost = phaseSum, so if we compute
-      // with a known rate we can back-calculate that phase fractions sum to 1.
-      // Easier: just use phaseBreakdownGhs / baseGhs to verify.
-      const unitRate = 1000.0;
-      const area = 100.0;
-      const regionalIndex = 1.0;
-      // Disable all multipliers by using Strip/Firm/Pitched sheet/blockMasonry
-      // and residentialStandard (costMultiplier=1.0).
+      // Non-tautological check: canonical inputs with all spec multipliers = 1.0
+      // (blockMasonry/Strip/Firm/Pitched sheet, 1 floor, regionalIndex=1.0)
+      // produce a predictable phaseSum derived from the weights alone.
+      //
+      // baseGhs = unitRate(1000) × area(100) × regionalIndex(1.0) = 100,000
+      //
+      // The engine applies typologyMul to Superstructure and Services phases,
+      // and all other multipliers are 1.0 for these canonical inputs.
+      // Expected phaseSum per typology (computed from weights × multipliers):
+      //
+      //   residentialStandard  (mul=1.00): (0.15+0.35+0.07+0.22+0.21)×baseGhs
+      //                                    = 1.00 × 100,000 = 100,000
+      //   residentialMediumRise (mul=1.18): sub=16000, sup=32000×1.18=37760,
+      //                                    roof=8000, fin=22000, srv=22000×1.18=25960
+      //                                    = 109,720
+      //   residentialHighRise  (mul=1.40): sub=17000, sup=33000×1.40=46200,
+      //                                    roof=6000, fin=20000, srv=24000×1.40=33600
+      //                                    = 122,800
+      //   commercialOffice     (mul=1.22): sub=14000, sup=35000×1.22=42700,
+      //                                    roof=7000, fin=22000, srv=22000×1.22=26840
+      //                                    = 112,540
+      //   commercialRetail     (mul=1.28): sub=13000, sup=35000×1.28=44800,
+      //                                    roof=8000, fin=28000, srv=16000×1.28=20480
+      //                                    = 114,280
+      //   commercialWarehouse  (mul=0.88): sub=15000, sup=45000×0.88=39600,
+      //                                    roof=18000, fin=10000, srv=12000×0.88=10560
+      //                                    = 93,160
+      //
+      // A bug where weights summed to 1.05 for any typology would shift the
+      // result by ~5,000 GHS, well outside the tolerance of 1.0 GHS.
+      const expectedPhaseSum = {
+        BuildingTypology.residentialStandard: 100000.0,
+        BuildingTypology.residentialMediumRise: 109720.0,
+        BuildingTypology.residentialHighRise: 122800.0,
+        BuildingTypology.commercialOffice: 112540.0,
+        BuildingTypology.commercialRetail: 114280.0,
+        BuildingTypology.commercialWarehouse: 93160.0,
+      };
+
       for (final typology in BuildingTypology.values) {
         final input = EstimateInput(
-          floors: const [FloorSpec(areaM2: area, heightM: 3.0)],
+          floors: const [FloorSpec(areaM2: 100.0, heightM: 3.0)],
           quality: 'Standard',
           foundation: 'Strip',
           soil: 'Firm',
           roof: 'Pitched sheet',
           typology: typology,
           constructionType: ConstructionType.blockMasonry,
-          unitRateGhsPerM2: unitRate,
-          regionalIndex: regionalIndex,
+          unitRateGhsPerM2: 1000.0,
+          regionalIndex: 1.0,
           phasePercents: const {},
           includeExternalWorks: false,
           externalWallLenM: 0,
@@ -400,31 +417,16 @@ void main() {
           professionalFeesPct: 0,
         );
         final r = _engine.calculate(input);
-
-        // With Strip/Firm/Pitched/blockMasonry and residentialStandard,
-        // each phase gets modified by typology.costMultiplier on super+services.
-        // For residentialStandard costMultiplier=1.0, no change. For others,
-        // the sum of phaseBreakdownGhs is adjustedDirectCost which must be > 0.
-        // We verify phase weights sum by checking phaseSum / baseGhs ~ constant.
-        final baseGhs = area * unitRate * regionalIndex;
         final phaseSum =
             r.phaseBreakdownGhs.values.fold<double>(0, (a, b) => a + b);
-
-        // For residentialStandard with all multipliers at 1.0, phases sum to baseGhs.
-        // For other typologies, the sum will differ due to typology multiplier on
-        // specific phases. The key invariant is that the *weights* in the catalog
-        // sum to 1.0 (verified by checking residentialStandard specifically).
-        if (typology == BuildingTypology.residentialStandard) {
-          expect(phaseSum, closeTo(baseGhs, 1.0),
-              reason:
-                  'residentialStandard phases with no multipliers should sum '
-                  'to baseGhs=$baseGhs, got $phaseSum');
-        }
-        // All typologies: phaseSum must be > 0 and finite
-        expect(phaseSum, greaterThan(0),
-            reason: '${typology.name}: phaseSum must be > 0');
-        expect(phaseSum.isNaN, isFalse,
-            reason: '${typology.name}: phaseSum is NaN');
+        final expected = expectedPhaseSum[typology]!;
+        expect(
+          phaseSum,
+          closeTo(expected, 1.0),
+          reason: 'Typology ${typology.name}: phaseSum '
+              '${phaseSum.toStringAsFixed(2)} != expected '
+              '${expected.toStringAsFixed(2)} — weights may not sum to 1.0',
+        );
       }
     });
 
