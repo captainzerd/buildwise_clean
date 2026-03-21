@@ -2,7 +2,8 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "rootDir": ".",
-    "outDir": "lib-test"
+    "outDir": "lib-test",
+    "noEmit": true
   },
   "include": ["src", "test"]
 }
