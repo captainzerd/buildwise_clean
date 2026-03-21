@@ -71,6 +71,7 @@ class VariationOrdersPage extends StatelessWidget {
       ),
       floatingActionButton: !isOwner
           ? FloatingActionButton.extended(
+              key: const Key('add_variation_order_button'),
               icon: const Icon(Icons.add),
               label: const Text('Submit Change Order'),
               onPressed: () => _showSubmitSheet(context, auth, service),
@@ -410,6 +411,7 @@ class _SubmitVoSheetState extends State<_SubmitVoSheet> {
             ),
             const SizedBox(height: 20),
             TextFormField(
+              key: const Key('vo_title_field'),
               controller: _titleCtrl,
               decoration: const InputDecoration(
                 labelText: 'Title',
@@ -438,6 +440,7 @@ class _SubmitVoSheetState extends State<_SubmitVoSheet> {
               children: [
                 Expanded(
                   child: TextFormField(
+                    key: const Key('vo_amount_field'),
                     controller: _deltaCtrl,
                     decoration: const InputDecoration(
                       labelText: 'Amount (GHS)',
@@ -486,6 +489,7 @@ class _SubmitVoSheetState extends State<_SubmitVoSheet> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
+                key: const Key('vo_save_button'),
                 onPressed: _saving ? null : _submit,
                 child: _saving
                     ? const SizedBox(

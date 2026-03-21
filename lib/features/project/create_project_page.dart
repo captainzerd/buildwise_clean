@@ -518,6 +518,7 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
           children: [
             // Title
             TextFormField(
+              key: const Key('project_name_field'),
               controller: _titleCtrl,
               decoration: const InputDecoration(
                 labelText: 'Project title *',
@@ -831,6 +832,7 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
+                key: const Key('project_save_confirm_button'),
                 onPressed: _saving ? null : _save,
                 icon: _saving
                     ? const SizedBox(

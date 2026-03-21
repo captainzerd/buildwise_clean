@@ -97,6 +97,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
         final title = project?.title ?? widget.projectTitle;
 
         return Scaffold(
+          key: const Key('project_details_screen'),
           appBar: AppBar(
             title: Text(title),
             actions: [
@@ -274,9 +275,10 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage>
               isScrollable: true,
               tabAlignment: TabAlignment.start,
               tabs: const [
-                Tab(icon: Icon(Icons.info_outline), text: 'Overview'),
+                Tab(key: Key('overview_tab'), icon: Icon(Icons.info_outline), text: 'Overview'),
                 Tab(icon: Icon(Icons.build_outlined), text: 'Progress'),
                 Tab(
+                    key: Key('finance_tab'),
                     icon: Icon(Icons.account_balance_wallet_outlined),
                     text: 'Finance',),
                 Tab(icon: Icon(Icons.folder_outlined), text: 'Documents'),

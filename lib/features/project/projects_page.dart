@@ -117,6 +117,7 @@ class _OwnerProjectsViewState extends State<_OwnerProjectsView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: const Key('projects_screen'),
       body: Column(
         children: [
           Padding(
@@ -169,6 +170,7 @@ class _OwnerProjectsViewState extends State<_OwnerProjectsView> {
           ),
           const SizedBox(height: 8),
           FloatingActionButton.extended(
+            key: const Key('create_project_fab'),
             heroTag: 'new_project',
             onPressed: () => _openCreate(context),
             icon: const Icon(Icons.add),
@@ -691,8 +693,10 @@ class _ProjectCard extends StatelessWidget {
     final overBudget = budget > 0 && spent > budget;
 
     return Card(
+      key: Key('project_list_item_${project.id}'),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
+        key: const Key('project_list_item'),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(16),

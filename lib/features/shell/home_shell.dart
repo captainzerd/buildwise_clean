@@ -215,6 +215,7 @@ class _NavBar extends StatelessWidget {
             label: 'Estimate',
           ),
         1 => NavigationDestination(
+            key: const Key('projects_nav_tab'),
             icon: Semantics(
               label: [
                 if (pendingDeletions > 0)

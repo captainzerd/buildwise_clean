@@ -293,6 +293,7 @@ class _EstimateResultPageState extends State<EstimateResultPage>
           SizedBox(
             width: double.infinity,
             child: FilledButton.tonalIcon(
+              key: const Key('save_as_project_button'),
               onPressed: () {
                 final auth = context.read<AuthService>();
                 if (!auth.isSignedIn) {
