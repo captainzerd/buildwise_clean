@@ -8,6 +8,9 @@ on:
       - firestore.indexes.json
       - firebase.json
 
+# NOTE: These deploy workflows trigger independently of ci.yml. Deploys are not gated
+# on CI passing. Ensure the CI workflow passes before relying on a deploy for production use.
+
 jobs:
   deploy-firestore-staging:
     name: Deploy Firestore → Staging

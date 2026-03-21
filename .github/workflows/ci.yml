@@ -46,7 +46,7 @@ jobs:
     name: Build Android (staging)
     runs-on: ubuntu-latest
     needs: analyze-and-test
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/mvp-vendors-projects'
 
     steps:
       - uses: actions/checkout@v4
@@ -73,7 +73,7 @@ jobs:
         run: |
           flutter build apk --debug \
             --dart-define=ENV=staging \
-            --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+            "--dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}"
 
       - name: Upload staging APK artifact
         uses: actions/upload-artifact@v4
@@ -113,9 +113,9 @@ jobs:
         run: |
           flutter build apk --release \
             --dart-define=ENV=prod \
-            --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=PAYSTACK_PUBLIC_KEY=${{ secrets.PAYSTACK_PUBLIC_KEY_LIVE }} \
-            --dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY_LIVE }}
+            "--dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}" \
+            "--dart-define=PAYSTACK_PUBLIC_KEY=${{ secrets.PAYSTACK_PUBLIC_KEY_LIVE }}" \
+            "--dart-define=STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY_LIVE }}"
 
       - name: Upload prod APK artifact
         uses: actions/upload-artifact@v4

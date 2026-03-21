@@ -8,6 +8,9 @@ on:
       - 'functions/package.json'
       - 'functions/package-lock.json'
 
+# NOTE: These deploy workflows trigger independently of ci.yml. Deploys are not gated
+# on CI passing. Ensure the CI workflow passes before relying on a deploy for production use.
+
 jobs:
   deploy-functions-staging:
     name: Deploy Functions → Staging
@@ -26,6 +29,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        working-directory: functions
+
+      - name: Clean build output
+        run: rm -rf lib
         working-directory: functions
 
       - name: Build TypeScript
@@ -59,6 +66,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        working-directory: functions
+
+      - name: Clean build output
+        run: rm -rf lib
         working-directory: functions
 
       - name: Build TypeScript
