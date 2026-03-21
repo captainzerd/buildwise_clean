@@ -18,11 +18,12 @@ const db = admin.firestore();
 
 async function deleteCollection(
   collRef: FirebaseFirestore.CollectionReference,
-  olderThanMs: number
+  olderThanMs: number,
+  timestampField = "createdAt"
 ): Promise<number> {
   const cutoff = new Date(Date.now() - olderThanMs);
   const snap = await collRef
-    .where("createdAt", "<", cutoff)
+    .where(timestampField, "<", cutoff)
     .limit(500)
     .get();
   if (snap.empty) return 0;
@@ -41,9 +42,9 @@ export const enforceDataRetention = onSchedule(
     const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-    // 1. Delete audit_logs older than 2 years
+    // 1. Delete audit_log older than 2 years
     const auditDeleted = await deleteCollection(
-      db.collection("audit_logs"),
+      db.collection("audit_log"),
       TWO_YEARS_MS
     );
     logger.info(`Data retention: deleted ${auditDeleted} audit log entries`);
@@ -54,7 +55,8 @@ export const enforceDataRetention = onSchedule(
     for (const userDoc of usersSnap.docs) {
       const deleted = await deleteCollection(
         userDoc.ref.collection("login_activity"),
-        NINETY_DAYS_MS
+        NINETY_DAYS_MS,
+        "timestamp"
       );
       loginDeleted += deleted;
     }
@@ -97,7 +99,7 @@ export const exportUserData = onCall(
 
     const [loginActivitySnap, auditLogsSnap] = await Promise.all([
       db.collection("users").doc(uid).collection("login_activity").limit(500).get(),
-      db.collection("audit_logs").where("uid", "==", uid).limit(500).get(),
+      db.collection("audit_log").where("uid", "==", uid).limit(500).get(),
     ]);
 
     return {
@@ -135,32 +137,69 @@ export const processAccountDeletion = onDocumentUpdated(
     logger.info(`processAccountDeletion: starting deletion for uid ${uid}`);
 
     try {
-      // 1. Delete Firebase Auth user
-      await admin.auth().deleteUser(uid);
-
-      // 2. Delete Firestore user document
+      // 1. Delete Firestore user document
       await db.collection("users").doc(uid).delete();
 
-      // 3. Mark all owned projects as deleted
+      // 2. Mark all owned projects as soft-deleted
       const projectsSnap = await db
         .collection("projects")
         .where("ownerUid", "==", uid)
+        .limit(500)
         .get();
-      const batch = db.batch();
+      const projectBatch = db.batch();
       projectsSnap.docs.forEach((doc) =>
-        batch.update(doc.ref, {
+        projectBatch.update(doc.ref, {
           deletedAt: admin.firestore.FieldValue.serverTimestamp(),
         })
       );
-      if (!projectsSnap.empty) await batch.commit();
+      if (!projectsSnap.empty) await projectBatch.commit();
 
-      // 4. Delete Firebase Storage files (best-effort)
+      // 2b. Delete owned contracts
+      const contractsSnap = await db
+        .collection("contracts")
+        .where("ownerUid", "==", uid)
+        .limit(500)
+        .get();
+      if (!contractsSnap.empty) {
+        const contractBatch = db.batch();
+        contractsSnap.docs.forEach((doc) => contractBatch.delete(doc.ref));
+        await contractBatch.commit();
+      }
+
+      // 2c. Delete owned invoices
+      const invoicesSnap = await db
+        .collection("invoices")
+        .where("ownerUid", "==", uid)
+        .limit(500)
+        .get();
+      if (!invoicesSnap.empty) {
+        const invoiceBatch = db.batch();
+        invoicesSnap.docs.forEach((doc) => invoiceBatch.delete(doc.ref));
+        await invoiceBatch.commit();
+      }
+
+      // 2d. Delete owned variation_orders
+      const voSnap = await db
+        .collection("variation_orders")
+        .where("ownerUid", "==", uid)
+        .limit(500)
+        .get();
+      if (!voSnap.empty) {
+        const voBatch = db.batch();
+        voSnap.docs.forEach((doc) => voBatch.delete(doc.ref));
+        await voBatch.commit();
+      }
+
+      // 3. Delete Firebase Storage files (best-effort)
       try {
         const bucket = admin.storage().bucket();
         await bucket.deleteFiles({ prefix: `users/${uid}/` });
       } catch (storageErr) {
         logger.warn(`processAccountDeletion: storage cleanup partial for ${uid}`, storageErr);
       }
+
+      // 4. Delete Firebase Auth user (after all Firestore/Storage cleanup)
+      await admin.auth().deleteUser(uid);
 
       // 5. Queue confirmation email via Firestore (picked up by Firebase Trigger Email Extension)
       // Setup required: install "Trigger Email from Firestore" extension in Firebase Console

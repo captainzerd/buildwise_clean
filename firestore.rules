@@ -526,6 +526,25 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────
+    // Deletion Requests
+    // ─────────────────────────────────────────
+
+    match /deletion_requests/{requestId} {
+      allow create: if isEmailVerified()
+        && request.resource.data.requestedByUid == request.auth.uid;
+      allow read: if isOwner(resource.data.requestedByUid) || isAdmin();
+      allow update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────
+    // Mail (Trigger Email Extension — server-only)
+    // ─────────────────────────────────────────
+
+    match /mail/{docId} {
+      allow read, write: if false;
+    }
+
+    // ─────────────────────────────────────────
     // App Config (read-only for authenticated users)
     // ─────────────────────────────────────────
 
