@@ -16,7 +16,9 @@ const SEED_PRICES = [
   { name: 'Emulsion paint (20L)', unit: '20L tin', priceGhs: 380.0, category: 'Finishes' },
 ];
 
-export const refreshMarketPrices = onSchedule('0 6 * * *', async () => {
+export const refreshMarketPrices = onSchedule(
+  { schedule: '0 6 * * *', region: 'europe-west1' },
+  async () => {
   const db = admin.firestore();
   await db.collection('market_prices').doc('ghana_current').set({
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),

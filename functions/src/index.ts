@@ -11,6 +11,7 @@ import {
 } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { BigQuery } from "@google-cloud/bigquery";
+import { rateLimit } from "./utils/rateLimit";
 
 // Firebase Secret Manager — set with:
 //   firebase functions:secrets:set PAYSTACK_SECRET_KEY
@@ -125,7 +126,7 @@ async function getProject(projectId: string) {
 // force-refresh and pick up new claims before they take effect. The Flutter
 // auth_service.dart does this automatically after signIn.
 export const onUserRoleChange = onDocumentWritten(
-  "users/{uid}",
+  { document: "users/{uid}", region: "europe-west1" },
   async (event) => {
     const uid = event.params.uid;
     const newData = event.data?.after?.data();
@@ -166,50 +167,54 @@ export const onUserRoleChange = onDocumentWritten(
 );
 
 // ── setUserRoles callable ────────────────────────────────────────────────────
-export const setUserRoles = onCall({ enforceAppCheck: false }, async (request) => {
-  const caller = request.auth;
-  if (!caller?.token?.admin) {
-    throw new Error("permission-denied: Only admins can set roles.");
-  }
+export const setUserRoles = onCall(
+  { region: "europe-west1", enforceAppCheck: true },
+  async (request) => {
+    const caller = request.auth;
+    if (!caller?.token?.admin) {
+      throw new Error("permission-denied: Only admins can set roles.");
+    }
+    await rateLimit(request.auth!.uid, "setUserRoles", 5, 3600);
 
-  const { uid, roles } = request.data || {};
-  if (typeof uid !== "string" || !uid) {
-    throw new Error("invalid-argument: 'uid' is required.");
-  }
-  if (typeof roles !== "object" || roles == null) {
-    throw new Error("invalid-argument: 'roles' must be an object.");
-  }
+    const { uid, roles } = request.data || {};
+    if (typeof uid !== "string" || !uid) {
+      throw new Error("invalid-argument: 'uid' is required.");
+    }
+    if (typeof roles !== "object" || roles == null) {
+      throw new Error("invalid-argument: 'roles' must be an object.");
+    }
 
-  const allowedKeys = ["basic", "vendor", "architect", "builder", "admin"] as const;
-  const claims: Record<string, boolean> = {};
-  for (const key of allowedKeys) {
-    if (roles[key] != null) claims[key] = !!roles[key];
-  }
+    const allowedKeys = ["basic", "vendor", "architect", "builder", "admin"] as const;
+    const claims: Record<string, boolean> = {};
+    for (const key of allowedKeys) {
+      if (roles[key] != null) claims[key] = !!roles[key];
+    }
 
-  await admin.auth().setCustomUserClaims(uid, {
-    ...claims,
-    role: claims.admin
-      ? "admin"
-      : claims.vendor
-        ? "vendor"
-        : claims.architect
-          ? "architect"
-          : claims.builder
-            ? "builder"
-            : "basic",
-  });
+    await admin.auth().setCustomUserClaims(uid, {
+      ...claims,
+      role: claims.admin
+        ? "admin"
+        : claims.vendor
+          ? "vendor"
+          : claims.architect
+            ? "architect"
+            : claims.builder
+              ? "builder"
+              : "basic",
+    });
 
-  await db.collection("users").doc(uid).set(
-    {
-      uid,
-      roles: claims,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true },
-  );
+    await db.collection("users").doc(uid).set(
+      {
+        uid,
+        roles: claims,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
 
-  return { ok: true, uid, roles: claims };
-});
+    return { ok: true, uid, roles: claims };
+  },
+);
 
 // ── Paystack transaction initialisation ─────────────────────────────────────
 // Called from PaystackService.initTransaction() in the Flutter app.
@@ -223,11 +228,12 @@ export const setUserRoles = onCall({ enforceAppCheck: false }, async (request) =
 // The Flutter app reads the *public* key from AppConfig.paystackPublicKey
 // (passed via --dart-define=PAYSTACK_PUBLIC_KEY=pk_live_...).
 export const initPaystackTransaction = onCall(
-  { secrets: [paystackSecretKey] },
+  { region: "europe-west1", enforceAppCheck: true, secrets: [paystackSecretKey] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "You must be signed in.");
     }
+    await rateLimit(request.auth!.uid, "initPaystack", 10, 3600);
 
     const { amountPesewas, email, reference, metadata } = request.data ?? {};
 
@@ -307,7 +313,7 @@ export const initPaystackTransaction = onCall(
 
 // 1. Phase added → notify owner
 export const onPhaseCreated = onDocumentCreated(
-  "projects/{projectId}/phases/{phaseId}",
+  { document: "projects/{projectId}/phases/{phaseId}", region: "europe-west1" },
   async (event) => {
     if (await dedupeEvent(event.id)) return;
     try {
@@ -336,7 +342,7 @@ export const onPhaseCreated = onDocumentCreated(
 
 // 2. Cost entry → notify owner + check budget overrun
 export const onCostCreated = onDocumentCreated(
-  "projects/{projectId}/costs/{costId}",
+  { document: "projects/{projectId}/costs/{costId}", region: "europe-west1" },
   async (event) => {
     if (await dedupeEvent(event.id)) return;
     try {
@@ -391,7 +397,7 @@ export const onCostCreated = onDocumentCreated(
 
 // 3. Update posted → notify owner
 export const onUpdateCreated = onDocumentCreated(
-  "projects/{projectId}/updates/{updateId}",
+  { document: "projects/{projectId}/updates/{updateId}", region: "europe-west1" },
   async (event) => {
     if (await dedupeEvent(event.id)) return;
     try {
@@ -419,7 +425,7 @@ export const onUpdateCreated = onDocumentCreated(
 
 // 4. Deletion request → notify owner
 export const onDeletionRequestCreated = onDocumentCreated(
-  "projects/{projectId}/deletionRequests/{reqId}",
+  { document: "projects/{projectId}/deletionRequests/{reqId}", region: "europe-west1" },
   async (event) => {
     if (await dedupeEvent(event.id)) return;
     try {
@@ -448,7 +454,7 @@ export const onDeletionRequestCreated = onDocumentCreated(
 
 // 5. Deletion request resolved → notify builder
 export const onDeletionRequestUpdated = onDocumentUpdated(
-  "projects/{projectId}/deletionRequests/{reqId}",
+  { document: "projects/{projectId}/deletionRequests/{reqId}", region: "europe-west1" },
   async (event) => {
     try {
       const { projectId } = event.params;
@@ -489,7 +495,7 @@ export const onDeletionRequestUpdated = onDocumentUpdated(
 
 // 6. Contract created → notify builder
 export const onContractCreated = onDocumentCreated(
-  "contracts/{contractId}",
+  { document: "contracts/{contractId}", region: "europe-west1" },
   async (event) => {
     if (await dedupeEvent(event.id)) return;
     try {
@@ -520,7 +526,7 @@ export const onContractCreated = onDocumentCreated(
 
 // 7. Contract signed → notify owner
 export const onContractUpdated = onDocumentUpdated(
-  "contracts/{contractId}",
+  { document: "contracts/{contractId}", region: "europe-west1" },
   async (event) => {
     try {
       const before = event.data?.before.data() ?? {};
@@ -554,7 +560,7 @@ export const onContractUpdated = onDocumentUpdated(
 
 // 8. Builder assigned to project → notify builder
 export const onProjectUpdated = onDocumentUpdated(
-  "projects/{projectId}",
+  { document: "projects/{projectId}", region: "europe-west1" },
   async (event) => {
     try {
       const { projectId } = event.params;
@@ -585,7 +591,7 @@ export const onProjectUpdated = onDocumentUpdated(
 
 // 9. Variation order submitted → notify owner
 export const onVariationOrderCreated = onDocumentCreated(
-  "projects/{projectId}/variation_orders/{voId}",
+  { document: "projects/{projectId}/variation_orders/{voId}", region: "europe-west1" },
   async (event) => {
     if (await dedupeEvent(event.id)) return;
     try {
@@ -617,7 +623,7 @@ export const onVariationOrderCreated = onDocumentCreated(
 
 // 10. Variation order decided → notify builder
 export const onVariationOrderUpdated = onDocumentUpdated(
-  "projects/{projectId}/variation_orders/{voId}",
+  { document: "projects/{projectId}/variation_orders/{voId}", region: "europe-west1" },
   async (event) => {
     try {
       const { projectId } = event.params;
@@ -651,7 +657,7 @@ export const onVariationOrderUpdated = onDocumentUpdated(
 
 // 11. Site visit scheduled → notify project members
 export const onSiteVisitCreated = onDocumentCreated(
-  "projects/{projectId}/site_visits/{visitId}",
+  { document: "projects/{projectId}/site_visits/{visitId}", region: "europe-west1" },
   async (event) => {
     if (await dedupeEvent(event.id)) return;
     try {
@@ -699,7 +705,7 @@ export const onSiteVisitCreated = onDocumentCreated(
 
 // 12. Snag item raised → notify project owner (type-aware)
 export const onSnagItemCreated = onDocumentCreated(
-  "projects/{projectId}/snag_items/{snagId}",
+  { document: "projects/{projectId}/snag_items/{snagId}", region: "europe-west1" },
   async (event) => {
     if (await dedupeEvent(event.id)) return;
     try {
@@ -759,7 +765,9 @@ export const onSnagItemCreated = onDocumentCreated(
 //   totalSpentGhs FLOAT, reportDate DATE, updatedAt TIMESTAMP
 //
 // This function runs daily at 02:00 UTC and writes per-owner aggregate stats.
-export const dailyProjectRollup = onSchedule("0 2 * * *", async () => {
+export const dailyProjectRollup = onSchedule(
+  { schedule: "0 2 * * *", region: "europe-west1" },
+  async () => {
   try {
     const bq = new BigQuery();
     const dataset = bq.dataset("wysebrix_analytics");
@@ -810,7 +818,9 @@ export const dailyProjectRollup = onSchedule("0 2 * * *", async () => {
 // ── Daily amountSpent + phase actualCostGhs reconciliation ──────────────────
 // Corrects drift caused by offline-queue failures or concurrent writes.
 // Runs daily at 03:00 UTC, well after the dailyProjectRollup at 02:00 UTC.
-export const reconcileAmountSpent = onSchedule("0 3 * * *", async () => {
+export const reconcileAmountSpent = onSchedule(
+  { schedule: "0 3 * * *", region: "europe-west1" },
+  async () => {
   try {
     const projectsSnap = await db.collection("projects").get();
     let fixedProjects = 0;
@@ -862,7 +872,7 @@ export const reconcileAmountSpent = onSchedule("0 3 * * *", async () => {
 
 // 13. RFQ request created → notify vendor
 export const onRfqCreated = onDocumentCreated(
-  "rfq_requests/{rfqId}",
+  { document: "rfq_requests/{rfqId}", region: "europe-west1" },
   async (event) => {
     if (await dedupeEvent(event.id)) return;
     try {
@@ -893,7 +903,7 @@ export const onRfqCreated = onDocumentCreated(
 
 // 14. RFQ status changed → notify owner (responded/accepted/declined)
 export const onRfqUpdated = onDocumentUpdated(
-  "rfq_requests/{rfqId}",
+  { document: "rfq_requests/{rfqId}", region: "europe-west1" },
   async (event) => {
     try {
       const before = event.data?.before.data() ?? {};
@@ -966,7 +976,7 @@ export const onRfqUpdated = onDocumentUpdated(
 
 // 16. Project deleted → cascade-delete all sub-collections
 export const onProjectDeleted = onDocumentDeleted(
-  "projects/{projectId}",
+  { document: "projects/{projectId}", region: "europe-west1" },
   async (event) => {
     const projectId = event.params.projectId;
     try {
@@ -987,7 +997,7 @@ export const onProjectDeleted = onDocumentDeleted(
 // 15. Chat message sent → notify ALL project members (including teamMemberUids)
 // Also handles @mention notifications (bypass chat pref for mentioned users).
 export const onChatMessageCreated = onDocumentCreated(
-  "projects/{projectId}/chat/{messageId}",
+  { document: "projects/{projectId}/chat/{messageId}", region: "europe-west1" },
   async (event) => {
     if (await dedupeEvent(event.id)) return;
     try {
@@ -1056,7 +1066,7 @@ export const onChatMessageCreated = onDocumentCreated(
 
 // 17. Task comment created → notify task assignee + project owner
 export const onTaskCommentCreated = onDocumentCreated(
-  "projects/{projectId}/tasks/{taskId}/comments/{commentId}",
+  { document: "projects/{projectId}/tasks/{taskId}/comments/{commentId}", region: "europe-west1" },
   async (event) => {
     if (await dedupeEvent(event.id)) return;
     try {
@@ -1112,7 +1122,7 @@ export const onTaskCommentCreated = onDocumentCreated(
 
 // 18. createInvitation callable — creates project invitation token
 export const createInvitation = onCall(
-  { enforceAppCheck: false },
+  { region: "europe-west1", enforceAppCheck: true },
   async (request) => {
     const caller = request.auth;
     if (!caller) {
@@ -1171,7 +1181,7 @@ export const createInvitation = onCall(
 // Runs every Sunday at 02:00 UTC. Deletes inbox notifications older than 90
 // days that have already been read, to keep Firestore storage costs low.
 export const cleanupOldNotifications = onSchedule(
-  { schedule: "every sunday 02:00", timeZone: "UTC" },
+  { schedule: "every sunday 02:00", timeZone: "UTC", region: "europe-west1" },
   async () => {
     const cutoff = admin.firestore.Timestamp.fromDate(
       new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), // 90 days ago
@@ -1218,7 +1228,7 @@ export const cleanupOldNotifications = onSchedule(
 // The function reads PAYSTACK_SECRET_KEY from Secret Manager (same secret used
 // by initPaystackTransaction).
 export const paystackWebhook = onRequest(
-  { secrets: [paystackSecretKey] },
+  { region: "europe-west1", secrets: [paystackSecretKey] },
   async (req, res) => {
     if (req.method !== "POST") {
       res.status(405).send("Method Not Allowed");
@@ -1349,7 +1359,7 @@ export const paystackWebhook = onRequest(
 // Called from upgrade_page.dart after a successful Paystack payment.
 // Verifies the payment reference with Paystack API then upgrades the user tier.
 export const activateSubscription = onCall(
-  { secrets: [paystackSecretKey] },
+  { region: "europe-west1", enforceAppCheck: true, secrets: [paystackSecretKey] },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) {
@@ -1420,10 +1430,11 @@ export const activateSubscription = onCall(
 // Called by flutter_stripe PaymentSheet before presenting the sheet.
 // Returns { clientSecret } — the secret key never leaves the server.
 export const createStripePaymentIntent = onCall(
-  { secrets: [stripeSecretKey] },
+  { region: "europe-west1", enforceAppCheck: true, secrets: [stripeSecretKey] },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Must be signed in.");
+    await rateLimit(request.auth!.uid, "createStripe", 10, 3600);
 
     const { amountCents, currency, email, tier } = request.data as {
       amountCents?: number;
@@ -1478,7 +1489,7 @@ export const createStripePaymentIntent = onCall(
 // Called client-side after Stripe PaymentSheet completes successfully.
 // Verifies the PaymentIntent status with Stripe, then updates Firestore.
 export const activateStripeSubscription = onCall(
-  { secrets: [stripeSecretKey] },
+  { region: "europe-west1", enforceAppCheck: true, secrets: [stripeSecretKey] },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Must be signed in.");
@@ -1545,7 +1556,9 @@ export const activateStripeSubscription = onCall(
 // ── User data cascade delete ─────────────────────────────────────────────────
 // Triggered when a users/{uid} document is deleted.
 // Cleans up all data owned by the user across collections.
-export const onUserDataDeleted = onDocumentDeleted("users/{uid}", async (event) => {
+export const onUserDataDeleted = onDocumentDeleted(
+  { document: "users/{uid}", region: "europe-west1" },
+  async (event) => {
   const uid = event.params.uid;
   try {
     // Delete all owned projects (+ sub-collections via recursiveDelete)
@@ -1574,7 +1587,9 @@ export const onUserDataDeleted = onDocumentDeleted("users/{uid}", async (event) 
 
 // ── Revoke User Sessions ─────────────────────────────────────────────────────
 // Callable by the user themselves to revoke all other active sessions.
-export const revokeUserSessions = onCall(async (request) => {
+export const revokeUserSessions = onCall(
+  { region: "europe-west1", enforceAppCheck: true },
+  async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
@@ -1597,7 +1612,7 @@ export const revokeUserSessions = onCall(async (request) => {
 
 // ── Daily: demote expired Project Pass users back to free ───────────────────
 export const checkExpiredProjectPasses = onSchedule(
-  { schedule: "every 24 hours", timeZone: "Africa/Accra" },
+  { schedule: "every 24 hours", timeZone: "Africa/Accra", region: "europe-west1" },
   async () => {
     const now = admin.firestore.Timestamp.now();
     const snap = await db
@@ -1633,7 +1648,7 @@ export const checkExpiredProjectPasses = onSchedule(
 // Called by CreateProjectPage before creating a project.
 // Returns { allowed: true } or throws 'resource-exhausted'.
 export const enforceProjectQuota = onCall(
-  { enforceAppCheck: false },
+  { region: "europe-west1", enforceAppCheck: true },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Sign in required");

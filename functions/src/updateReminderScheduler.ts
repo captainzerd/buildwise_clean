@@ -18,7 +18,7 @@ if (admin.apps.length === 0) {
 const db = admin.firestore();
 
 export const updateReminderScheduler = onSchedule(
-  { schedule: "0 8 * * *", timeZone: "UTC" },
+  { schedule: "0 8 * * *", timeZone: "UTC", region: "europe-west1" },
   async () => {
     const now = admin.firestore.Timestamp.now();
 

@@ -9,7 +9,7 @@ import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 const db = admin.firestore();
 
 export const budgetAlertTrigger = onDocumentUpdated(
-  "projects/{projectId}",
+  { document: "projects/{projectId}", region: "europe-west1" },
   async (event) => {
     const before = event.data?.before?.data();
     const after = event.data?.after?.data();

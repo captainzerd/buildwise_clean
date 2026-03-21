@@ -29,6 +29,8 @@ interface EstimateInput {
 
 export const analyseEstimateCosts = onCall(
   {
+    region: "europe-west1",
+    enforceAppCheck: true,
     secrets: [anthropicApiKey],
     memory: "256MiB",
     timeoutSeconds: 60,
