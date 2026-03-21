@@ -7,7 +7,7 @@ import {
   assertSucceeds,
 } from '@firebase/rules-unit-testing';
 
-export { assertFails, assertSucceeds };
+export { assertFails, assertSucceeds, RulesTestEnvironment };
 
 // Fixed UIDs used across all rule test files
 export const UIDS = {
@@ -79,4 +79,9 @@ export async function seedDoc(
     }
     await ref.set(data);
   });
+}
+
+// Clear all Firestore data (for use in afterEach hooks)
+export async function clearFirestore(testEnv: RulesTestEnvironment): Promise<void> {
+  await testEnv.clearFirestore();
 }
