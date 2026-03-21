@@ -15,6 +15,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/utils/permission_handler.dart';
 import '../../../core/widgets/shimmer_box.dart';
 import 'project_shared_widgets.dart';
 
@@ -47,6 +48,8 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
   bool _uploading = false;
   double _uploadProgress = 0;
   StreamSubscription<TaskSnapshot>? _uploadSub;
+  XFile? _pendingRetryFile;
+  String? _uploadError;
 
   @override
   void dispose() {
@@ -62,9 +65,20 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
     setState(() {
       _uploading = true;
       _uploadProgress = 0;
+      _uploadError = null;
+      _pendingRetryFile = null;
     });
 
     try {
+      // Check camera permission when using camera source.
+      if (source == ImageSource.camera) {
+        final granted = await AppPermissionHandler.requestCamera(context);
+        if (!granted) {
+          if (mounted) setState(() => _uploading = false);
+          return;
+        }
+      }
+
       final picker = ImagePicker();
       final XFile? file = await picker.pickImage(
         source: source,
@@ -122,7 +136,10 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
       final ref = FirebaseStorage.instance.ref(storagePath);
       final uploadTask = ref.putFile(
         File(file.path),
-        SettableMetadata(contentType: 'image/jpeg'),
+        SettableMetadata(
+          contentType: 'image/jpeg',
+          customMetadata: {'capturedAt': DateTime.now().toUtc().toIso8601String()},
+        ),
       );
 
       _uploadSub = uploadTask.snapshotEvents.listen((snapshot) {
@@ -141,7 +158,8 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
       final downloadUrl = await ref.getDownloadURL();
       final geoTag = await geoFuture;
 
-      // Persist URL (and optional geotag as metadata) to Firestore
+      // Persist URL, timestamp, and optional geotag as metadata to Firestore
+      final capturedAt = DateTime.now().toUtc().toIso8601String();
       await FirebaseFirestore.instance
           .collection('projects')
           .doc(widget.projectId)
@@ -149,6 +167,7 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
           .doc(widget.phaseId)
           .update({
         'completionPhotoUrls': FieldValue.arrayUnion([downloadUrl]),
+        'photoTimestamps.$uuid': capturedAt, // store per-photo UTC timestamp
         if (geoTag != null)
           'photoGeoTags.$uuid': geoTag, // store per-photo geotag
       });
@@ -166,7 +185,7 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Photo uploaded (no GPS — location permission denied)',
+                'Photo uploaded (no GPS — enable location for full verification)',
               ),
             ),
           );
@@ -176,10 +195,11 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
       await _uploadSub?.cancel();
       _uploadSub = null;
       if (mounted) {
-        setState(() => _uploading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
-        );
+        setState(() {
+          _uploading = false;
+          _pendingRetryFile = file;
+          _uploadError = 'Upload failed — tap Retry to try again.';
+        });
       }
     }
   }
@@ -190,15 +210,37 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (_) => SafeArea(
+      builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.verified_outlined,
+                    size: 14,
+                    color: Theme.of(ctx).colorScheme.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Photos are GPS-tagged and timestamped for verification.',
+                      style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             ListTile(
               leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text('Take photo'),
+              title: const Text('Take photo now'),
+              subtitle: const Text('Recommended — captures live GPS + time'),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(ctx);
                 _pickPhoto(ImageSource.camera);
               },
             ),
@@ -206,7 +248,7 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
               leading: const Icon(Icons.photo_library_outlined),
               title: const Text('Choose from gallery'),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(ctx);
                 _pickPhoto(ImageSource.gallery);
               },
             ),
@@ -293,6 +335,39 @@ class _PhotoEvidenceSectionState extends State<PhotoEvidenceSection> {
           Text(
             'Uploading… ${(_uploadProgress * 100).toStringAsFixed(0)}%',
             style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+        ],
+
+        // ── Upload error + retry ──
+        if (_uploadError != null && _pendingRetryFile != null) ...[
+          Row(
+            children: [
+              Icon(Icons.error_outline, size: 14, color: cs.error),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _uploadError!,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: cs.error),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  final fileToRetry = _pendingRetryFile!;
+                  setState(() {
+                    _uploading = true;
+                    _uploadProgress = 0;
+                    _uploadError = null;
+                    _pendingRetryFile = null;
+                  });
+                  _uploadPhoto(fileToRetry);
+                },
+                child: const Text('Retry'),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
         ],
