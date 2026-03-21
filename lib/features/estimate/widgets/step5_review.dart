@@ -35,7 +35,6 @@ class Step5Review extends StatelessWidget {
           sectionLabel(context, 'Summary'),
           const SizedBox(height: 16),
           Text(
-            key: const Key('step5_total_label'),
             'Review your estimate details below',
             style: Theme.of(context).textTheme.bodySmall,
           ),
@@ -49,7 +48,11 @@ class Step5Review extends StatelessWidget {
           SummaryRow('Region', c.region ?? 'Default'),
           SummaryRow('Currency', '${c.currency.code}  ${c.currency.symbol}'),
           const Divider(height: 24),
-          SummaryRow('Building type', c.typology.shortLabel),
+          SummaryRow(
+            key: const Key('step5_total_label'),
+            'Building type',
+            c.typology.shortLabel,
+          ),
           SummaryRow('Quality', c.quality),
           SummaryRow('Foundation', c.foundation),
           SummaryRow('Soil', c.soil),

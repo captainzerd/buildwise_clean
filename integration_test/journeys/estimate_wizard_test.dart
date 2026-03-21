@@ -41,9 +41,7 @@ void main() {
     await tester.tap(find.byKey(const Key('wizard_next_button')));
     await tester.pumpAndSettle();
 
-    // Step 3: quality
-    await tester.tap(find.byKey(const Key('step3_quality_standard')));
-    await tester.pumpAndSettle();
+    // Step 3: floors — quality is already 'Standard' (default); just proceed
     await tester.tap(find.byKey(const Key('wizard_next_button')));
     await tester.pumpAndSettle();
 

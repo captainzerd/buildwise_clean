@@ -127,6 +127,7 @@ class Step2Building extends StatelessWidget {
           const SizedBox(height: 16),
           // ── Quality ────────────────────────────────────────────────────────
           DropdownButtonFormField<String>(
+            key: const Key('step3_quality_dropdown'),
             initialValue: controller.quality,
             items: const [
               DropdownMenuItem(value: 'Economy', child: Text('Economy')),

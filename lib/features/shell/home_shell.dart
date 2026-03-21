@@ -209,7 +209,8 @@ class _NavBar extends StatelessWidget {
 
   NavigationDestination _destination(int logicalI) => switch (logicalI) {
         0 => const NavigationDestination(
-            icon: Icon(Icons.calculate_outlined, key: Key('new_estimate_button')),
+            key: Key('new_estimate_button'),
+            icon: Icon(Icons.calculate_outlined),
             selectedIcon: Icon(Icons.calculate),
             label: 'Estimate',
           ),

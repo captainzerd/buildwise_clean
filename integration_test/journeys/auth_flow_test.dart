@@ -4,6 +4,7 @@
 //
 // Get simulator ID: xcrun simctl list devices | grep Booted
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,10 @@ void main() {
   setUpAll(() async {
     await bootstrapTestApp();
     await seedFixtureUsers();
+  });
+
+  tearDown(() async {
+    await FirebaseAuth.instance.signOut();
   });
 
   testWidgets('cold launch shows sign-in screen', (tester) async {
