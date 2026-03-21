@@ -21,6 +21,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'logger_service.dart';
+
 enum AppVersionState { current, nudge, blocked }
 
 class AppVersionConfig {
@@ -82,7 +84,7 @@ class AppVersionService extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       // Version check failures must never crash the app.
-      debugPrint('AppVersionService: check failed: $e');
+      LoggerService.warning('AppVersionService: check failed', error: e);
     }
   }
 
