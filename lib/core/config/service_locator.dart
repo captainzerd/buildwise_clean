@@ -18,6 +18,7 @@ import '../services/work_experience_service.dart';
 import '../services/catalog_service.dart';
 import '../services/chat_service.dart';
 import '../services/complaint_service.dart';
+import '../services/app_version_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/contract_service.dart';
 import '../services/csv_service.dart';
@@ -123,4 +124,5 @@ Future<void> setupServiceLocator() async {
     ),
   );
   sl.registerLazySingleton<BuilderProjectState>(() => BuilderProjectState());
+  sl.registerLazySingleton<AppVersionService>(() => AppVersionService());
 }

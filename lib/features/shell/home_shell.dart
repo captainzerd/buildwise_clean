@@ -10,7 +10,9 @@
 // Badge: Projects tab shows a count of pending deletion requests for owners.
 
 import '../../core/config/service_locator.dart';
+import '../../core/services/app_version_service.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -38,7 +40,6 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
-  bool _wasSignedIn = false;
 
   // Tab index constants — makes switch() readable.
   static const _kEstimate = 0;
@@ -48,22 +49,48 @@ class _HomeShellState extends State<HomeShell> {
   static const _kAccount = 4;
 
   @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthService>();
-    final isOwner = auth.isSignedIn && auth.role.isClient;
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
+  }
 
-    // Reset to Estimate tab when user signs out from a protected tab.
-    if (_wasSignedIn && !auth.isSignedIn &&
-        (_index == _kProjects || _index == _kAnalytics)) {
+  late final _AppLifecycleObserver _lifecycleObserver =
+      _AppLifecycleObserver(onResume: () => context.read<AppVersionService>().check());
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final versionConfig = context.watch<AppVersionService>().config;
+    if (versionConfig.state == AppVersionState.blocked) {
+      return _VersionBlockedScreen(config: versionConfig);
+    }
+    final auth = context.watch<AuthService>();
+
+    // Compute the ordered list of tab indices visible to this role.
+    final visibleIndices = (auth.isSignedIn
+            ? auth.role.visibleTabIndices
+            : const {0, 1, 2, 3, 4})
+        .toList()
+      ..sort();
+
+    // Reset to first visible tab whenever the current tab leaves the allowed set
+    // (e.g. role switch, sign-out).
+    if (!visibleIndices.contains(_index)) {
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) { if (mounted) setState(() => _index = _kEstimate); },
+        (_) { if (mounted) setState(() => _index = visibleIndices.first); },
       );
     }
-    _wasSignedIn = auth.isSignedIn;
-
-    // Projects tab label is role-aware.
     final projectsLabel =
-        auth.isSignedIn && auth.role.isProfessional ? 'My Work' : 'Projects';
+        auth.isSignedIn ? auth.role.projectsTabLabel : 'Projects';
+
+    // Only project owners get the deletion-request badge stream.
+    final showOwnerBadges =
+        auth.isSignedIn && auth.role.canCreateProject;
 
     // Account and Estimate tabs supply their own AppBar (inner Scaffold).
     // All other tabs are wrapped in the outer Scaffold AppBar.
@@ -91,13 +118,15 @@ class _HomeShellState extends State<HomeShell> {
             ),
       body: Column(
         children: [
+          if (versionConfig.state == AppVersionState.nudge)
+            _UpdateBanner(config: versionConfig),
           const OfflineBanner(),
           Expanded(
             child: CoachMarkOverlay(child: _buildBody(auth)),
           ),
         ],
       ),
-      bottomNavigationBar: isOwner
+      bottomNavigationBar: showOwnerBadges
           ? StreamBuilder<List<DeletionRequest>>(
               stream: sl<DeletionRequestService>().allPendingStream(),
               builder: (_, deletionSnap) {
@@ -105,7 +134,8 @@ class _HomeShellState extends State<HomeShell> {
                 return StreamBuilder<int>(
                   stream: sl<NotificationService>().unreadChatCountStream(uid),
                   builder: (_, chatSnap) => _NavBar(
-                    index: _index,
+                    logicalIndex: _index,
+                    visibleIndices: visibleIndices,
                     projectsLabel: projectsLabel,
                     pendingDeletions: deletionSnap.data?.length ?? 0,
                     unreadChats: chatSnap.data ?? 0,
@@ -115,7 +145,8 @@ class _HomeShellState extends State<HomeShell> {
               },
             )
           : _NavBar(
-              index: _index,
+              logicalIndex: _index,
+              visibleIndices: visibleIndices,
               projectsLabel: projectsLabel,
               pendingDeletions: 0,
               unreadChats: 0,
@@ -135,92 +166,110 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 // ─────────────────────────────────────────────
-// Navigation bar widget
+// Navigation bar widget — role-aware dynamic tabs
 // ─────────────────────────────────────────────
 
 class _NavBar extends StatelessWidget {
   const _NavBar({
-    required this.index,
+    required this.logicalIndex,
+    required this.visibleIndices,
     required this.projectsLabel,
     required this.pendingDeletions,
     required this.unreadChats,
     required this.onTap,
   });
 
-  final int index;
+  /// The currently selected logical tab index (0–4).
+  final int logicalIndex;
+
+  /// Sorted list of logical indices that are visible for the current role.
+  final List<int> visibleIndices;
+
   final String projectsLabel;
   final int pendingDeletions;
   final int unreadChats;
+
+  /// Called with the *logical* index when the user taps a destination.
   final ValueChanged<int> onTap;
 
   @override
   Widget build(BuildContext context) {
+    final selectedVisibleIndex =
+        visibleIndices.indexOf(logicalIndex).clamp(0, visibleIndices.length - 1);
+
     return NavigationBar(
-      selectedIndex: index,
-      onDestinationSelected: onTap,
+      selectedIndex: selectedVisibleIndex,
+      onDestinationSelected: (i) => onTap(visibleIndices[i]),
       destinations: [
-        const NavigationDestination(
-          icon: Icon(Icons.calculate_outlined),
-          selectedIcon: Icon(Icons.calculate),
-          label: 'Estimate',
-        ),
-        NavigationDestination(
-          icon: Semantics(
-            label: [
-              if (pendingDeletions > 0)
-                '$pendingDeletions pending deletion request${pendingDeletions == 1 ? '' : 's'}',
-              if (unreadChats > 0)
-                '$unreadChats unread chat message${unreadChats == 1 ? '' : 's'}',
-            ].join(', '),
-            child: Badge(
-              isLabelVisible: pendingDeletions > 0,
-              label: Text(pendingDeletions > 99 ? '99+' : '$pendingDeletions'),
-              child: Badge(
-                isLabelVisible: unreadChats > 0,
-                label: Text(unreadChats > 99 ? '99+' : '$unreadChats'),
-                alignment: AlignmentDirectional.bottomStart,
-                child: const Icon(Icons.work_outline),
-              ),
-            ),
-          ),
-          selectedIcon: Semantics(
-            label: [
-              if (pendingDeletions > 0)
-                '$pendingDeletions pending deletion request${pendingDeletions == 1 ? '' : 's'}',
-              if (unreadChats > 0)
-                '$unreadChats unread chat message${unreadChats == 1 ? '' : 's'}',
-            ].join(', '),
-            child: Badge(
-              isLabelVisible: pendingDeletions > 0,
-              label: Text(pendingDeletions > 99 ? '99+' : '$pendingDeletions'),
-              child: Badge(
-                isLabelVisible: unreadChats > 0,
-                label: Text(unreadChats > 99 ? '99+' : '$unreadChats'),
-                alignment: AlignmentDirectional.bottomStart,
-                child: const Icon(Icons.work),
-              ),
-            ),
-          ),
-          label: projectsLabel,
-        ),
-        const NavigationDestination(
-          icon: Icon(Icons.analytics_outlined),
-          selectedIcon: Icon(Icons.analytics),
-          label: 'Analytics',
-        ),
-        const NavigationDestination(
-          icon: Icon(Icons.groups_outlined),
-          selectedIcon: Icon(Icons.groups),
-          label: 'People',
-        ),
-        const NavigationDestination(
-          icon: Icon(Icons.person_outline),
-          selectedIcon: Icon(Icons.person),
-          label: 'Account',
-        ),
+        for (final i in visibleIndices) _destination(i),
       ],
     );
   }
+
+  NavigationDestination _destination(int logicalI) => switch (logicalI) {
+        0 => const NavigationDestination(
+            icon: Icon(Icons.calculate_outlined),
+            selectedIcon: Icon(Icons.calculate),
+            label: 'Estimate',
+          ),
+        1 => NavigationDestination(
+            icon: Semantics(
+              label: [
+                if (pendingDeletions > 0)
+                  '$pendingDeletions pending deletion request${pendingDeletions == 1 ? '' : 's'}',
+                if (unreadChats > 0)
+                  '$unreadChats unread chat message${unreadChats == 1 ? '' : 's'}',
+              ].join(', '),
+              child: Badge(
+                isLabelVisible: pendingDeletions > 0,
+                label:
+                    Text(pendingDeletions > 99 ? '99+' : '$pendingDeletions'),
+                child: Badge(
+                  isLabelVisible: unreadChats > 0,
+                  label: Text(unreadChats > 99 ? '99+' : '$unreadChats'),
+                  alignment: AlignmentDirectional.bottomStart,
+                  child: const Icon(Icons.work_outline),
+                ),
+              ),
+            ),
+            selectedIcon: Semantics(
+              label: [
+                if (pendingDeletions > 0)
+                  '$pendingDeletions pending deletion request${pendingDeletions == 1 ? '' : 's'}',
+                if (unreadChats > 0)
+                  '$unreadChats unread chat message${unreadChats == 1 ? '' : 's'}',
+              ].join(', '),
+              child: Badge(
+                isLabelVisible: pendingDeletions > 0,
+                label:
+                    Text(pendingDeletions > 99 ? '99+' : '$pendingDeletions'),
+                child: Badge(
+                  isLabelVisible: unreadChats > 0,
+                  label: Text(unreadChats > 99 ? '99+' : '$unreadChats'),
+                  alignment: AlignmentDirectional.bottomStart,
+                  child: const Icon(Icons.work),
+                ),
+              ),
+            ),
+            label: projectsLabel,
+          ),
+        2 => const NavigationDestination(
+            icon: Icon(Icons.analytics_outlined),
+            selectedIcon: Icon(Icons.analytics),
+            label: 'Analytics',
+          ),
+        3 => const NavigationDestination(
+            icon: Icon(Icons.storefront_outlined),
+            selectedIcon: Icon(Icons.storefront),
+            label: 'Marketplace',
+          ),
+        4 => const NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Account',
+          ),
+        _ => throw ArgumentError('Unknown logical tab index: $logicalI'),
+      };
 }
 
 // ─────────────────────────────────────────────
@@ -293,6 +342,104 @@ class _SignInPrompt extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// ─────────────────────────────────────────
+// Version update UI
+// ─────────────────────────────────────────
+
+class _UpdateBanner extends StatefulWidget {
+  const _UpdateBanner({required this.config});
+  final AppVersionConfig config;
+
+  @override
+  State<_UpdateBanner> createState() => _UpdateBannerState();
+}
+
+class _UpdateBannerState extends State<_UpdateBanner> {
+  bool _dismissed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_dismissed) return const SizedBox.shrink();
+    return MaterialBanner(
+      content: Text(widget.config.message),
+      actions: [
+        TextButton(
+          onPressed: () => setState(() => _dismissed = true),
+          child: const Text('Later'),
+        ),
+        FilledButton(
+          onPressed: () => _openStore(widget.config.storeUrl),
+          child: const Text('Update'),
+        ),
+      ],
+    );
+  }
+}
+
+class _VersionBlockedScreen extends StatelessWidget {
+  const _VersionBlockedScreen({required this.config});
+  final AppVersionConfig config;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.system_update_outlined,
+                  size: 72,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Update Required',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  config.message,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                FilledButton.icon(
+                  onPressed: () => _openStore(config.storeUrl),
+                  icon: const Icon(Icons.download_outlined),
+                  label: const Text('Update WyseBrix'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AppLifecycleObserver extends WidgetsBindingObserver {
+  _AppLifecycleObserver({required this.onResume});
+  final VoidCallback onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) onResume();
+  }
+}
+
+Future<void> _openStore(String url) async {
+  if (url.isEmpty) return;
+  final uri = Uri.parse(url);
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
 

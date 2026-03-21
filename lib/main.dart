@@ -17,6 +17,7 @@ import 'core/services/auth_service.dart';
 import 'core/services/boq_service.dart';
 import 'core/services/builder_profile_service.dart';
 import 'core/services/catalog_service.dart';
+import 'core/services/app_version_service.dart';
 import 'core/services/connectivity_service.dart';
 import 'core/services/fx_service.dart';
 import 'core/services/notification_service.dart';
@@ -91,6 +92,7 @@ Future<void> main() async {
 
   await sl<BoqService>().init();
   sl<ConnectivityService>().start();
+  sl<AppVersionService>().check(); // Non-blocking — fires in background
 
   // ── Deep link wiring (wysebrix:// scheme) ──────────────────────────────
   final appLinks = AppLinks();
@@ -161,6 +163,7 @@ class AppRoot extends StatelessWidget {
         Provider<NotificationService>.value(value: sl<NotificationService>()),
         ChangeNotifierProvider<EstimateController>.value(value: sl<EstimateController>()),
         ChangeNotifierProvider<BuilderProjectState>.value(value: sl<BuilderProjectState>()),
+        ChangeNotifierProvider<AppVersionService>.value(value: sl<AppVersionService>()),
       ],
       child: _PostFrameInit(
         onReady: (context) => context.read<EstimateController>().init(),
