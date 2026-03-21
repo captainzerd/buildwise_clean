@@ -97,6 +97,7 @@ class _HomeShellState extends State<HomeShell> {
     final onCustomAppBarTab = _index == _kAccount || _index == _kEstimate;
 
     return Scaffold(
+      key: const Key('home_shell'),
       appBar: onCustomAppBarTab
           ? null
           : AppBar(
@@ -208,7 +209,7 @@ class _NavBar extends StatelessWidget {
 
   NavigationDestination _destination(int logicalI) => switch (logicalI) {
         0 => const NavigationDestination(
-            icon: Icon(Icons.calculate_outlined),
+            icon: Icon(Icons.calculate_outlined, key: Key('new_estimate_button')),
             selectedIcon: Icon(Icons.calculate),
             label: 'Estimate',
           ),

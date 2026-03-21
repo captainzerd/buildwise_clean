@@ -34,6 +34,12 @@ class Step5Review extends StatelessWidget {
         children: [
           sectionLabel(context, 'Summary'),
           const SizedBox(height: 16),
+          Text(
+            key: const Key('step5_total_label'),
+            'Review your estimate details below',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
           SummaryRow(
             'Project name',
             c.projectNameCtrl.text.trim().isEmpty
@@ -144,6 +150,7 @@ class ComputeButton extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: LoadingButton(
+        key: const Key('calculate_button'),
         label: 'Compute estimate',
         icon: Icons.calculate_outlined,
         onPressed: onCompute,

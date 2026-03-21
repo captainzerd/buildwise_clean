@@ -90,6 +90,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
     final email = auth.currentUser?.email ?? '';
 
     return Scaffold(
+      key: const Key('email_verification_gate'),
       appBar: AppBar(
         title: const Text('Verify your email'),
         actions: [

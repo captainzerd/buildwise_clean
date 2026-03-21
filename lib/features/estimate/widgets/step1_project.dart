@@ -38,6 +38,7 @@ class Step1Project extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           TextFormField(
+            key: const Key('step1_project_name'),
             controller: controller.projectNameCtrl,
             decoration: const InputDecoration(
               labelText: 'Project name (optional)',
@@ -47,6 +48,7 @@ class Step1Project extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
+            key: const Key('step1_region_dropdown'),
             decoration: const InputDecoration(
               labelText: 'Region',
               prefixIcon: Icon(Icons.location_on_outlined),

@@ -55,6 +55,9 @@ class Step2Building extends StatelessWidget {
             BuildingTypology.commercialWarehouse,
           ]) ...[
             GestureDetector(
+              key: t == BuildingTypology.residentialStandard
+                  ? const Key('step2_typology_residential_standard')
+                  : null,
               onTap: () => controller.setProgramme(typology_: t),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
@@ -127,7 +130,11 @@ class Step2Building extends StatelessWidget {
             initialValue: controller.quality,
             items: const [
               DropdownMenuItem(value: 'Economy', child: Text('Economy')),
-              DropdownMenuItem(value: 'Standard', child: Text('Standard')),
+              DropdownMenuItem(
+                key: Key('step3_quality_standard'),
+                value: 'Standard',
+                child: Text('Standard'),
+              ),
               DropdownMenuItem(value: 'Premium', child: Text('Premium')),
             ],
             onChanged: (v) => controller.setProgramme(quality_: v),

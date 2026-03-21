@@ -52,6 +52,7 @@ class _EstimateResultPageState extends State<EstimateResultPage>
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
+      key: const Key('estimate_result_screen'),
       appBar: AppBar(
         title: Text(
           controller.projectNameCtrl.text.trim().isEmpty
@@ -91,6 +92,7 @@ class _EstimateResultPageState extends State<EstimateResultPage>
                       return Column(
                         children: [
                           Text(
+                            key: const Key('total_planned_ghs_label'),
                             controller.money(v),
                             style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                                   color: cs.onPrimaryContainer,

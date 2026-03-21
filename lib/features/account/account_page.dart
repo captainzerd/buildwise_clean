@@ -1048,6 +1048,7 @@ class _SignOutButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return OutlinedButton.icon(
+      key: const Key('sign_out_button'),
       style: OutlinedButton.styleFrom(
         foregroundColor: Theme.of(context).colorScheme.error,
         side: BorderSide(color: Theme.of(context).colorScheme.error),

@@ -121,6 +121,7 @@ class _SignInFormState extends State<_SignInForm> {
           children: [
             const SizedBox(height: 16),
             TextFormField(
+              key: const Key('sign_in_email_field'),
               controller: _emailCtrl,
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.next,
@@ -134,6 +135,7 @@ class _SignInFormState extends State<_SignInForm> {
             ),
             const SizedBox(height: 16),
             TextFormField(
+              key: const Key('sign_in_password_field'),
               controller: _passwordCtrl,
               obscureText: _obscurePassword,
               textInputAction: TextInputAction.done,
@@ -172,6 +174,7 @@ class _SignInFormState extends State<_SignInForm> {
             ],
             const SizedBox(height: 8),
             FilledButton(
+              key: const Key('sign_in_submit_button'),
               onPressed: _busy ? null : _submit,
               child: _busy
                   ? const SizedBox(

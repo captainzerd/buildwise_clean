@@ -54,6 +54,7 @@ class StepScaffold extends StatelessWidget {
                   Expanded(
                     flex: 2,
                     child: FilledButton(
+                      key: const Key('wizard_next_button'),
                       onPressed: onNext,
                       child: Text(nextLabel),
                     ),
