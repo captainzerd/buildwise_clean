@@ -40,6 +40,23 @@ service cloud.firestore {
           || subTier() == 'business';
     }
 
+    // ── Subscription tier limits ──
+    // Free tier: max 3 projects. Paid tiers: unlimited.
+    // The app/Cloud Function maintains projectCount on the user doc.
+    function withinProjectLimit() {
+      return isPaidUser()
+        || get(/databases/$(database)/documents/users/$(request.auth.uid))
+             .data.get('projectCount', 0) < 3;
+    }
+
+    // Free tier: max 20 cost entries per project. Paid tiers: unlimited.
+    // The app/Cloud Function maintains costEntryCount on the project doc.
+    function withinCostEntryLimit(projectId) {
+      return isPaidUser()
+        || get(/databases/$(database)/documents/projects/$(projectId))
+             .data.get('costEntryCount', 0) < 20;
+    }
+
     // ─────────────────────────────────────────
     // Users
     // ─────────────────────────────────────────
@@ -89,13 +106,15 @@ service cloud.firestore {
       }
 
       function isProjectMember() {
-        return isProjectOwner() || isAssignedPm() || isTeamMember() || isAdmin();
+        return isProjectOwner() || isAssignedPm() || isTeamMember()
+            || isObserver() || isCollaborator() || isAdmin();
       }
 
       allow read: if isSignedIn() && isProjectMember();
 
       allow create: if isEmailVerified()
-        && request.resource.data.ownerUid == request.auth.uid;
+        && request.resource.data.ownerUid == request.auth.uid
+        && withinProjectLimit();
 
       allow update: if isSignedIn() && isProjectMember();
 
@@ -118,8 +137,9 @@ service cloud.firestore {
 
       match /costs/{costId} {
         allow read: if isSignedIn() && isProjectMember();
-        allow create: if isEmailVerified() &&
-          (isProjectOwner() || isAssignedPm() || isCollaborator() || isAdmin());
+        allow create: if isEmailVerified()
+          && (isProjectOwner() || isAssignedPm() || isCollaborator() || isAdmin())
+          && (isAdmin() || withinCostEntryLimit(projectId));
         allow update, delete: if isSignedIn() && isProjectOwner();
       }
 
@@ -265,6 +285,20 @@ service cloud.firestore {
         );
         allow create: if isEmailVerified() && isProjectMember();
         allow update, delete: if false;
+      }
+
+      match /permits/{permitId} {
+        allow read: if isSignedIn() && isProjectMember();
+        allow create: if isEmailVerified() && isProjectMember();
+        allow update: if isEmailVerified() && isProjectMember();
+        allow delete: if isSignedIn() && (isProjectOwner() || isAdmin());
+      }
+
+      match /drawings/{drawingId} {
+        allow read: if isSignedIn() && isProjectMember();
+        allow create: if isEmailVerified() && isProjectMember();
+        allow update: if isEmailVerified() && isProjectMember();
+        allow delete: if isSignedIn() && (isProjectOwner() || isAdmin());
       }
     }
 
@@ -480,6 +514,24 @@ service cloud.firestore {
         isAdmin()
       );
       allow delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────
+    // Rate Limits (server-write only via Admin SDK)
+    // ─────────────────────────────────────────
+
+    match /rate_limits/{doc} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────
+    // App Config (read-only for authenticated users)
+    // ─────────────────────────────────────────
+
+    match /config/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
   }
