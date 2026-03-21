@@ -65,7 +65,7 @@ function makeSnapshot(docs: Array<Record<string, unknown>>) {
 describe('enforceDataRetention', () => {
   beforeEach(() => {
     mockGet.mockReset();
-    mockBatchDelete.mockClear();
+    mockBatchDelete.mockReset().mockResolvedValue(undefined);
     mockBatchCommit.mockReset().mockResolvedValue(undefined);
     mockRef.collection = jest.fn().mockReturnValue(mockRef);
     mockRef.doc        = jest.fn().mockReturnValue(mockRef);
@@ -89,6 +89,7 @@ describe('enforceDataRetention', () => {
       .mockResolvedValueOnce(makeSnapshot([]));  // soft-deleted projects
     await capturedRetentionHandler();
     expect(mockBatchDelete).toHaveBeenCalledTimes(1);
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
   });
 
   it('login_activity: deletes entries older than 90 days', async () => {
