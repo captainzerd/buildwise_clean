@@ -2,16 +2,17 @@ name: Deploy Firestore Rules & Indexes
 
 on:
   push:
-    branches: [main]
+    branches: [main, mvp-vendors-projects]
     paths:
       - firestore.rules
       - firestore.indexes.json
       - firebase.json
 
 jobs:
-  deploy:
-    name: Deploy to Firebase
+  deploy-firestore-staging:
+    name: Deploy Firestore → Staging
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/mvp-vendors-projects'
 
     steps:
       - uses: actions/checkout@v4
@@ -19,9 +20,27 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      # Add FIREBASE_TOKEN secret via: firebase login:ci
-      - name: Deploy Firestore rules and indexes
+      - name: Deploy Firestore rules and indexes to Staging
         run: |
           firebase deploy --only firestore \
-            --token "${{ secrets.FIREBASE_TOKEN }}" \
+            --project wysebrix-staging \
+            --token "${{ secrets.FIREBASE_TOKEN_STAGING }}" \
+            --non-interactive
+
+  deploy-firestore-prod:
+    name: Deploy Firestore → Production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy Firestore rules and indexes to Production
+        run: |
+          firebase deploy --only firestore \
+            --project building-estimator \
+            --token "${{ secrets.FIREBASE_TOKEN_PROD }}" \
             --non-interactive
