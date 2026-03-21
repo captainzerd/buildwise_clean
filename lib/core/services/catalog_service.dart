@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../errors/app_exception.dart';
 import '../models/catalog_version.dart';
+import 'logger_service.dart';
 
 export '../models/catalog_version.dart' show TaxLineDefault;
 
@@ -125,7 +126,7 @@ class CatalogService extends ChangeNotifier {
           'Could not load latest rates — using built-in defaults. '
           '(${AppException.from(e).message})';
       _version = CatalogVersion.fallback();
-      debugPrint('CatalogService._load error: $e');
+      LoggerService.error('CatalogService._load error', error: e);
     } finally {
       _isLoading = false;
       _loaded = true;

@@ -19,10 +19,10 @@
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 
 import '../models/boq_item.dart';
 import '../models/boq_rate_config.dart';
+import 'logger_service.dart';
 
 class BoqService {
   BoqService();
@@ -38,7 +38,7 @@ class BoqService {
         _rates = BoqRateConfig.fromDoc(doc);
       }
     } catch (e) {
-      debugPrint('BoqService.init: failed to load rates, using defaults. $e');
+      LoggerService.warning('BoqService.init: failed to load rates, using defaults', error: e);
     }
   }
 

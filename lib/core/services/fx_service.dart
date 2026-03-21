@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/currency.dart';
+import 'logger_service.dart';
 
 /// Live GHS-based FX service.
 ///
@@ -95,7 +96,7 @@ class FxService extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      debugPrint('FxService: cache read error — $e');
+      LoggerService.warning('FxService: cache read error', error: e);
     }
   }
 
@@ -110,7 +111,7 @@ class FxService extends ChangeNotifier {
         }),
       );
     } catch (e) {
-      debugPrint('FxService: cache write error — $e');
+      LoggerService.warning('FxService: cache write error', error: e);
     }
   }
 
@@ -163,7 +164,7 @@ class FxService extends ChangeNotifier {
       await _saveToCache(_rates);
     } catch (e) {
       _error = 'Could not refresh exchange rates. Showing last known rates.';
-      debugPrint('FxService: fetch error — $e');
+      LoggerService.warning('FxService: fetch error', error: e);
     } finally {
       _isLoading = false;
       notifyListeners();

@@ -1,10 +1,10 @@
 // lib/core/services/project_service.dart
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:async/async.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -20,6 +20,7 @@ import '../models/project_update.dart';
 import '../models/team_member.dart';
 import '../repositories/i_project_repository.dart';
 import 'audit_service.dart';
+import 'logger_service.dart';
 
 class ProjectService implements IProjectRepository {
   /// [db] and [storage] are optional; defaults to Firebase singletons.
@@ -183,11 +184,21 @@ class ProjectService implements IProjectRepository {
   }
 
   /// Create a new project. Returns the new doc ID.
+  /// Also increments projectCount on the owner's user doc so that Firestore
+  /// security rules can enforce the free-tier limit (max 3 projects).
   @override
   Future<String> createProject(Project project) async {
     try {
       final ref = _db.collection('projects').doc();
-      await ref.set(project.toMap());
+      final userRef = _db.collection('users').doc(project.ownerUid);
+      final batch = _db.batch();
+      batch.set(ref, project.toMap());
+      batch.set(
+        userRef,
+        {'projectCount': FieldValue.increment(1)},
+        SetOptions(merge: true),
+      );
+      await batch.commit();
       return ref.id;
     } catch (e) {
       throw AppException.from(e);
@@ -234,10 +245,24 @@ class ProjectService implements IProjectRepository {
   }
 
   /// Delete a project root doc (sub-collections cleaned up by Cloud Function in prod).
+  /// Also decrements projectCount on the owner's user doc.
   @override
   Future<void> deleteProject(String projectId) async {
     try {
-      await _db.collection('projects').doc(projectId).delete();
+      final projectRef = _db.collection('projects').doc(projectId);
+      await _db.runTransaction((tx) async {
+        final snap = await tx.get(projectRef);
+        final ownerUid = snap.data()?['ownerUid'] as String?;
+        tx.delete(projectRef);
+        if (ownerUid != null) {
+          final userRef = _db.collection('users').doc(ownerUid);
+          tx.set(
+            userRef,
+            {'projectCount': FieldValue.increment(-1)},
+            SetOptions(merge: true),
+          );
+        }
+      });
     } catch (e) {
       throw AppException.from(e);
     }
@@ -539,6 +564,7 @@ class ProjectService implements IProjectRepository {
         tx.set(entryRef, entry.toMap());
         tx.update(projectRef, {
           'amountSpent': current + entry.amountGhs,
+          'costEntryCount': FieldValue.increment(1),
           'updatedAt': FieldValue.serverTimestamp(),
         });
         if (entry.phaseId != null && entry.phaseId!.isNotEmpty) {
@@ -571,6 +597,7 @@ class ProjectService implements IProjectRepository {
         tx.delete(entryRef);
         tx.update(projectRef, {
           'amountSpent': (current - amountGhs).clamp(0, double.infinity),
+          'costEntryCount': FieldValue.increment(-1),
           'updatedAt': FieldValue.serverTimestamp(),
         });
         if (phaseId != null && phaseId.isNotEmpty) {
@@ -805,7 +832,7 @@ class ProjectService implements IProjectRepository {
         try {
           await _storage.ref(storagePath).delete();
         } catch (e) {
-          debugPrint('ProjectService: Storage delete skipped — $e');
+          LoggerService.warning('ProjectService: Storage delete skipped', error: e);
         }
       }
       await _db
@@ -844,7 +871,7 @@ class ProjectService implements IProjectRepository {
       );
       if (result != null) return await result.readAsBytes();
     } catch (e) {
-      debugPrint('ProjectService: compression failed — $e');
+      LoggerService.warning('ProjectService: compression failed', error: e);
     }
     return await file.readAsBytes();
   }
@@ -864,7 +891,7 @@ class ProjectService implements IProjectRepository {
         await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
         urls.add(await ref.getDownloadURL());
       } catch (e) {
-        debugPrint('ProjectService: photo upload failed for $name — $e');
+        LoggerService.error('ProjectService: photo upload failed for $name', error: e);
       }
     }
     return urls;
@@ -888,7 +915,7 @@ class ProjectService implements IProjectRepository {
         await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
         urls.add(await ref.getDownloadURL());
       } catch (e) {
-        debugPrint('ProjectService: phase photo upload failed — $e');
+        LoggerService.error('ProjectService: phase photo upload failed', error: e);
       }
     }
     return urls;

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../errors/app_exception.dart';
 import '../models/pm_profile.dart';
+import 'logger_service.dart';
 
 class PmProfileService extends ChangeNotifier {
   final _db = FirebaseFirestore.instance;
@@ -92,7 +93,7 @@ class PmProfileService extends ChangeNotifier {
         });
       });
     } catch (e) {
-      debugPrint('PmProfileService.addReview error: $e');
+      LoggerService.error('PmProfileService.addReview error', error: e);
       throw AppException.from(e);
     }
   }

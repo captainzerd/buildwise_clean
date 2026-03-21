@@ -1,8 +1,8 @@
 // lib/core/services/audit_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 
 import '../models/audit_event.dart';
+import 'logger_service.dart';
 
 class AuditService {
   AuditService({FirebaseFirestore? db})
@@ -38,7 +38,7 @@ class AuditService {
       await _col.add(event.toMap());
     } catch (e) {
       // Audit logging must never block or crash the UI.
-      debugPrint('AuditService: failed to log event: $e');
+      LoggerService.warning('AuditService: failed to log event', error: e);
     }
   }
 

@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:go_router/go_router.dart';
 import '../models/app_notification.dart';
 import 'auth_service.dart';
+import 'logger_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> _onBackgroundMessage(RemoteMessage _) async {}
@@ -76,7 +77,7 @@ class NotificationService {
       final token = await _fcm.getToken();
       if (token != null) _pendingToken = token;
     } catch (e) {
-      debugPrint('NotificationService: FCM token unavailable — $e');
+      LoggerService.warning('NotificationService: FCM token unavailable', error: e);
     }
 
     // Token refresh

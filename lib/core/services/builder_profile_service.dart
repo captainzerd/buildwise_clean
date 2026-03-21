@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../errors/app_exception.dart';
 import '../models/builder_profile.dart';
+import 'logger_service.dart';
 
 class BuilderProfileService extends ChangeNotifier {
   final _db = FirebaseFirestore.instance;
@@ -121,7 +122,7 @@ class BuilderProfileService extends ChangeNotifier {
       // Recompute trust + reputation scores after review is committed
       await updateTrustScore(builderUid);
     } catch (e) {
-      debugPrint('BuilderProfileService.addReview error: $e');
+      LoggerService.error('BuilderProfileService.addReview error', error: e);
       throw AppException.from(e);
     }
   }
@@ -234,7 +235,7 @@ class BuilderProfileService extends ChangeNotifier {
           .doc(builderUid)
           .update({'trustScore': score});
     } catch (e) {
-      debugPrint('BuilderProfileService.updateTrustScore: $e');
+      LoggerService.error('BuilderProfileService.updateTrustScore', error: e);
     }
   }
 }

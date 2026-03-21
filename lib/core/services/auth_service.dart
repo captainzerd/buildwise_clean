@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/app_user.dart';
 import '../models/login_activity.dart';
+import 'logger_service.dart';
 
 /// Single source of truth for authentication state.
 /// Firebase.initializeApp() must be called in main.dart BEFORE AuthService.init().
@@ -20,7 +21,7 @@ class AuthService extends ChangeNotifier {
 
   AppUser? get currentUser => _currentUser;
   bool get isSignedIn => _currentUser != null;
-  ProfessionalType get role => _currentUser?.role ?? ProfessionalType.homeowner;
+  ProfessionalType get role => _currentUser?.role ?? ProfessionalType.owner;
 
   /// Reflects the Firebase emailVerified flag (may differ from Firestore profile
   /// until refreshEmailVerificationStatus() is called).
@@ -32,7 +33,7 @@ class AuthService extends ChangeNotifier {
     _initialized = true;
     _authSub = FirebaseAuth.instance.authStateChanges().listen(
       _onAuthStateChanged,
-      onError: (e) => debugPrint('AuthService stream error: $e'),
+      onError: (e) => LoggerService.error('AuthService stream error', error: e),
     );
   }
 
@@ -58,8 +59,10 @@ class AuthService extends ChangeNotifier {
       // Record login activity
       await _writeLoginActivity(firebaseUser.uid, firebaseUser.providerData);
     } catch (e) {
-      debugPrint('AuthService: failed to load user profile – $e');
-      _currentUser = null;
+      LoggerService.error('AuthService: failed to load user profile', error: e);
+      // Fall back to a minimal profile from Firebase Auth so the user remains
+      // signed in even when Firestore is temporarily unreachable.
+      _currentUser = _profileFromFirebaseUser(firebaseUser);
     }
 
     notifyListeners();
@@ -103,7 +106,7 @@ class AuthService extends ChangeNotifier {
           .doc(activity.id)
           .set(activity.toMap());
     } catch (e) {
-      debugPrint('AuthService._writeLoginActivity: $e');
+      LoggerService.warning('AuthService._writeLoginActivity', error: e);
     }
   }
 
@@ -111,7 +114,7 @@ class AuthService extends ChangeNotifier {
         uid: u.uid,
         email: u.email ?? '',
         displayName: u.displayName ?? '',
-        role: ProfessionalType.homeowner,
+        role: ProfessionalType.owner,
         emailVerified: u.emailVerified,
         createdAt: DateTime.now(),
       );
@@ -155,7 +158,12 @@ class AuthService extends ChangeNotifier {
 
       await user.sendEmailVerification();
     } catch (e) {
-      // Roll back the Firebase Auth account so the user can try again cleanly.
+      // Roll back both Firebase Auth and Firestore so the user can try again cleanly.
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .delete()
+          .catchError((_) {});
       await user.delete();
       rethrow;
     }
@@ -229,7 +237,7 @@ class AuthService extends ChangeNotifier {
           .httpsCallable('revokeUserSessions')
           .call({'uid': uid});
     } catch (e) {
-      debugPrint('AuthService.revokeAllSessions: $e');
+      LoggerService.error('AuthService.revokeAllSessions', error: e);
       rethrow;
     }
   }
@@ -294,7 +302,7 @@ class AuthService extends ChangeNotifier {
         uid: user.uid,
         email: user.email ?? '',
         displayName: user.displayName ?? '',
-        role: ProfessionalType.homeowner,
+        role: ProfessionalType.owner,
         emailVerified: true,
         createdAt: DateTime.now(),
       );
@@ -438,21 +446,18 @@ class AuthService extends ChangeNotifier {
     final refreshed = FirebaseAuth.instance.currentUser;
     if (refreshed == null) return;
 
-    if (_currentUser != null &&
-        refreshed.emailVerified != _currentUser!.emailVerified) {
-      // Update Firestore profile flag
+    if (refreshed.emailVerified) {
+      // Update Firestore profile flag (idempotent — safe to call even if already set).
       await FirebaseFirestore.instance
           .collection('users')
           .doc(refreshed.uid)
-          .update({'emailVerified': refreshed.emailVerified});
+          .update({'emailVerified': true});
 
       // Force a token refresh so Firestore security rules (email_verified claim)
       // immediately see the updated verification status.
       await FirebaseAuth.instance.currentUser?.getIdToken(true);
 
-      _currentUser = _currentUser!.copyWith(
-        emailVerified: refreshed.emailVerified,
-      );
+      _currentUser = _currentUser?.copyWith(emailVerified: true);
       notifyListeners();
     }
   }

@@ -1,4 +1,7 @@
 // lib/core/services/sync_service.dart
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
@@ -6,6 +9,7 @@ import '../models/cost_entry.dart';
 import '../models/payment_record.dart';
 import '../storage/offline_queue_store.dart';
 import 'connectivity_service.dart';
+import 'logger_service.dart';
 import 'notification_service.dart';
 import 'payment_service.dart';
 import 'project_service.dart';
@@ -60,11 +64,11 @@ class SyncService extends ChangeNotifier {
         continue;
       }
       try {
-        await _replay(op);
+        await _replayWithRetry(op);
         _processedIds.add(opId);
         succeeded++;
       } catch (e) {
-        debugPrint('SyncService: replay failed for op ${op['op']}: $e');
+        LoggerService.error('SyncService: replay failed for op ${op['op']}', error: e);
         failed.add(op);
       }
     }
@@ -82,6 +86,24 @@ class SyncService extends ChangeNotifier {
       _showSnackbar(
         'Synced $succeeded offline operation${succeeded == 1 ? '' : 's'}.',
       );
+    }
+  }
+
+  static const _maxRetries = 3;
+
+  Future<void> _replayWithRetry(Map<String, dynamic> op) async {
+    for (int attempt = 0; attempt <= _maxRetries; attempt++) {
+      try {
+        await _replay(op);
+        return;
+      } catch (e) {
+        if (attempt == _maxRetries) rethrow;
+        final delay = Duration(
+          milliseconds: (pow(2, attempt) * 500).toInt(),
+        );
+        LoggerService.warning('SyncService: attempt ${attempt + 1} failed, retrying in ${delay.inMilliseconds}ms');
+        await Future<void>.delayed(delay);
+      }
     }
   }
 
@@ -141,7 +163,7 @@ class SyncService extends ChangeNotifier {
         );
 
       default:
-        debugPrint('SyncService: unknown op type "$opType"');
+        LoggerService.warning('SyncService: unknown op type "$opType"');
     }
   }
 
