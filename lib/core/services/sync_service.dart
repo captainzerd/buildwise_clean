@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/cost_entry.dart';
@@ -25,6 +26,7 @@ class SyncService extends ChangeNotifier {
         _projectService = projectService,
         _paymentService = paymentService {
     _connectivity.addListener(_onConnectivityChanged);
+    _loadProcessedIds();
   }
 
   final ConnectivityService _connectivity;
@@ -35,9 +37,36 @@ class SyncService extends ChangeNotifier {
   bool _syncing = false;
   bool get isSyncing => _syncing;
 
-  /// In-memory set of op IDs already replayed in this process lifetime.
-  /// Guards against double-replay on rapid connect/disconnect cycles.
-  final Set<String> _processedIds = {};
+  static const _kSyncProcessedKey = 'sync_processed_ids';
+  static const _kTtlDays = 7;
+  Set<String> _processedIds = {};
+
+  /// Loads processed IDs from SharedPreferences, pruning entries older than [_kTtlDays].
+  Future<void> _loadProcessedIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList(_kSyncProcessedKey) ?? [];
+    final cutoff = DateTime.now()
+        .subtract(const Duration(days: _kTtlDays))
+        .millisecondsSinceEpoch;
+    _processedIds = raw.where((entry) {
+      final parts = entry.split(':');
+      if (parts.length < 2) return false;
+      final ts = int.tryParse(parts.last) ?? 0;
+      return ts > cutoff;
+    }).map((entry) {
+      // Strip the trailing :timestamp to get the raw ID
+      final idx = entry.lastIndexOf(':');
+      return entry.substring(0, idx);
+    }).toSet();
+  }
+
+  /// Persists the current _processedIds set to SharedPreferences as {id}:{epochMs} pairs.
+  Future<void> _saveProcessedIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final entries = _processedIds.map((id) => '$id:$now').toList();
+    await prefs.setStringList(_kSyncProcessedKey, entries);
+  }
 
   void _onConnectivityChanged() {
     if (_connectivity.isOnline) {
@@ -67,6 +96,7 @@ class SyncService extends ChangeNotifier {
         await _replayWithRetry(op);
         _processedIds.add(opId);
         succeeded++;
+        await _saveProcessedIds();
       } catch (e) {
         LoggerService.error('SyncService: replay failed for op ${op['op']}', error: e);
         failed.add(op);
