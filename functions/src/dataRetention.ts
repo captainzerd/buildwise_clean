@@ -16,6 +16,8 @@ const db = admin.firestore();
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+// Deletes up to 500 qualifying documents per run (Firestore batch limit).
+// Documents beyond 500 will be cleaned up on subsequent daily runs.
 async function deleteCollection(
   collRef: FirebaseFirestore.CollectionReference,
   olderThanMs: number,
@@ -144,7 +146,7 @@ export const processAccountDeletion = onDocumentUpdated(
       const projectsSnap = await db
         .collection("projects")
         .where("ownerUid", "==", uid)
-        .limit(500)
+        .limit(500) // practical per-run cap; users with >500 owned records are not expected
         .get();
       const projectBatch = db.batch();
       projectsSnap.docs.forEach((doc) =>

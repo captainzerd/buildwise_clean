@@ -533,6 +533,8 @@ service cloud.firestore {
       allow create: if isEmailVerified()
         && request.resource.data.requestedByUid == request.auth.uid;
       allow read: if isOwner(resource.data.requestedByUid) || isAdmin();
+      // Updates are performed only by Cloud Functions via the Admin SDK (bypasses rules).
+      // Client-side updates are intentionally blocked.
       allow update, delete: if false;
     }
 
