@@ -2,7 +2,7 @@
 //
 // Full-screen result page pushed after a successful estimate computation.
 // Shows an animated count-up total, phase breakdown pie chart, expandable
-// line rows, and two CTAs: Save and Create Project.
+// line rows, and two CTAs: Save as Project and Export PDF.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/config/service_locator.dart';
@@ -38,8 +38,6 @@ class _EstimateResultPageState extends State<EstimateResultPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController = TabController(length: 2, vsync: this);
   late final String _saveDocId = const Uuid().v4();
-  bool _saving = false;
-  bool _saved = false;
 
   @override
   void dispose() {
@@ -50,7 +48,6 @@ class _EstimateResultPageState extends State<EstimateResultPage>
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<EstimateController>();
-    final auth = context.read<AuthService>();
     final r = controller.result!;
     final cs = Theme.of(context).colorScheme;
 
@@ -197,102 +194,6 @@ class _EstimateResultPageState extends State<EstimateResultPage>
           const SizedBox(height: 24),
 
           // ── CTAs ─────────────────────────────────────────────────────────
-          if (auth.isSignedIn)
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _saving || _saved
-                    ? null
-                    : () => _save(context, controller, auth),
-                icon: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Icon(_saved ? Icons.check : Icons.bookmark_add_outlined),
-                label: Text(
-                  _saved
-                      ? 'Saved'
-                      : _saving
-                          ? 'Saving…'
-                          : 'Save estimate',
-                ),
-              ),
-            )
-          else
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () => context.go('/sign-in'),
-                icon: const Icon(Icons.bookmark_add_outlined),
-                label: const Text('Sign in to save estimate'),
-              ),
-            ),
-
-          const SizedBox(height: 10),
-
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.edit_outlined, size: 18),
-              label: const Text('Edit estimate'),
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => AiOptimiserSheet(
-                  typology: controller.typology.name,
-                  quality: controller.quality,
-                  region: controller.region ?? 'Greater Accra',
-                  floorAreaM2: r.totalBuiltUpArea,
-                  floors: controller.floors.length,
-                  totalGhs: r.totalPlannedGhs,
-                  breakdownGhs: Map<String, double>.from(
-                    r.phaseBreakdownGhs,
-                  ),
-                  preliminariesPct: controller.preliminariesPct,
-                  ohpPct: sl<CatalogService>().ohpDefaultPct,
-                  contingencyPct: controller.contingencyPct,
-                ),
-              ),
-              icon: const Icon(Icons.auto_awesome, size: 18),
-              label: const Text('AI Cost Optimiser'),
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => BoqPage(
-                    phaseBreakdown: r.phaseBreakdownGhs,
-                    floorAreaSqm: r.totalBuiltUpArea,
-                    boqService: sl<BoqService>(),
-                  ),
-                ),
-              ),
-              icon: const Icon(Icons.table_chart_outlined, size: 18),
-              label: const Text('View Indicative Quantity Schedule'),
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -330,7 +231,7 @@ class _EstimateResultPageState extends State<EstimateResultPage>
                 );
               },
               icon: const Icon(Icons.create_new_folder_outlined),
-              label: const Text('Create project from estimate'),
+              label: const Text('Save as Project'),
             ),
           ),
 
@@ -420,6 +321,7 @@ class _EstimateResultPageState extends State<EstimateResultPage>
     }
   }
 
+  // ignore: unused_element
   Future<void> _save(
     BuildContext context,
     EstimateController controller,
