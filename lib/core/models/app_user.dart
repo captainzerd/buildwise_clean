@@ -93,6 +93,24 @@ extension ProfessionalTypeInfo on ProfessionalType {
   bool get isClient => !isProfessional && !isAdmin;
 
   bool get isAdmin => this == ProfessionalType.admin;
+
+  /// Tab indices (0-4) visible to this role when signed in.
+  /// 0=Estimate, 1=Projects, 2=Analytics, 3=People, 4=Account
+  Set<int> get visibleTabIndices => switch (this) {
+        ProfessionalType.contractor ||
+        ProfessionalType.architect ||
+        ProfessionalType.engineer ||
+        ProfessionalType.inspector ||
+        ProfessionalType.materialSupplier =>
+          const {0, 1, 3, 4}, // professionals: no Analytics
+        _ => const {0, 1, 2, 3, 4}, // clients + admin: all tabs
+      };
+
+  /// Label for the Projects tab.
+  String get projectsTabLabel => isProfessional ? 'My Work' : 'Projects';
+
+  /// Whether this role can create new projects.
+  bool get canCreateProject => isClient || isAdmin;
 }
 
 // ── ID Verification Status ─────────────────────────────────────────────────

@@ -21,7 +21,7 @@ class AuthService extends ChangeNotifier {
 
   AppUser? get currentUser => _currentUser;
   bool get isSignedIn => _currentUser != null;
-  ProfessionalType get role => _currentUser?.role ?? ProfessionalType.owner;
+  ProfessionalType get role => _currentUser?.role ?? ProfessionalType.homeowner;
 
   /// Reflects the Firebase emailVerified flag (may differ from Firestore profile
   /// until refreshEmailVerificationStatus() is called).
@@ -114,7 +114,7 @@ class AuthService extends ChangeNotifier {
         uid: u.uid,
         email: u.email ?? '',
         displayName: u.displayName ?? '',
-        role: ProfessionalType.owner,
+        role: ProfessionalType.homeowner,
         emailVerified: u.emailVerified,
         createdAt: DateTime.now(),
       );
@@ -302,7 +302,7 @@ class AuthService extends ChangeNotifier {
         uid: user.uid,
         email: user.email ?? '',
         displayName: user.displayName ?? '',
-        role: ProfessionalType.owner,
+        role: ProfessionalType.homeowner,
         emailVerified: true,
         createdAt: DateTime.now(),
       );
