@@ -1,11 +1,10 @@
 // lib/features/shell/home_shell.dart
 //
-// Primary navigation shell — 5 tabs:
-//   0  Estimate   – always accessible
-//   1  Projects   – email-verified (owners "Projects"; builders "My Work")
-//   2  Analytics  – email-verified, owner-only content
-//   3  People     – Marketplace (public) + Vendors (email-verified) combined
-//   4  Account    – always accessible; shows sign-in prompt when logged out
+// Primary navigation shell — 4 tabs:
+//   0  Estimate       – always accessible
+//   1  Projects       – email-verified (owners "Projects"; builders "My Work")
+//   3  Find Builders  – builder marketplace (public)
+//   4  Account        – always accessible; shows sign-in prompt when logged out
 //
 // Badge: Projects tab shows a count of pending deletion requests for owners.
 
@@ -24,10 +23,9 @@ import '../../core/services/notification_service.dart';
 import '../../core/widgets/coach_mark_overlay.dart';
 import '../../core/widgets/offline_banner.dart';
 import '../account/account_page.dart';
-import '../analytics/analytics_page.dart';
 import '../auth/email_verification_page.dart';
 import '../estimate/estimate_page.dart';
-import '../people/people_page.dart';
+import '../project/builder_marketplace_page.dart';
 import '../project/projects_page.dart';
 import '../../core/widgets/theme_mode_action.dart';
 
@@ -44,7 +42,6 @@ class _HomeShellState extends State<HomeShell> {
   // Tab index constants — makes switch() readable.
   static const _kEstimate = 0;
   static const _kProjects = 1;
-  static const _kAnalytics = 2;
   static const _kPeople = 3;
   static const _kAccount = 4;
 
@@ -74,7 +71,7 @@ class _HomeShellState extends State<HomeShell> {
     // Compute the ordered list of tab indices visible to this role.
     final visibleIndices = (auth.isSignedIn
             ? auth.role.visibleTabIndices
-            : const {0, 1, 2, 3, 4})
+            : const {0, 1, 3, 4})
         .toList()
       ..sort();
 
@@ -159,8 +156,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget _buildBody(AuthService auth) => switch (_index) {
         _kEstimate => const EstimatePage(),
         _kProjects => _AuthGuard(auth: auth, child: const ProjectsPage()),
-        _kAnalytics => _AuthGuard(auth: auth, child: const AnalyticsPage()),
-        _kPeople => const PeoplePage(),
+        _kPeople => const BuilderMarketplacePage(),
         _kAccount => AccountPage(embedded: true, auth: auth),
         _ => const SizedBox.shrink(),
       };
@@ -256,15 +252,10 @@ class _NavBar extends StatelessWidget {
             ),
             label: projectsLabel,
           ),
-        2 => const NavigationDestination(
-            icon: Icon(Icons.analytics_outlined),
-            selectedIcon: Icon(Icons.analytics),
-            label: 'Analytics',
-          ),
         3 => const NavigationDestination(
             icon: Icon(Icons.storefront_outlined),
             selectedIcon: Icon(Icons.storefront),
-            label: 'Marketplace',
+            label: 'Find Builders',
           ),
         4 => const NavigationDestination(
             icon: Icon(Icons.person_outline),
