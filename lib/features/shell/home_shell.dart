@@ -42,6 +42,7 @@ class _HomeShellState extends State<HomeShell> {
   // Tab index constants — makes switch() readable.
   static const _kEstimate = 0;
   static const _kProjects = 1;
+  static const _kAnalytics = 2; // unreachable — Analytics hidden from nav in Phase 1
   static const _kPeople = 3;
   static const _kAccount = 4;
 
