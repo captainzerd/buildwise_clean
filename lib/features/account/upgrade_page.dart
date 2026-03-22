@@ -237,49 +237,54 @@ class _UpgradePageState extends State<UpgradePage> {
           ),
           const SizedBox(height: 16),
 
-          // ── Business tier ─────────────────────────────────────────────────
-          _PlanCard(
-            tier: SubscriptionTier.business,
-            isCurrentPlan: currentTier == SubscriptionTier.business,
-            priceDisplay: _priceDisplay(SubscriptionTier.business, fx),
-            ghsNote: _ghsNote(SubscriptionTier.business),
-            gbpNote: '~£15/month',
-            features: const [
-              'Everything in Pro',
-              'Listed in builder/PM marketplace',
-              'Verified documents badge',
-              'Increased search visibility',
-              'Team member invites (coming soon)',
-            ],
-            onSelect: currentTier == SubscriptionTier.business
-                ? null
-                : () => _selectPlan(
-                    context, SubscriptionTier.business, email, uid, fx,
-                  ),
-          ),
-          const SizedBox(height: 16),
+          // ── Business tier (professionals only) ───────────────────────────
+          if (!(auth.currentUser?.role.isClient ?? true)) ...[
+            _PlanCard(
+              tier: SubscriptionTier.business,
+              isCurrentPlan: currentTier == SubscriptionTier.business,
+              priceDisplay: _priceDisplay(SubscriptionTier.business, fx),
+              ghsNote: _ghsNote(SubscriptionTier.business),
+              gbpNote: '~£15/month',
+              features: const [
+                'Everything in Pro',
+                'Listed in builder/PM marketplace',
+                'Verified documents badge',
+                'Increased search visibility',
+                'Team member invites (coming soon)',
+              ],
+              onSelect: currentTier == SubscriptionTier.business
+                  ? null
+                  : () => _selectPlan(
+                      context, SubscriptionTier.business, email, uid, fx,
+                    ),
+            ),
+            const SizedBox(height: 16),
+          ],
 
-          // ── Builder SKU tier (supply-side) ────────────────────────────────
-          _PlanCard(
-            tier: SubscriptionTier.builderSku,
-            isCurrentPlan: currentTier == SubscriptionTier.builderSku,
-            priceDisplay: _priceDisplay(SubscriptionTier.builderSku, fx),
-            ghsNote: _ghsNote(SubscriptionTier.builderSku),
-            gbpNote: '~£1.80/month',
-            badge: 'For professionals',
-            features: const [
-              'Marketplace visibility',
-              'Verified badge display',
-              'Access client projects',
-            ],
-            ctaLabel: 'Get Builder SKU',
-            onSelect: currentTier == SubscriptionTier.builderSku
-                ? null
-                : () => _selectPlan(
-                    context, SubscriptionTier.builderSku, email, uid, fx,
-                  ),
-          ),
-          const SizedBox(height: 28),
+          // ── Builder SKU tier (professionals only) ─────────────────────────
+          if (!(auth.currentUser?.role.isClient ?? true)) ...[
+            _PlanCard(
+              tier: SubscriptionTier.builderSku,
+              isCurrentPlan: currentTier == SubscriptionTier.builderSku,
+              priceDisplay: _priceDisplay(SubscriptionTier.builderSku, fx),
+              ghsNote: _ghsNote(SubscriptionTier.builderSku),
+              gbpNote: '~£1.80/month',
+              badge: 'For professionals',
+              features: const [
+                'Marketplace visibility',
+                'Verified badge display',
+                'Access client projects',
+              ],
+              ctaLabel: 'Get Builder SKU',
+              onSelect: currentTier == SubscriptionTier.builderSku
+                  ? null
+                  : () => _selectPlan(
+                      context, SubscriptionTier.builderSku, email, uid, fx,
+                    ),
+            ),
+            const SizedBox(height: 28),
+          ],
+          if (auth.currentUser?.role.isClient ?? true) const SizedBox(height: 28),
 
           // ── Rate freshness note ────────────────────────────────────────────
           Row(

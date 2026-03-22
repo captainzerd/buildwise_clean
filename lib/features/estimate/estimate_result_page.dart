@@ -2,13 +2,14 @@
 //
 // Full-screen result page pushed after a successful estimate computation.
 // Shows an animated count-up total, phase breakdown pie chart, expandable
-// line rows, and two CTAs: Save and Create Project.
+// line rows, and two CTAs: Save as Project and Export PDF.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/config/service_locator.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
@@ -18,6 +19,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/boq_service.dart';
 import '../../core/services/catalog_service.dart';
+import '../../core/services/pdf_service.dart';
+import '../../core/services/snapshot.dart';
 import '../project/create_project_page.dart';
 import 'boq_page.dart';
 import 'state/estimate_controller.dart';
@@ -35,8 +38,6 @@ class _EstimateResultPageState extends State<EstimateResultPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController = TabController(length: 2, vsync: this);
   late final String _saveDocId = const Uuid().v4();
-  bool _saving = false;
-  bool _saved = false;
 
   @override
   void dispose() {
@@ -47,7 +48,6 @@ class _EstimateResultPageState extends State<EstimateResultPage>
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<EstimateController>();
-    final auth = context.read<AuthService>();
     final r = controller.result!;
     final cs = Theme.of(context).colorScheme;
 
@@ -194,105 +194,9 @@ class _EstimateResultPageState extends State<EstimateResultPage>
           const SizedBox(height: 24),
 
           // ── CTAs ─────────────────────────────────────────────────────────
-          if (auth.isSignedIn)
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _saving || _saved
-                    ? null
-                    : () => _save(context, controller, auth),
-                icon: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Icon(_saved ? Icons.check : Icons.bookmark_add_outlined),
-                label: Text(
-                  _saved
-                      ? 'Saved'
-                      : _saving
-                          ? 'Saving…'
-                          : 'Save estimate',
-                ),
-              ),
-            )
-          else
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () => context.go('/sign-in'),
-                icon: const Icon(Icons.bookmark_add_outlined),
-                label: const Text('Sign in to save estimate'),
-              ),
-            ),
-
-          const SizedBox(height: 10),
-
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.edit_outlined, size: 18),
-              label: const Text('Edit estimate'),
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => AiOptimiserSheet(
-                  typology: controller.typology.name,
-                  quality: controller.quality,
-                  region: controller.region ?? 'Greater Accra',
-                  floorAreaM2: r.totalBuiltUpArea,
-                  floors: controller.floors.length,
-                  totalGhs: r.totalPlannedGhs,
-                  breakdownGhs: Map<String, double>.from(
-                    r.phaseBreakdownGhs,
-                  ),
-                  preliminariesPct: controller.preliminariesPct,
-                  ohpPct: sl<CatalogService>().ohpDefaultPct,
-                  contingencyPct: controller.contingencyPct,
-                ),
-              ),
-              icon: const Icon(Icons.auto_awesome, size: 18),
-              label: const Text('AI Cost Optimiser'),
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => BoqPage(
-                    phaseBreakdown: r.phaseBreakdownGhs,
-                    floorAreaSqm: r.totalBuiltUpArea,
-                    boqService: sl<BoqService>(),
-                  ),
-                ),
-              ),
-              icon: const Icon(Icons.table_chart_outlined, size: 18),
-              label: const Text('View Indicative Quantity Schedule'),
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.tonalIcon(
+            child: FilledButton.icon(
               key: const Key('save_as_project_button'),
               onPressed: () {
                 final auth = context.read<AuthService>();
@@ -327,7 +231,19 @@ class _EstimateResultPageState extends State<EstimateResultPage>
                 );
               },
               icon: const Icon(Icons.create_new_folder_outlined),
-              label: const Text('Create project from estimate'),
+              label: const Text('Save as Project'),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const Key('export_pdf_button'),
+              onPressed: () => _exportPdf(context, controller),
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: const Text('Export PDF'),
             ),
           ),
 
@@ -363,6 +279,49 @@ class _EstimateResultPageState extends State<EstimateResultPage>
 
   String _formatAmount(double v) => _amountFmt.format(v);
 
+  Future<void> _exportPdf(
+    BuildContext context,
+    EstimateController controller,
+  ) async {
+    final r = controller.result!;
+    final fxRate = controller.currency.code == 'GHS'
+        ? 1.0
+        : controller.fxService.rateFor(controller.currency.code);
+    final snap = EstimateSnapshot.fromParts(
+      name: controller.projectNameCtrl.text.trim(),
+      region: controller.region ?? '',
+      currencyCode: controller.currency.code,
+      inputs: {},
+      outputs: {
+        'totalGhs': r.totalPlannedGhs,
+        'breakdownGhs': r.phaseBreakdownGhs,
+        'ohpGhs': r.ohpGhs,
+        'contingencyGhs': r.contingencyGhs,
+        'taxesGhs': r.taxLinesGhs.values.fold<double>(0, (a, b) => a + b),
+        'areaM2Total': r.totalBuiltUpArea,
+        if (controller.currency.code != 'GHS')
+          'fx': {
+            'code': controller.currency.code,
+            'rate': fxRate,
+            'total': r.totalPlannedGhs * fxRate,
+          },
+      },
+    );
+    try {
+      final bytes = await PdfService().exportEstimate(snap);
+      final safeName = snap.safeName.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+      final filename =
+          '${safeName.isEmpty ? "estimate" : safeName}_estimate.pdf';
+      await Printing.sharePdf(bytes: bytes, filename: filename);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    }
+  }
+
+  // ignore: unused_element
   Future<void> _save(
     BuildContext context,
     EstimateController controller,

@@ -54,3 +54,5 @@ firebase/envs/prod/GoogleService-Info.plist
 # Firebase credential files (injected by CI — never commit these)
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
+.superpowers/
+.worktrees/

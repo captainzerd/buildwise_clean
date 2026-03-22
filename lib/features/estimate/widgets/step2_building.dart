@@ -1,13 +1,19 @@
 // lib/features/estimate/widgets/step2_building.dart
 //
-// Step 2 of the estimate wizard: building type, quality, foundation, soil, roof,
-// M&E tier and curtain wall toggles.
+// Step 2 of the estimate wizard: building type, quality, foundation, soil, roof.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/estimate_controller.dart' show EstimateController, BuildingTypology;
 import 'step_scaffold.dart';
+
+// ── Phase 1: visible building types ──────────────────────────────────────────
+
+const _kPhase1Typologies = [
+  BuildingTypology.residentialStandard,
+  BuildingTypology.residentialMediumRise,
+];
 
 // ── Icon mapping ───────────────────────────────────────────────────────────────
 
@@ -46,14 +52,7 @@ class Step2Building extends StatelessWidget {
           sectionLabel(context, 'Building specification'),
           const SizedBox(height: 16),
           // ── Typology card list ──────────────────────────────────────────────
-          for (final t in const [
-            BuildingTypology.residentialStandard,
-            BuildingTypology.residentialMediumRise,
-            BuildingTypology.residentialHighRise,
-            BuildingTypology.commercialOffice,
-            BuildingTypology.commercialRetail,
-            BuildingTypology.commercialWarehouse,
-          ]) ...[
+          for (final t in _kPhase1Typologies) ...[
             GestureDetector(
               key: t == BuildingTypology.residentialStandard
                   ? const Key('step2_typology_residential_standard')
@@ -228,28 +227,6 @@ class Step2Building extends StatelessWidget {
             ],
             onChanged: (v) => controller.setProgramme(roof_: v),
             decoration: const InputDecoration(labelText: 'Roof type'),
-          ),
-          const SizedBox(height: 16),
-          // ── Services & Openings ────────────────────────────────────────────
-          sectionLabel(context, 'Services & Openings'),
-          const SizedBox(height: 8),
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Enhanced M&E services'),
-            subtitle: const Text(
-              'AC, solar-ready, smart wiring, 3-phase power (+18%)',
-            ),
-            value: controller.enhancedServices,
-            onChanged: controller.setEnhancedServices,
-          ),
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Curtain wall / large glazing'),
-            subtitle: const Text(
-              'Openings allocation raised to 8% of base (+4%)',
-            ),
-            value: controller.curtainWall,
-            onChanged: controller.setCurtainWall,
           ),
         ],
       ),

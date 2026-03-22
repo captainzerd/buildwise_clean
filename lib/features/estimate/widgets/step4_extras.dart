@@ -96,64 +96,6 @@ class Step4Extras extends StatelessWidget {
                   value: controller.includeWaterTank,
                   onChanged: (v) => controller.setWaterTank(v ?? false),
                 ),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Generator house'),
-                  subtitle: const Text('Fixed: GH₵ 12,000'),
-                  value: controller.includeGeneratorHouse,
-                  onChanged: (v) => controller.setGeneratorHouse(v ?? false),
-                ),
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Swimming pool'),
-                  value: controller.includeSwimmingPool,
-                  onChanged: (v) => controller.setSwimmingPool(enabled: v),
-                ),
-                if (controller.includeSwimmingPool) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Row(
-                      children: [
-                        const Text('GH₵ '),
-                        Expanded(
-                          child: Slider(
-                            value: controller.swimmingPoolGhs.clamp(
-                              45000,
-                              80000,
-                            ),
-                            min: 45000,
-                            max: 80000,
-                            divisions: 35,
-                            label:
-                                'GH₵ ${controller.swimmingPoolGhs.toStringAsFixed(0)}',
-                            onChanged: (v) =>
-                                controller.setSwimmingPool(amountGhs: v),
-                          ),
-                        ),
-                        SizedBox(
-                          width: 72,
-                          child: Text(
-                            controller.swimmingPoolGhs.toStringAsFixed(0),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                TextFormField(
-                  initialValue:
-                      controller.securityWallLenM.toStringAsFixed(0),
-                  decoration: const InputDecoration(
-                    labelText: 'Security wall with barbed wire',
-                    suffixText: 'm @ GH₵ 1,400/m',
-                    helperText: 'Enter linear metres (0 = not included)',
-                  ),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  onChanged: (v) =>
-                      controller.setSecurityWall(double.tryParse(v) ?? 0),
-                ),
               ],
             ],
           ),
@@ -187,23 +129,6 @@ class Step4Extras extends StatelessWidget {
                   onChanged: controller.setContingencyPct,
                 ),
               const SizedBox(height: 8),
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Professional fees'),
-                subtitle: const Text(
-                  'Architect, engineer & QS (design + supervision)',
-                ),
-                value: controller.professionalFeesEnabled,
-                onChanged: (v) => controller.setProfessionalFees(enabled: v),
-              ),
-              if (controller.professionalFeesEnabled)
-                _LabeledSlider(
-                  label: 'Professional fees %',
-                  value: controller.professionalFeesPct,
-                  min: 1,
-                  max: 10,
-                  onChanged: (v) => controller.setProfessionalFees(pct: v),
-                ),
             ],
           ),
           // ── Section 3: Permit ────────────────────────────────────────────
