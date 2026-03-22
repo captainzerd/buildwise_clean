@@ -524,22 +524,87 @@ class _ProfessionalTypePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    Widget roleCard({
+      required IconData icon,
+      required String title,
+      required String subtitle,
+      required ProfessionalType roleValue,
+    }) {
+      final selected = value == roleValue;
+      return GestureDetector(
+        onTap: enabled ? () => onChanged(roleValue) : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: selected ? cs.primaryContainer : cs.surfaceContainerHighest,
+            border: Border.all(
+              color: selected ? cs.primary : cs.outline,
+              width: selected ? 2 : 1,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(icon,
+                  color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                  size: 28),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              color: selected
+                                  ? cs.onPrimaryContainer
+                                  : cs.onSurface,
+                              fontWeight: FontWeight.w600,
+                            )),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: selected
+                                  ? cs.onPrimaryContainer
+                                  : cs.onSurfaceVariant,
+                            )),
+                  ],
+                ),
+              ),
+              Radio<ProfessionalType>(
+                value: roleValue,
+                groupValue: value,
+                onChanged: enabled ? (v) => onChanged(v!) : null,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Column(
       children: [
-        for (final type in ProfessionalType.values) ...[
-          _ProfessionalTypeCard(
-            type: type,
-            selected: value == type,
-            enabled: enabled,
-            onTap: () => onChanged(type),
-          ),
-          const SizedBox(height: 8),
-        ],
+        roleCard(
+          icon: Icons.home_outlined,
+          title: "I'm building a home",
+          subtitle: 'Planning or managing a residential build',
+          roleValue: ProfessionalType.homeowner,
+        ),
+        roleCard(
+          icon: Icons.construction,
+          title: "I'm a professional",
+          subtitle: 'Contractor, architect, engineer or surveyor',
+          roleValue: ProfessionalType.contractor,
+        ),
       ],
     );
   }
 }
 
+// ignore: unused_element
 class _ProfessionalTypeCard extends StatelessWidget {
   const _ProfessionalTypeCard({
     required this.type,
