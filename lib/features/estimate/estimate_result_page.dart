@@ -9,6 +9,7 @@ import '../../core/config/service_locator.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
@@ -18,6 +19,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/boq_service.dart';
 import '../../core/services/catalog_service.dart';
+import '../../core/services/pdf_service.dart';
+import '../../core/services/snapshot.dart';
 import '../project/create_project_page.dart';
 import 'boq_page.dart';
 import 'state/estimate_controller.dart';
@@ -292,7 +295,7 @@ class _EstimateResultPageState extends State<EstimateResultPage>
 
           SizedBox(
             width: double.infinity,
-            child: FilledButton.tonalIcon(
+            child: FilledButton.icon(
               key: const Key('save_as_project_button'),
               onPressed: () {
                 final auth = context.read<AuthService>();
@@ -331,6 +334,18 @@ class _EstimateResultPageState extends State<EstimateResultPage>
             ),
           ),
 
+          const SizedBox(height: 10),
+
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const Key('export_pdf_button'),
+              onPressed: () => _exportPdf(context, controller),
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: const Text('Export PDF'),
+            ),
+          ),
+
           const SizedBox(height: 48),
         ],
       ),
@@ -362,6 +377,48 @@ class _EstimateResultPageState extends State<EstimateResultPage>
   static final _amountFmt = NumberFormat('#,##0.##', 'en_US');
 
   String _formatAmount(double v) => _amountFmt.format(v);
+
+  Future<void> _exportPdf(
+    BuildContext context,
+    EstimateController controller,
+  ) async {
+    final r = controller.result!;
+    final fxRate = controller.currency.code == 'GHS'
+        ? 1.0
+        : controller.fxService.rateFor(controller.currency.code);
+    final snap = EstimateSnapshot.fromParts(
+      name: controller.projectNameCtrl.text.trim(),
+      region: controller.region ?? '',
+      currencyCode: controller.currency.code,
+      inputs: {},
+      outputs: {
+        'totalGhs': r.totalPlannedGhs,
+        'breakdownGhs': r.phaseBreakdownGhs,
+        'ohpGhs': r.ohpGhs,
+        'contingencyGhs': r.contingencyGhs,
+        'taxesGhs': r.taxLinesGhs.values.fold<double>(0, (a, b) => a + b),
+        'areaM2Total': r.totalBuiltUpArea,
+        if (controller.currency.code != 'GHS')
+          'fx': {
+            'code': controller.currency.code,
+            'rate': fxRate,
+            'total': r.totalPlannedGhs * fxRate,
+          },
+      },
+    );
+    try {
+      final bytes = await PdfService().exportEstimate(snap);
+      final safeName = snap.safeName.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+      final filename =
+          '${safeName.isEmpty ? "estimate" : safeName}_estimate.pdf';
+      await Printing.sharePdf(bytes: bytes, filename: filename);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    }
+  }
 
   Future<void> _save(
     BuildContext context,
