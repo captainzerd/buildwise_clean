@@ -4,9 +4,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/errors/app_exception.dart';
 import '../../core/services/pdf_service.dart';
 import '../../core/services/snapshot.dart';
 import '../../core/storage/storage_service.dart';
+import '../../core/widgets/empty_state.dart';
 import 'estimate_detail_page.dart';
 
 class SavedEstimatesPage extends StatefulWidget {
@@ -46,7 +48,7 @@ class _SavedEstimatesPageState extends State<SavedEstimatesPage> {
   Future<void> _exportPdf(EstimateSnapshot snap) async {
     final bytes = await _pdf.exportSnapshot(snap);
     final docs = await getApplicationDocumentsDirectory();
-    final exportsDir = Directory('${docs.path}/BuildWise/exports');
+    final exportsDir = Directory('${docs.path}/WyseBrix/exports');
     if (!await exportsDir.exists()) {
       await exportsDir.create(recursive: true);
     }
@@ -67,12 +69,25 @@ class _SavedEstimatesPageState extends State<SavedEstimatesPage> {
       body: FutureBuilder<List<EstimateSnapshot>>(
         future: _futureSnaps,
         builder: (context, snap) {
-          if (!snap.hasData) {
+          if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (snap.hasError) {
+            return EmptyState(
+              icon: Icons.cloud_off_outlined,
+              title: 'Could not load estimates',
+              message: AppException.from(snap.error!).message,
+              actionLabel: 'Retry',
+              onAction: () => setState(() { _futureSnaps = _load(); }),
+            );
           }
           final items = snap.data!;
           if (items.isEmpty) {
-            return const Center(child: Text('No saved estimates yet.'));
+            return const EmptyState(
+              icon: Icons.bookmark_outline,
+              title: 'No saved estimates',
+              message: 'Compute an estimate and tap Save to store it here.',
+            );
           }
           return ListView.separated(
             itemCount: items.length,

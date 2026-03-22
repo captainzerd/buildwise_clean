@@ -119,8 +119,9 @@ class EstimateSnapshot {
   static EstimateSnapshot? tryParse(String raw, {String? filename}) {
     try {
       final v = jsonDecode(raw);
-      if (v is Map)
+      if (v is Map) {
         return EstimateSnapshot.fromJson(Map<String, dynamic>.from(v));
+      }
       return null;
     } catch (_) {
       return null;

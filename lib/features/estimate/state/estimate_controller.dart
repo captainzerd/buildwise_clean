@@ -1,225 +1,404 @@
-// lib/features/estimate/state/estimate_controller.dart
-import 'dart:math' as math;
+import 'dart:convert';
+import 'dart:ui' show PlatformDispatcher;
+
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/errors/app_exception.dart';
+import '../../../core/models/currency.dart';
 import '../../../core/services/catalog_service.dart';
-import '../../../core/services/regional_index_provider.dart';
 import '../../../core/services/fx_service.dart';
+import '../../../core/services/regional_index_provider.dart';
 import '../../../core/storage/storage_service.dart';
-import '../../../core/services/snapshot.dart';
+import '../../../core/use_cases/calculate_estimate.dart';
 
-@immutable
-class CurrencyInfo {
-  const CurrencyInfo(this.code, this.symbol, {this.baseToUsd = 1.0});
-  final String code; // e.g., "GHS"
-  final String symbol; // e.g., "₵"
-  final double baseToUsd;
-}
-
-@immutable
-class FloorSpec {
-  const FloorSpec({required this.areaM2, required this.heightM});
-  final double areaM2;
-  final double heightM;
-  FloorSpec copyWith({double? areaM2, double? heightM}) => FloorSpec(
-        areaM2: areaM2 ?? this.areaM2,
-        heightM: heightM ?? this.heightM,
-      );
-}
-
-@immutable
-class EstimateResult {
-  const EstimateResult({
-    required this.totalBuiltUpArea,
-    required this.baseCostGhs,
-    required this.phaseBreakdownGhs,
-    required this.addOnsGhs,
-    required this.ohpGhs,
-    required this.contingencyGhs,
-    required this.taxesGhs,
-    required this.totalPlannedGhs,
-  });
-
-  final double totalBuiltUpArea;
-  final double baseCostGhs; // phases + addOns (pre-OHP/cont/tax)
-  final Map<String, double> phaseBreakdownGhs;
-  final Map<String, double> addOnsGhs;
-  final double ohpGhs;
-  final double contingencyGhs;
-  final double taxesGhs;
-  final double totalPlannedGhs;
-}
+export '../../../core/models/currency.dart' show CurrencyInfo;
+export '../../../core/use_cases/calculate_estimate.dart'
+    show BuildingTypology, EstimateResult, FloorSpec, PermitMode, TaxLine;
 
 class EstimateController extends ChangeNotifier {
   EstimateController({
-    required CatalogService catalogService,
-    required RegionalIndexProvider regionalIndexProvider,
-    FxService? fxService,
-    StorageService? storageService,
-  })  : _catalogService = catalogService,
-        _regionalIndex = regionalIndexProvider,
-        _fx = fxService ?? FxService(),
-        _storage = storageService ?? StorageService();
+    required this.catalogService,
+    required this.regionalIndexProvider,
+    required this.fxService,
+    required this.storageService,
+  });
 
-  final CatalogService _catalogService;
-  final RegionalIndexProvider _regionalIndex;
-  final FxService _fx;
-  final StorageService _storage;
+  final CatalogService catalogService;
+  final RegionalIndexProvider regionalIndexProvider;
+  final FxService fxService;
+  final StorageService storageService;
 
-  // UI Form key (validators).
+  // ── Form state ──
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
-
-  // Legacy UI compatibility (kept)
   final TextEditingController projectNameCtrl = TextEditingController();
 
-  // Project
-  String projectName = '';
   String? region;
+  CurrencyInfo currency = CurrencyInfo.ghs;
 
-  // Units & Currency
-  bool useMetric = true;
-  CurrencyInfo currency = const CurrencyInfo('GHS', '₵');
-
-  // Programme
-  String buildingType = 'Residential';
+  BuildingTypology typology = BuildingTypology.residentialStandard;
+  bool enhancedServices = false;
+  bool curtainWall = false;
+  bool includeWaterTank = false;
+  bool includeGeneratorHouse = false;
+  bool includeSwimmingPool = false;
+  double swimmingPoolGhs = 62500;
+  double securityWallLenM = 0;
+  static const double _securityWallRatePerM = 1400.0;
   String quality = 'Standard';
-  String roof = 'Pitched sheet';
   String foundation = 'Strip';
   String soil = 'Firm';
+  String roof = 'Pitched sheet';
+  int storeys = 1;
 
-  // Floors (at least one)
   final List<FloorSpec> floors = <FloorSpec>[
-    const FloorSpec(areaM2: 150, heightM: 10),
+    const FloorSpec(areaM2: 120, heightM: 3.0),
   ];
 
-  // External works (optional)
   bool includeExternalWorks = false;
   double externalWallLenM = 0;
   double drivewayAreaM2 = 0;
   bool includeSeptic = false;
 
-  // Commercial percentages (defaults loaded from catalog)
-  double _ohpPct = 10;
-  double _contingencyPct = 10;
-  double _taxesPct = 15;
+  double preliminariesPct = 0;
+  bool contingencyEnabled = false;
+  double contingencyPct = 10.0;
 
-  // Optional budget (MVP+)
+  PermitMode permitMode = PermitMode.percent;
+  double permitPct = 0;
+  double? permitManualGhs;
+
+  List<TaxLine> taxLines = const [];
+
   double? budgetAmount;
 
-  // Result
-  EstimateResult? _result;
-  bool _hasResult = false;
+  bool professionalFeesEnabled = false;
+  double professionalFeesPct = 4.0;
 
-  // -------- Getters (for UI & legacy code) ----------
-  bool get hasResult => _hasResult;
+  // ── Async state ──
+  bool _isComputing = false;
+  String? _computeError;
+
+  bool get isComputing => _isComputing;
+  String? get computeError => _computeError;
+
+  // ── Derived ──
+  List<String> get regions => regionalIndexProvider.regionCodes;
+
+  /// True when the minimum required inputs are present for a valid computation.
+  bool get isFormValid {
+    if (floors.isEmpty) return false;
+    for (final f in floors) {
+      if (f.areaM2 <= 0 || f.areaM2 > 50000) return false;
+      if (f.heightM <= 0 || f.heightM > 12.0) return false;
+    }
+    return true;
+  }
+
+  /// Human-readable reason why the form is invalid, or null if valid.
+  String? get validationError {
+    if (floors.isEmpty) return 'Add at least one floor.';
+    for (int i = 0; i < floors.length; i++) {
+      final f = floors[i];
+      if (f.areaM2 <= 0) {
+        return 'Floor ${i + 1}: area must be greater than 0 m².';
+      }
+      if (f.areaM2 > 50000) {
+        return 'Floor ${i + 1}: area seems too large (max 50,000 m²).';
+      }
+      if (f.heightM <= 0) {
+        return 'Floor ${i + 1}: height must be greater than 0.';
+      }
+      if (f.heightM > 12.0) {
+        return 'Floor ${i + 1}: height seems too large (max 12 m).';
+      }
+    }
+    return null;
+  }
+
+  // ── Result ──
+  EstimateResult? _result;
+  bool get hasResult => _result != null;
   EstimateResult? get result => _result;
 
-  List<String> get regions => _regionalIndex.regions;
+  // Compatibility getters consumed by existing widgets.
+  double get grandTotalGhs => _result?.totalPlannedGhs ?? 0;
+  Map<String, double> get phaseBreakdown =>
+      _result?.phaseBreakdownGhs ?? const {};
+  Map<String, double> get addOnsGhs => _result?.addOnsGhs ?? const {};
+  double get ohpGhs => _result?.ohpGhs ?? 0;
+  double get contingencyGhs => _result?.contingencyGhs ?? 0;
+  double get taxesGhs =>
+      _result?.taxLinesGhs.values.fold<double>(0, (a, b) => a + b) ?? 0;
+  double get professionalFeesGhs => _result?.professionalFeesGhs ?? 0;
 
-  // Legacy helpers still referenced by UI:
-  String get currencyCode => currency.code;
+  static const _prefKeyCurrency = 'estimate_currency_code';
+  static const _prefKeyDraft = 'estimate_draft_v1';
 
-  // GHS money (used for local summaries if needed)
-  String _ghs(num v) => '₵ ${v.toStringAsFixed(2)}';
-
-  // Display money (selected currency) with FX conversion
-  String money(num vGhs) {
-    final fx = _fx.convertFromGhs(vGhs.toDouble(), currency.code);
-    return '${currency.symbol} ${fx.toStringAsFixed(2)}';
-  }
-
-  // GHS numbers for legacy bindings
-  Map<String, double> get phasesGhs => _result?.phaseBreakdownGhs ?? const {};
-  double get worksSubtotalGhs => _result?.baseCostGhs ?? 0.0;
-  double get ohpGhs => _result?.ohpGhs ?? 0.0;
-  double get contingencyGhs => _result?.contingencyGhs ?? 0.0;
-  double get taxesGhs => _result?.taxesGhs ?? 0.0;
-  double get grandTotalGhs => _result?.totalPlannedGhs ?? 0.0;
-
-  // FX view (for UI totals shown in selected currency)
-  double get grandTotalFx => _fx.convertFromGhs(grandTotalGhs, currency.code);
-
-  bool get contingencyEnabled => _contingencyPct > 0;
-  double get contingencyPct => _contingencyPct;
-
-  // Derived: is form valid?
-  bool get isFormValid {
-    final hasRegion = (region ?? '').isNotEmpty;
-    final hasFloor =
-        floors.isNotEmpty && floors.every((f) => f.areaM2 > 0 && f.heightM > 0);
-    final hasProgramme = buildingType.isNotEmpty &&
-        quality.isNotEmpty &&
-        foundation.isNotEmpty &&
-        soil.isNotEmpty;
-    return hasRegion && hasFloor && hasProgramme;
-  }
-
-  // -------- Lifecycle ----------
+  // ── Lifecycle ──
   Future<void> init() async {
-    await Future.wait([
-      _catalogService.ensureLoaded(),
-      _regionalIndex.load(),
-      _fx.refreshIfStale(),
-    ]);
+    await catalogService.ensureLoaded();
+    preliminariesPct = catalogService.preliminariesDefaultPct;
+    permitPct = catalogService.permitDefaultPct;
+    taxLines = [
+      for (final t in catalogService.taxLinesDefault)
+        TaxLine(name: t.name, pct: t.pct),
+    ];
 
-    region ??= regions.isNotEmpty ? regions.first : null;
-
-    final cat = _catalogService.catalog!;
-    _ohpPct = cat.ohpDefaultPct;
-    _contingencyPct = cat.contingencyDefaultPct;
-    _taxesPct = cat.taxesDefaultPct;
-
-    if (projectName.isNotEmpty) {
-      projectNameCtrl.text = projectName;
+    // Restore last-used currency from SharedPreferences.
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_prefKeyCurrency);
+    if (saved != null) {
+      final match = CurrencyInfo.values.where((c) => c.code == saved).firstOrNull;
+      if (match != null) currency = match;
     }
-    projectNameCtrl.addListener(() {
-      projectName = projectNameCtrl.text;
-    });
 
-    notifyListeners();
-  }
+    await restoreFormState();
 
-  // -------- Mutators ----------
-  void setProjectName(String v) {
-    projectName = v;
-    if (projectNameCtrl.text != v) {
-      projectNameCtrl.text = v;
-      projectNameCtrl.selection = TextSelection.fromPosition(
-        TextPosition(offset: projectNameCtrl.text.length),
-      );
+    // Auto-select currency based on device locale (only when user hasn't
+    // already persisted a non-GHS preference).
+    if (currency == CurrencyInfo.ghs) {
+      final locale = PlatformDispatcher.instance.locale;
+      final country = locale.countryCode?.toUpperCase() ?? '';
+      final detected = switch (country) {
+        'GB' => CurrencyInfo.gbp,
+        'US' => CurrencyInfo.usd,
+        'CA' => CurrencyInfo.cad,
+        'AU' => CurrencyInfo.aud,
+        'NG' => CurrencyInfo.ngn,
+        'DE' ||
+        'FR' ||
+        'NL' ||
+        'BE' ||
+        'AT' ||
+        'IE' ||
+        'PT' ||
+        'ES' ||
+        'IT' ||
+        'FI' ||
+        'LU' ||
+        'GR' ||
+        'SK' ||
+        'SI' ||
+        'EE' ||
+        'LV' ||
+        'LT' ||
+        'CY' ||
+        'MT' =>
+          CurrencyInfo.eur,
+        _ => CurrencyInfo.ghs, // GH and all others default to GHS
+      };
+      if (detected != CurrencyInfo.ghs) {
+        setCurrency(detected);
+      }
     }
+
     notifyListeners();
   }
 
-  void setRegion(String? v) {
-    region = v;
-    notifyListeners();
+  /// Persists current form inputs to SharedPreferences (draft auto-save).
+  Future<void> saveFormState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final map = {
+        'projectName': projectNameCtrl.text,
+        'region': region,
+        'typology': typology.name,
+        'quality': quality,
+        'foundation': foundation,
+        'soil': soil,
+        'roof': roof,
+        'storeys': storeys,
+        'floors': [
+          for (final f in floors)
+            {'areaM2': f.areaM2, 'heightM': f.heightM},
+        ],
+        'enhancedServices': enhancedServices,
+        'curtainWall': curtainWall,
+        'includeWaterTank': includeWaterTank,
+        'includeGeneratorHouse': includeGeneratorHouse,
+        'includeSwimmingPool': includeSwimmingPool,
+        'swimmingPoolGhs': swimmingPoolGhs,
+        'securityWallLenM': securityWallLenM,
+        'includeExternalWorks': includeExternalWorks,
+        'externalWallLenM': externalWallLenM,
+        'drivewayAreaM2': drivewayAreaM2,
+        'includeSeptic': includeSeptic,
+        'preliminariesPct': preliminariesPct,
+        'contingencyEnabled': contingencyEnabled,
+        'contingencyPct': contingencyPct,
+        'permitMode': permitMode.name,
+        'permitPct': permitPct,
+        'permitManualGhs': permitManualGhs,
+        'budgetAmount': budgetAmount,
+        'professionalFeesEnabled': professionalFeesEnabled,
+        'professionalFeesPct': professionalFeesPct,
+      };
+      await prefs.setString(_prefKeyDraft, jsonEncode(map));
+    } catch (e) {
+      debugPrint('EstimateController.saveFormState error: $e');
+    }
   }
 
-  void setUseMetric(bool v) {
-    useMetric = v;
-    notifyListeners();
+  /// Restores form inputs from SharedPreferences draft.
+  Future<void> restoreFormState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_prefKeyDraft);
+      if (raw == null) return;
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      projectNameCtrl.text = map['projectName'] as String? ?? '';
+      region = map['region'] as String?;
+      typology = BuildingTypology.fromString(map['typology'] as String?);
+      quality = map['quality'] as String? ?? quality;
+      foundation = map['foundation'] as String? ?? foundation;
+      soil = map['soil'] as String? ?? soil;
+      roof = map['roof'] as String? ?? roof;
+      storeys = (map['storeys'] as num?)?.toInt() ?? storeys;
+      final rawFloors = map['floors'] as List?;
+      if (rawFloors != null && rawFloors.isNotEmpty) {
+        floors
+          ..clear()
+          ..addAll(
+            rawFloors.cast<Map<String, dynamic>>().map(
+                  (f) => FloorSpec(
+                    areaM2: (f['areaM2'] as num?)?.toDouble() ?? 100,
+                    heightM: (f['heightM'] as num?)?.toDouble() ?? 3.0,
+                  ),
+                ),
+          );
+      }
+      enhancedServices = (map['enhancedServices'] as bool?) ?? false;
+      curtainWall = (map['curtainWall'] as bool?) ?? false;
+      includeWaterTank = (map['includeWaterTank'] as bool?) ?? false;
+      includeGeneratorHouse = (map['includeGeneratorHouse'] as bool?) ?? false;
+      includeSwimmingPool = (map['includeSwimmingPool'] as bool?) ?? false;
+      swimmingPoolGhs = (map['swimmingPoolGhs'] as num?)?.toDouble() ?? 62500;
+      securityWallLenM = (map['securityWallLenM'] as num?)?.toDouble() ?? 0;
+      includeExternalWorks =
+          map['includeExternalWorks'] as bool? ?? includeExternalWorks;
+      externalWallLenM =
+          (map['externalWallLenM'] as num?)?.toDouble() ?? externalWallLenM;
+      drivewayAreaM2 =
+          (map['drivewayAreaM2'] as num?)?.toDouble() ?? drivewayAreaM2;
+      includeSeptic = map['includeSeptic'] as bool? ?? includeSeptic;
+      preliminariesPct =
+          (map['preliminariesPct'] as num?)?.toDouble() ?? preliminariesPct;
+      contingencyEnabled =
+          map['contingencyEnabled'] as bool? ?? contingencyEnabled;
+      contingencyPct =
+          (map['contingencyPct'] as num?)?.toDouble() ?? contingencyPct;
+      final pmName = map['permitMode'] as String?;
+      if (pmName != null) {
+        permitMode = PermitMode.values.firstWhere(
+          (m) => m.name == pmName,
+          orElse: () => PermitMode.percent,
+        );
+      }
+      permitPct = (map['permitPct'] as num?)?.toDouble() ?? permitPct;
+      permitManualGhs = (map['permitManualGhs'] as num?)?.toDouble();
+      budgetAmount = (map['budgetAmount'] as num?)?.toDouble();
+      professionalFeesEnabled =
+          map['professionalFeesEnabled'] as bool? ?? professionalFeesEnabled;
+      professionalFeesPct =
+          (map['professionalFeesPct'] as num?)?.toDouble() ?? professionalFeesPct;
+    } catch (e) {
+      debugPrint('EstimateController.restoreFormState error: $e');
+    }
   }
 
-  Future<void> setCurrency(CurrencyInfo v) async {
-    currency = v;
-    await _fx.refreshIfStale(); // ensure we have a rate
-    notifyListeners(); // redraw totals with FX
+  /// Removes saved draft (call after successful save).
+  Future<void> clearFormState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefKeyDraft);
+    } catch (e) {
+      debugPrint('EstimateController.clearFormState error: $e');
+    }
+  }
+
+  // ── Mutations ──
+  void setRegion(String? r) {
+    region = r;
+    notifyListeners();
+    saveFormState();
+  }
+
+  void setCurrency(CurrencyInfo c) {
+    currency = c;
+    notifyListeners();
+    // Persist for next session.
+    SharedPreferences.getInstance()
+        .then((p) => p.setString(_prefKeyCurrency, c.code));
   }
 
   void setProgramme({
-    String? buildingType_,
+    BuildingTypology? typology_,
     String? quality_,
-    String? roof_,
     String? foundation_,
     String? soil_,
+    String? roof_,
+    int? storeys_,
   }) {
-    buildingType = buildingType_ ?? buildingType;
-    quality = quality_ ?? quality;
-    roof = roof_ ?? roof;
-    foundation = foundation_ ?? foundation;
-    soil = soil_ ?? soil;
+    if (typology_ != null) typology = typology_;
+    if (quality_ != null) quality = quality_;
+    if (foundation_ != null) foundation = foundation_;
+    if (soil_ != null) soil = soil_;
+    if (roof_ != null) roof = roof_;
+    if (storeys_ != null) storeys = storeys_;
     notifyListeners();
+    saveFormState();
+  }
+
+  void setEnhancedServices(bool v) {
+    enhancedServices = v;
+    notifyListeners();
+  }
+
+  void setCurtainWall(bool v) {
+    curtainWall = v;
+    notifyListeners();
+  }
+
+  void setWaterTank(bool v) {
+    includeWaterTank = v;
+    notifyListeners();
+  }
+
+  void setGeneratorHouse(bool v) {
+    includeGeneratorHouse = v;
+    notifyListeners();
+  }
+
+  void setSwimmingPool({bool? enabled, double? amountGhs}) {
+    if (enabled != null) includeSwimmingPool = enabled;
+    if (amountGhs != null) swimmingPoolGhs = amountGhs;
+    notifyListeners();
+  }
+
+  void setSecurityWall(double lenM) {
+    securityWallLenM = lenM;
+    notifyListeners();
+  }
+
+  void addFloor() {
+    floors.add(const FloorSpec(areaM2: 100, heightM: 3.0));
+    notifyListeners();
+    saveFormState();
+  }
+
+  void updateFloor(int i, {double? areaM2, double? heightM}) {
+    floors[i] = floors[i].copyWith(areaM2: areaM2, heightM: heightM);
+    notifyListeners();
+    saveFormState();
+  }
+
+  void removeFloor(int i) {
+    if (floors.length <= 1) return;
+    floors.removeAt(i);
+    notifyListeners();
+    saveFormState();
   }
 
   void setExternalWorks({
@@ -235,275 +414,172 @@ class EstimateController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setBudgetAmount(double? v) {
-    budgetAmount = v;
+  void setPreliminariesPct(double v) {
+    preliminariesPct = v;
     notifyListeners();
   }
 
-  void addFloor() {
-    floors.add(const FloorSpec(areaM2: 100, heightM: 10));
+  void setContingencyEnabled(bool v) {
+    contingencyEnabled = v;
     notifyListeners();
   }
 
-  void removeFloor(int index) {
-    if (index >= 0 && index < floors.length) {
-      floors.removeAt(index);
-      notifyListeners();
-    }
-  }
-
-  void updateFloor(int index, {double? areaM2, double? heightM}) {
-    if (index < 0 || index >= floors.length) return;
-    floors[index] = floors[index].copyWith(
-      areaM2: areaM2,
-      heightM: heightM,
-    );
+  void setContingencyPct(double v) {
+    contingencyPct = v;
     notifyListeners();
   }
 
-  void setContingencyEnabled(bool enabled) {
-    _contingencyPct = enabled ? math.max(_contingencyPct, 1) : 0;
+  void setPermitMode(PermitMode m) {
+    permitMode = m;
     notifyListeners();
   }
 
-  void setContingencyPct(double pct) {
-    _contingencyPct = pct.clamp(0, 50);
+  void setPermitPct(double v) {
+    permitPct = v;
     notifyListeners();
   }
 
-  // -------- Compute ----------
+  void setPermitManual(double? ghs) {
+    permitManualGhs = ghs;
+    notifyListeners();
+  }
+
+  void setBudgetAmount(double? ghs) {
+    budgetAmount = ghs;
+    notifyListeners();
+  }
+
+  void setProfessionalFees({bool? enabled, double? pct}) {
+    professionalFeesEnabled = enabled ?? professionalFeesEnabled;
+    professionalFeesPct = pct ?? professionalFeesPct;
+    notifyListeners();
+  }
+
+  // ── Compute ──
   Future<void> compute() async {
+    _computeError = null;
+
     if (!isFormValid) {
-      _hasResult = false;
+      _computeError = validationError ?? 'Please check your inputs.';
       notifyListeners();
       return;
     }
 
-    final cat = await _catalogService.ensureLoaded();
-
-    if (region == null || region!.isEmpty) {
-      region = regions.isNotEmpty ? regions.first : null;
-    }
-
-    final idx = _regionalIndex.indexFor(region ?? '');
-    final ci = (idx['ci'] ?? 1.0).toDouble();
-    final materialIdx = (idx['material'] ?? 1.0).toDouble();
-    final labourIdx = (idx['labour'] ?? 1.0).toDouble();
-    final transportIdx = (idx['transport'] ?? 1.0).toDouble();
-
-    final totalArea = floors.fold<double>(0, (sum, f) => sum + f.areaM2);
-
-    final isResidential = buildingType.toLowerCase().contains('res');
-    final baseRate = (isResidential
-            ? cat.baseRates['residential']
-            : cat.baseRates['commercial']) ??
-        3500;
-
-    final soilKey = soil.toLowerCase();
-    final soilMult = _pick(
-      cat.soilFactor,
-      {
-        'firm': 'firm',
-        'soft': 'soft',
-        'waterlogged': 'waterlogged',
-        'laterite': 'laterite',
-      },
-      soilKey,
-      1.0,
-    );
-
-    final foundationKey = foundation.toLowerCase();
-    final foundationPct = _pick(
-      cat.foundationUpliftPct,
-      {
-        'strip': 'strip',
-        'raft': 'raft',
-        'pile': 'pile',
-        'pad': 'pad',
-      },
-      foundationKey,
-      0.0,
-    );
-
-    final qualityKey = quality.toLowerCase();
-    final qualityMult = _pick(
-      cat.finishes,
-      {
-        'economy': 'economy',
-        'standard': 'standard',
-        'premium': 'premium',
-      },
-      qualityKey,
-      1.0,
-    );
-
-    final roofKey = roof.toLowerCase();
-    final roofMult = _pick(
-      cat.roof,
-      {
-        'pitched sheet': 'pitched_sheet',
-        'concrete flat': 'concrete_flat',
-        'tile': 'tile',
-      },
-      roofKey,
-      1.0,
-    );
-
-    final regionalMult = (ci + materialIdx + labourIdx + transportIdx) / 4.0;
-
-    final structureGhs = totalArea *
-        baseRate *
-        soilMult *
-        (1 + foundationPct / 100.0) *
-        regionalMult;
-
-    final shares = cat.phaseSharesDefault;
-    final substructure = structureGhs * (shares['substructure'] ?? 25) / 100.0;
-    final superstructure =
-        structureGhs * (shares['superstructure'] ?? 45) / 100.0;
-    final roofing = structureGhs * (shares['roofing'] ?? 8) / 100.0 * roofMult;
-    final services = structureGhs *
-        (shares['services'] ?? 8) /
-        100.0 *
-        _pick(
-          cat.services,
-          {'standard': 'standard', 'enhanced': 'enhanced'},
-          qualityKey,
-          1.0,
-        );
-    final finishes =
-        structureGhs * (shares['finishes'] ?? 10) / 100.0 * qualityMult;
-    final openings = structureGhs *
-        (shares['openings'] ?? 4) /
-        100.0 *
-        _pick(
-          cat.openings,
-          {'aluminium': 'aluminium', 'hardwood': 'hardwood', 'upvc': 'upvc'},
-          'aluminium',
-          1.0,
-        );
-
-    final extRates = cat.external;
-    final wallRate = (extRates['external_wall_ghs_per_m'] ?? 0).toDouble();
-    final driveRate = (extRates['driveway_ghs_per_m2'] ?? 0).toDouble();
-    final septicLump =
-        includeSeptic ? (extRates['septic_ghs_lump'] ?? 0).toDouble() : 0.0;
-
-    final externalWall =
-        includeExternalWorks ? externalWallLenM * wallRate : 0.0;
-    final driveway = includeExternalWorks ? drivewayAreaM2 * driveRate : 0.0;
-
-    final phaseBreakdown = <String, double>{
-      'Substructure': substructure,
-      'Superstructure': superstructure,
-      'Roofing': roofing,
-      'Services': services,
-      'Finishes': finishes,
-      'Openings': openings,
-    };
-
-    final addOns = <String, double>{
-      if (includeExternalWorks && externalWall > 0)
-        'External wall': externalWall,
-      if (includeExternalWorks && driveway > 0) 'Driveway': driveway,
-      if (includeSeptic && septicLump > 0) 'Septic system': septicLump,
-    };
-
-    final baseSum = _sum(phaseBreakdown.values) + _sum(addOns.values);
-
-    final ohp = baseSum * _ohpPct / 100.0;
-    final contingency = baseSum * _contingencyPct / 100.0;
-    final net = baseSum + ohp + contingency;
-    final taxes = net * _taxesPct / 100.0;
-    final total = net + taxes;
-
-    _result = EstimateResult(
-      totalBuiltUpArea: totalArea,
-      baseCostGhs: baseSum,
-      phaseBreakdownGhs: phaseBreakdown,
-      addOnsGhs: addOns,
-      ohpGhs: ohp,
-      contingencyGhs: contingency,
-      taxesGhs: taxes,
-      totalPlannedGhs: total,
-    );
-
-    _hasResult = true;
+    _isComputing = true;
     notifyListeners();
+
+    try {
+      final input = EstimateInput(
+        floors: List.unmodifiable(floors),
+        quality: quality,
+        foundation: foundation,
+        soil: soil,
+        roof: roof,
+        typology: typology,
+        enhancedServices: enhancedServices,
+        curtainWall: curtainWall,
+        includeWaterTank: includeWaterTank,
+        includeGeneratorHouse: includeGeneratorHouse,
+        includeSwimmingPool: includeSwimmingPool,
+        swimmingPoolGhs: swimmingPoolGhs,
+        securityWallLenM: securityWallLenM,
+        securityWallRatePerM: _securityWallRatePerM,
+        unitRateGhsPerM2: catalogService.unitRatesGhsPerM2[quality] ??
+            catalogService.unitRatesGhsPerM2['Standard'] ??
+            6200.0,
+        regionalIndex: regionalIndexProvider.indexFor(region),
+        phasePercents: catalogService.phasePercents,
+        includeExternalWorks: includeExternalWorks,
+        externalWallLenM: externalWallLenM,
+        drivewayAreaM2: drivewayAreaM2,
+        includeSeptic: includeSeptic,
+        compoundWallRatePerM: catalogService.compoundWallRatePerM,
+        drivewayRatePerM2: catalogService.drivewayRatePerM2,
+        septicLumpSum: catalogService.septicLumpSum,
+        preliminariesPct: preliminariesPct,
+        ohpPct: catalogService.ohpDefaultPct,
+        contingencyEnabled: contingencyEnabled,
+        contingencyPct: contingencyPct,
+        permitMode: permitMode,
+        permitPct: permitPct,
+        permitManualGhs: permitManualGhs,
+        taxLines: List.unmodifiable(taxLines),
+        professionalFeesEnabled: professionalFeesEnabled,
+        professionalFeesPct: professionalFeesPct,
+      );
+      _result = const EstimationEngine().calculate(input);
+    } catch (e) {
+      _computeError = AppException.from(e).message;
+      debugPrint('EstimateController.compute error: $e');
+    } finally {
+      _isComputing = false;
+      notifyListeners();
+    }
   }
 
-  /// Pure snapshot (no I/O). Used by UI (e.g., PDF export) and tests.
-  EstimateSnapshot toSnapshot() {
-    assert(_hasResult && region != null,
-        'toSnapshot called before compute() or without region');
+  // ── Display helpers ──
 
-    final fxRate = _fx.rateTo(currency.code);
+  static final _nf = NumberFormat('#,##0.##', 'en_US');
 
-    return EstimateSnapshot.fromParts(
-      name: projectName.isEmpty ? 'Untitled Project' : projectName,
-      region: region!,
-      currencyCode: currency.code,
-      inputs: {
-        'buildingType': buildingType,
-        'quality': quality,
-        'roof': roof,
-        'foundation': foundation,
-        'soil': soil,
-        'floors': floors
-            .map((f) => {'areaM2': f.areaM2, 'heightM': f.heightM})
-            .toList(),
-        'external': {
-          'enabled': includeExternalWorks,
-          'externalWallLenM': externalWallLenM,
-          'drivewayAreaM2': drivewayAreaM2,
-          'septic': includeSeptic,
-        },
-        'percentages': {
-          'ohp': _ohpPct,
-          'contingency': _contingencyPct,
-          'taxes': _taxesPct,
-        },
-        'budget': budgetAmount,
-      },
-      outputs: {
-        'areaM2Total': _result!.totalBuiltUpArea,
-        'breakdownGhs': _result!.phaseBreakdownGhs,
-        'addonsGhs': _result!.addOnsGhs,
-        'ohpGhs': _result!.ohpGhs,
-        'contingencyGhs': _result!.contingencyGhs,
-        'taxesGhs': _result!.taxesGhs,
-        'totalGhs': _result!.totalPlannedGhs,
-        'fx': {
-          'code': currency.code,
-          'rate': fxRate,
-          'total': _fx.convertFromGhs(_result!.totalPlannedGhs, currency.code),
-        },
-      },
+  /// Format [ghs] in the currently selected currency.
+  String money(double ghs) {
+    final sym = currency.symbol;
+    if (currency.code == 'GHS') {
+      return '$sym${_fmt(ghs)}';
+    }
+    final converted = fxService.convertFromGhs(
+      amountGhs: ghs,
+      to: currency.code,
     );
+    return '$sym${_fmt(converted)}';
   }
 
-  // Save snapshot (local JSON). Returns saved path.
-  Future<String?> saveSnapshot() async {
-    if (!_hasResult || region == null) return null;
+  String _fmt(double v) => _nf.format(v);
 
-    final snap = toSnapshot(); // reuse the pure builder above
-    final path = await _storage.writeJson(snap.filename(), snap.toJson());
-    return path;
+  /// Serialises current inputs + result to a plain map for cloud/local storage.
+  /// [userId] must be provided by the caller before persisting.
+  /// Caller should also add `createdAt: FieldValue.serverTimestamp()`.
+  Map<String, dynamic> toMap() {
+    assert(_result != null, 'Call compute() before toMap().');
+    final r = _result!;
+    final fxRate = currency.code == 'GHS'
+        ? 1.0
+        : fxService.rateFor(currency.code);
+    return {
+      'projectName': projectNameCtrl.text.trim(),
+      'region': region ?? '',
+      'typology': typology.name,
+      'quality': quality,
+      'foundation': foundation,
+      'soil': soil,
+      'roof': roof,
+      'floors': [
+        for (final f in floors) {'areaM2': f.areaM2, 'heightM': f.heightM},
+      ],
+      'includeExternalWorks': includeExternalWorks,
+      'externalWallLenM': externalWallLenM,
+      'drivewayAreaM2': drivewayAreaM2,
+      'includeSeptic': includeSeptic,
+      if (budgetAmount != null) 'budgetAmount': budgetAmount,
+      'grandTotalGhs': r.totalPlannedGhs,
+      'grandTotalFx': r.totalPlannedGhs * fxRate,
+      'fxCode': currency.code,
+      'fxSymbol': currency.symbol,
+      'phaseBreakdownGhs': r.phaseBreakdownGhs,
+      'addOnsGhs': r.addOnsGhs,
+      'preliminariesGhs': r.preliminariesGhs,
+      'ohpGhs': r.ohpGhs,
+      'professionalFeesGhs': r.professionalFeesGhs,
+      'contingencyGhs': r.contingencyGhs,
+      'taxLinesGhs': r.taxLinesGhs,
+      'permitGhs': r.permitGhs,
+      'totalBuiltUpArea': r.totalBuiltUpArea,
+    };
   }
 
-  // -------- Helpers ----------
-  double _sum(Iterable<double> xs) => xs.fold<double>(0, (a, b) => a + b);
-
-  double _pick(
-    Map<String, double> table,
-    Map<String, String> aliases,
-    String key,
-    double fallback,
-  ) {
-    final normalized = key.replaceAll('_', ' ').trim();
-    final asKey = aliases[normalized] ??
-        aliases[normalized.toLowerCase()] ??
-        key.toLowerCase().replaceAll(' ', '_');
-    return (table[asKey] ?? fallback).toDouble();
+  @override
+  void dispose() {
+    projectNameCtrl.dispose();
+    super.dispose();
   }
 }

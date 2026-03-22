@@ -1,6 +1,6 @@
 {
-    "name": "buildwise_clean",
-    "short_name": "buildwise_clean",
+    "name": "WyseBrix",
+    "short_name": "WyseBrix",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

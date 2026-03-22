@@ -17,7 +17,10 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      return web;
+      throw UnsupportedError(
+        'DefaultFirebaseOptions have not been configured for web - '
+        'you can reconfigure this by running the FlutterFire CLI again.',
+      );
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -27,7 +30,10 @@ class DefaultFirebaseOptions {
       case TargetPlatform.macOS:
         return macos;
       case TargetPlatform.windows:
-        return windows;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -40,16 +46,6 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAFeKLWcvjJ3kjIXas0gYQslsCGSb4kcaQ',
-    appId: '1:329020058091:web:6e139995fb76c26d4691ae',
-    messagingSenderId: '329020058091',
-    projectId: 'building-estimator',
-    authDomain: 'building-estimator.firebaseapp.com',
-    storageBucket: 'building-estimator.firebasestorage.app',
-    measurementId: 'G-69KNDHWYVC',
-  );
-
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyBEW4ZS59Seo5eox--NMmiLu5iqurns694',
     appId: '1:329020058091:android:06523be7f4b6fa974691ae',
@@ -60,30 +56,20 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDtMGwUy-XJUAcC1GZZmuP902KiDh7DUCg',
-    appId: '1:329020058091:ios:57ff5c552e5395114691ae',
+    appId: '1:329020058091:ios:c59f8eee4424aa0d4691ae',
     messagingSenderId: '329020058091',
     projectId: 'building-estimator',
     storageBucket: 'building-estimator.firebasestorage.app',
-    iosBundleId: 'com.example.buildwise',
+    iosBundleId: 'com.example.buildwiseClean',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDtMGwUy-XJUAcC1GZZmuP902KiDh7DUCg',
-    appId: '1:329020058091:ios:71a579240b3169b64691ae',
+    appId: '1:329020058091:ios:c59f8eee4424aa0d4691ae',
     messagingSenderId: '329020058091',
     projectId: 'building-estimator',
     storageBucket: 'building-estimator.firebasestorage.app',
-    iosBundleId: 'com.example.app',
-  );
-
-  static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyAFeKLWcvjJ3kjIXas0gYQslsCGSb4kcaQ',
-    appId: '1:329020058091:web:7dae740638f510944691ae',
-    messagingSenderId: '329020058091',
-    projectId: 'building-estimator',
-    authDomain: 'building-estimator.firebaseapp.com',
-    storageBucket: 'building-estimator.firebasestorage.app',
-    measurementId: 'G-T73118PNSZ',
+    iosBundleId: 'com.example.buildwiseClean',
   );
 
 }

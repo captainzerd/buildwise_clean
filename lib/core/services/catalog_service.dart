@@ -1,108 +1,136 @@
-// lib/core/services/catalog_service.dart
-import 'dart:convert';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
-@immutable
-class GhCatalog {
-  const GhCatalog({
-    required this.ohpDefaultPct,
-    required this.contingencyDefaultPct,
-    required this.taxesDefaultPct,
-    required this.baseRates,
-    required this.soilFactor,
-    required this.foundationUpliftPct,
-    required this.phaseSharesDefault,
-    required this.roof,
-    required this.services,
-    required this.finishes,
-    required this.openings,
-    required this.external,
-  });
+import '../errors/app_exception.dart';
+import '../models/catalog_version.dart';
+import 'logger_service.dart';
 
-  final double ohpDefaultPct;
-  final double contingencyDefaultPct;
-  final double taxesDefaultPct;
+export '../models/catalog_version.dart' show TaxLineDefault;
 
-  final Map<String, double> baseRates;
-  final Map<String, double> soilFactor;
-  final Map<String, double> foundationUpliftPct;
-  final Map<String, double> phaseSharesDefault;
-  final Map<String, double> roof;
-  final Map<String, double> services;
-  final Map<String, double> finishes;
-  final Map<String, double> openings;
-  final Map<String, double> external;
+/// Loads the active Ghana construction cost catalog.
+///
+/// Priority:
+///   1. Firestore  cost_catalog/config → cost_catalog/{activeVersionId}
+///   2. Built-in [CatalogVersion.fallback()] when Firestore is unavailable.
+///
+/// Firestore offline persistence (enabled in main.dart) means the last
+/// fetched version is available even without connectivity.
+class CatalogService extends ChangeNotifier {
+  CatalogVersion _version = CatalogVersion.fallback();
+  bool _isLoading = false;
+  bool _loaded = false;
+  String? _error;
 
-  factory GhCatalog.fromJson(Map<String, dynamic> m) {
-    double _num(Object? x, [double d = 0]) => (x is num) ? x.toDouble() : d;
-    Map<String, double> _toMap(Map? mm) => {
-          for (final e in (mm ?? {}).entries)
-            if (e.value is num) e.key.toString(): (e.value as num).toDouble(),
-        };
+  // ── State ──
 
-    return GhCatalog(
-      ohpDefaultPct: _num(m['ohpDefaultPct'], 10),
-      contingencyDefaultPct: _num(m['contingencyDefaultPct'], 10),
-      taxesDefaultPct: _num(m['taxesDefaultPct'], 15),
-      baseRates: _toMap(m['baseRates']),
-      soilFactor: _toMap(m['soilFactor']),
-      foundationUpliftPct: _toMap(m['foundationUpliftPct']),
-      phaseSharesDefault: _toMap(m['phaseSharesDefault']),
-      roof: _toMap(m['roof']),
-      services: _toMap(m['services']),
-      finishes: _toMap(m['finishes']),
-      openings: _toMap(m['openings']),
-      external: _toMap(m['external']),
-    );
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+  bool get isUsingFallback => _version.id == 'built-in';
+  CatalogVersion get activeVersion => _version;
+
+  // ── Catalog version metadata ──
+
+  /// The date this catalog version was published, or null for the fallback.
+  DateTime? get ratesPublishedAt => _version.publishedAt;
+
+  /// Human-readable label for the active rates version, e.g. "Q1 2026".
+  /// Appends "(estimated rates)" when falling back to built-in defaults.
+  String get ratesVersionLabel {
+    final date = _version.publishedAt ?? DateTime(2026, 1, 1);
+    final month = date.month;
+    final quarter =
+        month <= 3 ? 'Q1' : month <= 6 ? 'Q2' : month <= 9 ? 'Q3' : 'Q4';
+    final year = DateFormat('yyyy').format(date);
+    final label = '$quarter $year';
+    return isUsingFallback ? '$label (estimated rates)' : label;
   }
-}
 
-class CatalogService {
-  GhCatalog? _catalog;
+  // ── Accessors consumed by EstimateController ──
 
-  Future<GhCatalog> ensureLoaded() async {
-    if (_catalog != null) return _catalog!;
+  /// GHS/m² by quality tier ('Economy' | 'Standard' | 'Premium').
+  Map<String, double> get unitRatesGhsPerM2 => _version.baseRatesPerM2;
+
+  /// Phase name → fraction of base cost.
+  Map<String, double> get phasePercents => _version.phaseWeights;
+
+  /// Region name → cost multiplier.
+  Map<String, double> get regionalIndices => _version.regionalIndices;
+
+  double get compoundWallRatePerM =>
+      _version.addOnRates['compoundWallPerM'] ?? 1200.0;
+  double get drivewayRatePerM2 =>
+      _version.addOnRates['drivewayPerM2'] ?? 350.0;
+  double get septicLumpSum =>
+      _version.addOnRates['septicLump'] ?? 18000.0;
+
+  double get preliminariesDefaultPct => _version.preliminariesDefaultPct;
+  double get ohpDefaultPct => _version.ohpDefaultPct;
+  double get permitDefaultPct => _version.permitDefaultPct;
+  List<TaxLineDefault> get taxLinesDefault => _version.taxLines;
+
+  // ── Lifecycle ──
+
+  /// Called once on app startup. Safe to call multiple times.
+  Future<void> ensureLoaded() async {
+    if (_loaded) return;
+    await _load();
+  }
+
+  /// Force a fresh fetch from Firestore (e.g. admin just published a version).
+  Future<void> refresh() => _load();
+
+  // ── Internal ──
+
+  Future<void> _load() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
     try {
-      final raw =
-          await rootBundle.loadString('assets/data/cost_catalog_gh.json');
-      final json = jsonDecode(raw) as Map<String, dynamic>;
-      _catalog = GhCatalog.fromJson(json);
-    } catch (_) {
-      // Safe defaults if the asset is missing.
-      _catalog = GhCatalog.fromJson(const {
-        "ohpDefaultPct": 10,
-        "contingencyDefaultPct": 10,
-        "taxesDefaultPct": 15,
-        "baseRates": {"residential": 3500, "commercial": 4200},
-        "soilFactor": {
-          "firm": 1.0,
-          "soft": 1.08,
-          "waterlogged": 1.15,
-          "laterite": 1.05
-        },
-        "foundationUpliftPct": {"strip": 0, "raft": 8, "pile": 20, "pad": 5},
-        "phaseSharesDefault": {
-          "substructure": 25,
-          "superstructure": 45,
-          "roofing": 8,
-          "services": 8,
-          "finishes": 10,
-          "openings": 4
-        },
-        "roof": {"pitched_sheet": 1.0, "concrete_flat": 1.12, "tile": 1.08},
-        "services": {"standard": 1.0, "enhanced": 1.15},
-        "finishes": {"economy": 0.92, "standard": 1.0, "premium": 1.12},
-        "openings": {"aluminium": 1.0, "hardwood": 1.05, "upvc": 1.02},
-        "external": {
-          "external_wall_ghs_per_m": 650,
-          "driveway_ghs_per_m2": 220,
-          "septic_ghs_lump": 16000
-        }
-      });
-    }
-    return _catalog!;
-  }
+      final db = FirebaseFirestore.instance;
 
-  GhCatalog? get catalog => _catalog;
+      // 1. Get the active version ID from the config document.
+      final configSnap =
+          await db.collection('cost_catalog').doc('config').get();
+
+      if (!configSnap.exists) {
+        // No catalog published yet — use fallback silently.
+        _version = CatalogVersion.fallback();
+        return;
+      }
+
+      final activeVersionId =
+          configSnap.data()?['activeVersion'] as String?;
+
+      if (activeVersionId == null || activeVersionId.isEmpty) {
+        _version = CatalogVersion.fallback();
+        return;
+      }
+
+      // 2. Fetch the version document.
+      final versionSnap = await db
+          .collection('cost_catalog')
+          .doc(activeVersionId)
+          .get();
+
+      if (!versionSnap.exists) {
+        throw AppException(
+          'Catalog version "$activeVersionId" not found in Firestore.',
+        );
+      }
+
+      _version = CatalogVersion.fromDoc(versionSnap);
+    } catch (e) {
+      _error =
+          'Could not load latest rates — using built-in defaults. '
+          '(${AppException.from(e).message})';
+      _version = CatalogVersion.fallback();
+      LoggerService.error('CatalogService._load error', error: e);
+    } finally {
+      _isLoading = false;
+      _loaded = true;
+      notifyListeners();
+    }
+  }
 }

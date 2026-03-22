@@ -1,0 +1,54 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log", "*.local"]
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "emulators": {
+    "auth":      { "port": 9099 },
+    "firestore": { "port": 8080 },
+    "ui":        { "enabled": false }
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "building-estimator",
+          "appId": "1:329020058091:android:741165312e632d434691ae",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "building-estimator",
+          "appId": "1:329020058091:ios:c59f8eee4424aa0d4691ae",
+          "uploadDebugSymbols": true,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "building-estimator",
+          "appId": "1:329020058091:ios:c59f8eee4424aa0d4691ae",
+          "uploadDebugSymbols": false,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "building-estimator",
+          "configurations": {
+            "android": "1:329020058091:android:741165312e632d434691ae",
+            "ios": "1:329020058091:ios:c59f8eee4424aa0d4691ae"
+          }
+        }
+      }
+    }
+  }
+}

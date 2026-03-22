@@ -22,7 +22,7 @@ class StoredFile {
 }
 
 class StorageService {
-  StorageService({String appFolderName = 'BuildWise'})
+  StorageService({String appFolderName = 'WyseBrix'})
       : _appFolderName = appFolderName;
 
   final String _appFolderName;
@@ -73,11 +73,15 @@ class StorageService {
   }
 
   Future<String> writeJsonToPath(
-      String fullPath, Map<String, dynamic> data) async {
+    String fullPath,
+    Map<String, dynamic> data,
+  ) async {
     final f = File(fullPath);
     await f.parent.create(recursive: true);
-    await f.writeAsString(const JsonEncoder.withIndent('  ').convert(data),
-        flush: true);
+    await f.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(data),
+      flush: true,
+    );
     return f.path;
   }
 
@@ -90,8 +94,8 @@ class StorageService {
   }
 
   /// Legacy-friendly generic list:
-  /// - T == String => returns List<String> of full paths
-  /// - T == StoredFile => returns List<StoredFile>
+  /// - T == String => returns List of full paths
+  /// - T == StoredFile => returns List of StoredFile
   Future<List<T>> listJson<T>({String subFolder = 'estimates'}) async {
     final dir = await _ensureSub(subFolder);
     final files = await dir

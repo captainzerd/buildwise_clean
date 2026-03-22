@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:buildwise_clean/core/data/cost_catalog.dart';
+import 'package:wysebrix/core/data/cost_catalog.dart';
 
 void main() {
   group('GhanaCostCatalog – base rates', () {
@@ -11,6 +11,28 @@ void main() {
       );
       expect(r, isNot(0));
       expect(r, greaterThan(0));
+    });
+
+    test('base residential rate is 5500 GHS/m²', () {
+      expect(
+        GhanaCostCatalog.baseCostPerSqm(
+          buildType: BuildType.residential,
+          quality: Quality.standard,
+          site: SiteComplexity.normal,
+        ),
+        equals(5500.0),
+      );
+    });
+
+    test('base commercial rate is 6875 GHS/m²', () {
+      expect(
+        GhanaCostCatalog.baseCostPerSqm(
+          buildType: BuildType.commercial,
+          quality: Quality.standard,
+          site: SiteComplexity.normal,
+        ),
+        equals(6875.0),
+      );
     });
 
     test('quality and site complexity increase cost monotonically', () {
@@ -32,10 +54,16 @@ void main() {
         site: SiteComplexity.normal,
       );
 
-      expect(harderSite, greaterThan(baseline),
-          reason: 'difficult site should cost more than normal site');
-      expect(premiumQuality, greaterThan(baseline),
-          reason: 'premium quality should cost more than standard');
+      expect(
+        harderSite,
+        greaterThan(baseline),
+        reason: 'difficult site should cost more than normal site',
+      );
+      expect(
+        premiumQuality,
+        greaterThan(baseline),
+        reason: 'premium quality should cost more than standard',
+      );
     });
   });
 
@@ -43,8 +71,11 @@ void main() {
     test('phase weights sum roughly to 1.0', () {
       final w = GhanaCostCatalog.phaseWeightsForRegion('Ahafo');
       final sum = w.values.fold<double>(0, (a, b) => a + b);
-      expect((sum - 1.0).abs() < 0.0001, isTrue,
-          reason: 'phase weights should sum to ~1.0; actual = $sum');
+      expect(
+        (sum - 1.0).abs() < 0.0001,
+        isTrue,
+        reason: 'phase weights should sum to ~1.0; actual = $sum',
+      );
       expect(w, isNotEmpty);
     });
 

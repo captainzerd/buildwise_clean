@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/services/snapshot.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/services/pdf_service.dart';
+import '../estimate/widgets/mortgage_calculator_sheet.dart';
 
 class EstimateDetailPage extends StatefulWidget {
   const EstimateDetailPage({super.key, required this.snapshot});
@@ -37,13 +38,14 @@ class _EstimateDetailPageState extends State<EstimateDetailPage> {
             icon: const Icon(Icons.picture_as_pdf_outlined),
             tooltip: 'Export PDF',
             onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
               try {
                 final bytes = await _pdf.exportSnapshot(s);
 
                 // Ensure exports folder exists under app documents.
                 final docsDir = await getApplicationDocumentsDirectory();
                 final exportsDir =
-                    Directory('${docsDir.path}/BuildWise/exports');
+                    Directory('${docsDir.path}/WyseBrix/exports');
                 if (!await exportsDir.exists()) {
                   await exportsDir.create(recursive: true);
                 }
@@ -52,14 +54,12 @@ class _EstimateDetailPageState extends State<EstimateDetailPage> {
                     '${exportsDir.path}/${s.safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
                 await _storage.writeBytesToPath(outPath, bytes);
 
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   const SnackBar(content: Text('PDF exported')),
                 );
               } catch (e) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Export failed: $e')),
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Export failed: $e'), duration: const Duration(seconds: 10)),
                 );
               }
             },
@@ -83,10 +83,29 @@ class _EstimateDetailPageState extends State<EstimateDetailPage> {
           Text('Contingency (GHS): ${outs['contingencyGhs'] ?? 0}'),
           Text('Taxes (GHS): ${outs['taxesGhs'] ?? 0}'),
           Text('Grand Total (GHS): ${outs['totalGhs'] ?? 0}'),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.calculate_outlined),
+            label: const Text('Calculate Mortgage'),
+            onPressed: () {
+              final totalGhs =
+                  (outs['totalGhs'] as num?)?.toDouble();
+              showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                showDragHandle: false,
+                builder: (_) => MortgageCalculatorSheet(
+                  initialLoanAmountGhs: totalGhs,
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 4),
           if (phases.isNotEmpty) ...[
-            Text('Phase breakdown',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Phase breakdown',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 6),
             ...phases.entries.map(
               (e) => ListTile(
@@ -103,8 +122,10 @@ class _EstimateDetailPageState extends State<EstimateDetailPage> {
           ],
           const SizedBox(height: 16),
           if (s.transactions.isNotEmpty) ...[
-            Text('Transactions',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Transactions',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 6),
             ...s.transactions.map(
               (t) => ListTile(
